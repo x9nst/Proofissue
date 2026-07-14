@@ -14,7 +14,7 @@ The project is ready to start Milestone 1. The items below are intended to preve
 
 ## Implementation response — 2026-07-14
 
-Milestone 1 is in progress. This review was treated as an implementation gate, not only as background reading.
+Milestone 1 is complete. This review was treated as an implementation gate, not only as background reading.
 
 | Review concern | Current response | Readiness effect |
 | --- | --- | --- |
@@ -26,8 +26,8 @@ Milestone 1 is in progress. This review was treated as an implementation gate, n
 | Documentation consistency | `AGENTS.md`, architecture, milestone terminology, current-checkout limits, matching scope, and Action responsibilities were reconciled. | Resolved; ongoing checks still apply. |
 | Artifact input/output rules | `artifact-io-contract.md` fixes parser limits, deterministic serialization rules, bounded errors, and no-overwrite atomic-write behavior. | Resolved as the Milestone 2 implementation contract. |
 | Maintainer demand test | Separate participant and facilitator packets plus a session record now support Gate A. Artifact presentation remains explicitly provisional until sessions occur. | Tracked and intentionally open; does not block foundation work. |
-| Repository license | The repository owner must select a license; no legal choice is inferred by implementation work. | Open Milestone 1 acceptance item. |
-| CI evidence | Linux and Windows workflows are configured. A remote run is still required before Milestone 1 can be marked complete. | Open Milestone 1 acceptance item. |
+| Repository license | The repository owner selected Apache License 2.0 on 2026-07-14. | Resolved in the root `LICENSE` and `license-decision.md`. |
+| CI evidence | The pinned Linux and Windows foundation jobs passed on GitHub Actions. | Resolved by foundation run `29327099233`; see `milestone-1-evidence.md`. |
 
 The original checklist below remains the audit snapshot. This response records the implementation disposition without rewriting the review's original findings.
 

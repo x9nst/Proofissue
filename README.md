@@ -7,7 +7,7 @@ The project is currently building its technical prototype: one dependency-free N
 ## Repository Status
 
 - Product and security contracts: complete as reviewed design documents
-- Repository foundation: in progress
+- Repository foundation: complete
 - Static artifact core: not started
 - Recorder, runner, CLI, and GitHub Action behavior: not implemented
 

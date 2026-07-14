@@ -28,7 +28,7 @@ Completing the technical prototype does not complete the initial supported workf
 | Milestone | Status | Depends on | Evidence |
 | --- | --- | --- | --- |
 | 0. Product and security contracts | Complete | None | Decision, architecture, artifact, recording, replay, security, and threat-model documents; acceptance review below |
-| 1. Repository foundation | In Progress | Milestone 0 | Local clean install and all checks pass; see `docs/milestone-1-evidence.md`; Apache License 2.0 selected; external CI remains |
+| 1. Repository foundation | Complete | Milestone 0 | Apache License 2.0 selected; local checks and hosted Linux and Windows CI pass; see `docs/milestone-1-evidence.md` |
 | 2. Static artifact core | Planned | Milestone 1 | Schema fixtures and deterministic serialization tests |
 | 3. Recorder and redaction | Planned | Milestone 2 | Recording, minimal collection, and secret-leakage tests |
 | 4. Locked-down replay and matching | Planned | Milestones 2-3 | Repeated replay and container security tests |
@@ -144,7 +144,7 @@ These amendments clarify and strengthen the accepted contracts without broadenin
 
 ## Milestone 1 — Repository Foundation
 
-**Status:** In Progress
+**Status:** Complete
 
 **Target outcome:**
 
@@ -164,14 +164,14 @@ A contributor can obtain the repository and run the same basic quality checks as
 **Acceptance criteria:**
 
 - [x] A clean checkout installs from a lockfile.
-- [ ] Format checking, linting, type checking, tests, and builds pass locally and in CI.
+- [x] Format checking, linting, type checking, tests, and builds pass locally and in CI.
 - [x] Strict TypeScript is enabled and `any` is not allowed by project convention.
 - [x] Package dependency direction matches `docs/architecture.md`.
 - [x] CLI and Action entry points both depend on the shared application layer rather than coordinating replay independently.
 - [x] Supported Node.js, npm, Docker, and operating-system expectations are documented.
 - [x] Generated files, local paths, credentials, and test secrets are excluded.
 
-Local verification evidence is recorded in `docs/milestone-1-evidence.md`. The owner selected Apache License 2.0 on 2026-07-14. The combined local-and-CI criterion remains open until the hosted workflow succeeds on both operating systems.
+Local and hosted verification evidence is recorded in `docs/milestone-1-evidence.md`. The owner selected Apache License 2.0 on 2026-07-14, and the foundation workflow passed on the pinned Linux and Windows runners.
 
 **Verification:**
 

@@ -27,7 +27,7 @@
 - `threat-model.md` maps concrete malicious inputs and behaviors to rejection, containment, or detection requirements.
 - `testing-strategy.md` defines property-based testing, fuzzing, cleanup fault injection, hostile-output testing, compatibility evidence, and repeatability measurement.
 - `supported-environments.md` defines development, recording, replay, engine, host, and CI support claims.
-- `license-decision.md` records the unresolved owner choice required before contributions or release.
+- `license-decision.md` records the owner's Apache License 2.0 decision and contribution terms.
 - `PRE_MILESTONE_2_READINESS_REVIEW.md` records the readiness audit and the implementation response.
 
 ## Foundation and Planned Documentation
