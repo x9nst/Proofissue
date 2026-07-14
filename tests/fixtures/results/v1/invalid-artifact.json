@@ -1,0 +1,17 @@
+{
+  "result_schema_version": 1,
+  "operation": "replay",
+  "status": "invalid_artifact",
+  "warnings": [],
+  "errors": [
+    {
+      "code": "schema_violation",
+      "message": "The artifact contains an unknown top-level field."
+    }
+  ],
+  "mode": "snapshot",
+  "evidence": [],
+  "differences": [],
+  "substituted_paths": [],
+  "scope_limitations": []
+}

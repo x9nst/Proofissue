@@ -1,0 +1,18 @@
+{
+  "result_schema_version": 1,
+  "operation": "replay",
+  "status": "execution_failed",
+  "artifact_version": 1,
+  "warnings": [],
+  "errors": [
+    {
+      "code": "engine_unavailable",
+      "message": "A supported container engine was not available."
+    }
+  ],
+  "mode": "snapshot",
+  "evidence": [],
+  "differences": [],
+  "substituted_paths": [],
+  "scope_limitations": []
+}

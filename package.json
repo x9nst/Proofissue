@@ -1,0 +1,41 @@
+{
+  "name": "proofissue",
+  "version": "0.0.0",
+  "private": true,
+  "license": "Apache-2.0",
+  "type": "module",
+  "description": "Portable, inspectable, replayable bug reports.",
+  "packageManager": "npm@11.12.1",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=11 <12"
+  },
+  "workspaces": [
+    "packages/*",
+    "action"
+  ],
+  "scripts": {
+    "build": "tsc -b --force --pretty false",
+    "check": "npm run format:check && npm run lint && npm run deps:check && npm run typecheck && npm test && npm run build && npm run hygiene:check",
+    "clean": "node scripts/clean.mjs",
+    "deps:check": "node scripts/check-dependencies.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "hygiene:check": "node scripts/check-repository-hygiene.mjs",
+    "lint": "eslint \"packages/**/*.ts\" \"action/**/*.ts\" \"tests/**/*.ts\" \"vitest.config.ts\" --max-warnings=0 --no-error-on-unmatched-pattern",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false"
+  },
+  "devDependencies": {
+    "@emnapi/core": "1.11.2",
+    "@emnapi/runtime": "1.11.2",
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.13.3",
+    "eslint": "10.7.0",
+    "fast-check": "4.9.0",
+    "prettier": "3.9.5",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.64.0",
+    "vitest": "4.1.10"
+  }
+}

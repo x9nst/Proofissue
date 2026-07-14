@@ -1,0 +1,8 @@
+.git/
+.agents/
+node_modules/
+dist/
+coverage/
+package-lock.json
+tests/fuzz-corpus/
+**/*.md

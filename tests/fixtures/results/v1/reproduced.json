@@ -1,0 +1,50 @@
+{
+  "result_schema_version": 1,
+  "operation": "replay",
+  "status": "reproduced",
+  "artifact_version": 1,
+  "artifact_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "warnings": [],
+  "errors": [],
+  "mode": "snapshot",
+  "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "effective_limits": {
+    "cpus": 1,
+    "memory_mb": 512,
+    "output_bytes_per_stream": 1048576,
+    "processes": 64,
+    "timeout_seconds": 60,
+    "writable_workspace_mb": 16
+  },
+  "execution": {
+    "duration_ms": 125,
+    "exit_code": 1,
+    "stdout": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 0,
+      "total_bytes": 0,
+      "truncated": false
+    },
+    "stderr": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 36,
+      "total_bytes": 36,
+      "truncated": false
+    },
+    "termination_reason": "exited"
+  },
+  "evidence": [
+    { "kind": "exit_code", "message": "Exit code matched: 1." },
+    { "kind": "stderr_contains", "message": "Expected stderr text was present." }
+  ],
+  "differences": [],
+  "substituted_paths": [],
+  "scope_limitations": [],
+  "cleanup": {
+    "completed": true,
+    "attempted_resources": ["container", "workspace"],
+    "residual_resources": []
+  }
+}

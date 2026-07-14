@@ -1,0 +1,33 @@
+name: Feature proposal
+description: Propose a narrowly scoped improvement
+title: 'proposal: '
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Reproduction workflow problem
+      description: Explain the current reporter or maintainer problem using a concrete example.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe the result without prescribing implementation details.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Existing alternatives
+      description: Compare with a minimal repository, failing pull request, Dockerfile, or standalone script where relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: security
+    attributes:
+      label: Security and compatibility impact
+    validations:
+      required: true

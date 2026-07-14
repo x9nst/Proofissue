@@ -1,0 +1,42 @@
+{
+  "result_schema_version": 1,
+  "operation": "replay",
+  "status": "not_reproduced",
+  "artifact_version": 1,
+  "warnings": [],
+  "errors": [],
+  "mode": "current_checkout",
+  "execution": {
+    "duration_ms": 98,
+    "exit_code": 0,
+    "stdout": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 0,
+      "total_bytes": 0,
+      "truncated": false
+    },
+    "stderr": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 0,
+      "total_bytes": 0,
+      "truncated": false
+    },
+    "termination_reason": "exited"
+  },
+  "evidence": [],
+  "differences": [{ "kind": "exit_code", "message": "Expected exit code 1 but received 0." }],
+  "substituted_paths": ["calculate.mjs"],
+  "scope_limitations": [
+    {
+      "code": "declared_subject_paths_only",
+      "message": "Only declared, existing subject paths were substituted."
+    }
+  ],
+  "cleanup": {
+    "completed": true,
+    "attempted_resources": ["container", "workspace"],
+    "residual_resources": []
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "files": [],
+  "references": [
+    { "path": "packages/contracts" },
+    { "path": "packages/process-output" },
+    { "path": "packages/artifact-schema" },
+    { "path": "packages/redactor" },
+    { "path": "packages/matcher" },
+    { "path": "packages/recorder" },
+    { "path": "packages/runner" },
+    { "path": "packages/application" },
+    { "path": "packages/cli" },
+    { "path": "packages/report-ui" },
+    { "path": "action" }
+  ]
+}
