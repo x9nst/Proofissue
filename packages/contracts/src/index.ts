@@ -115,9 +115,54 @@ export interface ValidateOperationResult extends OperationResultBase {
   readonly status: 'valid' | 'invalid_artifact';
 }
 
+export interface ArtifactInspectionFile {
+  readonly path: string;
+  readonly role: 'reproduction' | 'subject';
+  readonly bytes: number;
+  readonly sha256: string;
+}
+
+export interface ArtifactInspectionRedactionFinding {
+  readonly category:
+    'api_key' | 'authorization_header' | 'password' | 'private_key' | 'sensitive_environment';
+  readonly target: string;
+  readonly count: number;
+}
+
+export interface ArtifactInspectionSummary {
+  readonly runtime: 'node';
+  readonly runtime_version: string;
+  readonly operating_system: 'linux';
+  readonly image: string;
+  readonly command: {
+    readonly program: 'node';
+    readonly argument_count: number;
+    readonly working_directory: '.';
+  };
+  readonly files: readonly ArtifactInspectionFile[];
+  readonly expectations: {
+    readonly exit_code: number;
+    readonly stdout_count: number;
+    readonly stderr_count: number;
+  };
+  readonly limits: {
+    readonly cpus: number;
+    readonly memory_mb: number;
+    readonly output_bytes_per_stream: number;
+    readonly processes: number;
+    readonly timeout_seconds: number;
+  };
+  readonly redaction: {
+    readonly enabled: true;
+    readonly finding_count: number;
+    readonly findings: readonly ArtifactInspectionRedactionFinding[];
+  };
+}
+
 export interface InspectOperationResult extends OperationResultBase {
   readonly operation: 'inspect';
   readonly status: 'inspected' | 'invalid_artifact';
+  readonly inspection?: ArtifactInspectionSummary;
 }
 
 export type ReplayStatus =

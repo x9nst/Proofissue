@@ -5,6 +5,7 @@
 - `../MILESTONES.md` describes the long-term product roadmap.
 - `../IMPLEMENTATION_PLAN.md` tracks near-term milestones, acceptance criteria, dependencies, and evidence.
 - `milestone-1-evidence.md` records the foundation verification results and open completion gates.
+- `milestone-2-evidence.md` records the static artifact core implementation and acceptance evidence.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.

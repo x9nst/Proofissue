@@ -4,7 +4,7 @@ Fixtures are public compatibility and security evidence. They must be minimal, r
 
 ## Directories
 
-- `artifacts/v1`: provisional version 1 artifact fixtures until Milestone 2 freezes the executable schema.
+- `artifacts/v1`: permanent version 1 valid, invalid, and canonical-byte compatibility fixtures. Public presentation wording remains provisional until maintainer Gate A.
 - `results/v1`: provisional machine-result fixtures until the result contract is accepted.
 - `synthetic-secrets`: unmistakably fake values used only to prove redaction and leakage checks.
 
@@ -17,4 +17,4 @@ Fixtures are public compatibility and security evidence. They must be minimal, r
 - A compatibility fixture is not reformatted merely because a newer serializer changes style.
 - Provisional fixtures are clearly labeled and carry no compatibility promise.
 
-The first provisional artifact pair and all four replay-result statuses are present. Artifact fixtures become executable schema evidence in Milestone 2; result fixtures already have a foundation test that preserves status coverage and prevents detailed decoded output from entering the public examples.
+The first artifact pair, a deterministic canonical byte fixture, and all four replay-result statuses are present. Milestone 2 tests preserve artifact compatibility, schema synchronization, and exact canonical serialization. Result fixtures retain status coverage and prevent detailed decoded output from entering public examples.

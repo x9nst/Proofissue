@@ -1,0 +1,50 @@
+version: 1
+environment:
+  runtime: node
+  runtime_version: "24"
+  operating_system: linux
+  image: "node@sha256:1111111111111111111111111111111111111111111111111111111111111111"
+capture:
+  host_operating_system: win32
+  host_architecture: "x64"
+  node_version: "24.15.0"
+command:
+  program: node
+  arguments:
+    - "reproduction.mjs"
+  working_directory: .
+files:
+  - path: "calculate.mjs"
+    role: subject
+    encoding: utf8
+    content: |-
+      export function calculate(value) {
+        return value + 1;
+      }
+    sha256: "4efedc1500baf98326c0ec905ce57d08952b86e985598f5dfbc7508262c72b7c"
+  - path: "reproduction.mjs"
+    role: reproduction
+    encoding: utf8
+    content: |-
+      import { calculate } from './calculate.mjs';
+
+      if (calculate(2) !== 4) {
+        console.error('Expected 4 from calculate(2)');
+        process.exitCode = 1;
+      }
+    sha256: "3f2b69382a3fb8e0ded1f07b73e7ba06592c1d9bdc82c9235f3f88e132556f3a"
+expect:
+  exit_code: 1
+  stdout: []
+  stderr:
+    - mode: contains
+      value: "Expected 4 from calculate(2)"
+limits:
+  timeout_seconds: 60
+  memory_mb: 512
+  cpus: 1
+  processes: 64
+  output_bytes_per_stream: 1048576
+redaction:
+  enabled: true
+  findings: []
