@@ -2,7 +2,7 @@
 
 ## Status
 
-This is the accepted design for the technical prototype slice and a provisional proposal for artifact version 1. Presentation details remain provisional until maintainer Gate A is completed. The executable JSON Schema, golden fixture, and compatibility tests will be created in Milestone 2 before the interface is called stable.
+This is the implemented design for the technical prototype slice and a provisional proposal for artifact version 1. Presentation details and public compatibility wording remain provisional until maintainer Gate A is completed. The executable JSON Schema is published at `packages/artifact-schema/schema/artifact-v1.schema.json`; permanent valid, invalid, and canonical byte fixtures are tested in Milestone 2.
 
 ## Container
 

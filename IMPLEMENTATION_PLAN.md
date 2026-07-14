@@ -29,7 +29,7 @@ Completing the technical prototype does not complete the initial supported workf
 | --- | --- | --- | --- |
 | 0. Product and security contracts | Complete | None | Decision, architecture, artifact, recording, replay, security, and threat-model documents; acceptance review below |
 | 1. Repository foundation | Complete | Milestone 0 | Apache License 2.0 selected; local checks and hosted Linux and Windows CI pass; see `docs/milestone-1-evidence.md` |
-| 2. Static artifact core | Planned | Milestone 1 | Schema fixtures and deterministic serialization tests |
+| 2. Static artifact core | Complete | Milestone 1 | Static validation, safe inspection, schema, compatibility, property, fuzz-corpus, and deterministic serialization evidence; see `docs/milestone-2-evidence.md` |
 | 3. Recorder and redaction | Planned | Milestone 2 | Recording, minimal collection, and secret-leakage tests |
 | 4. Locked-down replay and matching | Planned | Milestones 2-3 | Repeated replay and container security tests |
 | 5. Fix verification | Planned | Milestone 4 | Original and corrected-source end-to-end fixture |
@@ -179,7 +179,7 @@ Run the clean installation, formatting, linting, type-checking, test, and build 
 
 ## Milestone 2 — Static Artifact Core
 
-**Status:** Planned
+**Status:** Complete
 
 **Target outcome:**
 
@@ -199,14 +199,16 @@ ProofIssue can safely read, validate, inspect, and deterministically write versi
 
 **Acceptance criteria:**
 
-- [ ] Valid fixtures pass schema and semantic validation.
-- [ ] Unknown fields, duplicate paths, absolute paths, traversal paths, invalid hashes, invalid limits, malformed YAML, aliases, and oversized content are rejected.
-- [ ] Validation performs no command execution and creates no workspace.
-- [ ] Identical canonical input produces byte-for-byte identical output.
-- [ ] Inspection reports redaction metadata and never reveals removed values.
-- [ ] A permanent version 1 compatibility fixture is tested.
-- [ ] Property-based tests preserve round-trip and path-safety invariants across generated bounded inputs.
-- [ ] Parser fuzzing fails safely under byte, depth, node, and time limits without execution or unbounded errors.
+- [x] Valid fixtures pass schema and semantic validation.
+- [x] Unknown fields, duplicate paths, absolute paths, traversal paths, invalid hashes, invalid limits, malformed YAML, aliases, and oversized content are rejected.
+- [x] Validation performs no command execution and creates no workspace.
+- [x] Identical canonical input produces byte-for-byte identical output.
+- [x] Inspection reports redaction metadata and never reveals removed values.
+- [x] A permanent version 1 compatibility fixture is tested.
+- [x] Property-based tests preserve round-trip and path-safety invariants across generated bounded inputs.
+- [x] Parser fuzzing fails safely under byte, depth, node, and time limits without execution or unbounded errors.
+
+Completion evidence is recorded in `docs/milestone-2-evidence.md`. Artifact presentation and public compatibility wording remain provisional until maintainer Gate A; the static implementation and its compatibility fixtures are complete.
 
 ## Milestone 3 — Recorder and Redaction
 

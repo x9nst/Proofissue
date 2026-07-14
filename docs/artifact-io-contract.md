@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted implementation contract for Milestone 2. The executable parser and serializer do not exist yet, and their public compatibility remains provisional until golden fixtures pass.
+Implemented in Milestone 2. The bounded parser, semantic validator, deterministic serializer, regular-file reader, and no-overwrite atomic publisher follow this contract and are covered by golden, property, security, and compatibility tests. Public presentation compatibility remains provisional until maintainer Gate A.
 
 ## Parser Limits
 

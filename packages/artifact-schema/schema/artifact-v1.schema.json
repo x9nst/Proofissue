@@ -1,0 +1,267 @@
+{
+  "$id": "https://proofissue.dev/schema/artifact/v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "type": "integer"
+    },
+    "environment": {
+      "additionalProperties": false,
+      "properties": {
+        "runtime": {
+          "const": "node"
+        },
+        "runtime_version": {
+          "maxLength": 16,
+          "pattern": "^[0-9]+$",
+          "type": "string"
+        },
+        "operating_system": {
+          "const": "linux"
+        },
+        "image": {
+          "maxLength": 255,
+          "pattern": "^[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$",
+          "type": "string"
+        }
+      },
+      "required": ["runtime", "runtime_version", "operating_system", "image"],
+      "type": "object"
+    },
+    "capture": {
+      "additionalProperties": false,
+      "properties": {
+        "host_operating_system": {
+          "enum": ["win32", "darwin", "linux"]
+        },
+        "host_architecture": {
+          "enum": [
+            "arm",
+            "arm64",
+            "ia32",
+            "loong64",
+            "mips",
+            "mipsel",
+            "ppc",
+            "ppc64",
+            "riscv64",
+            "s390",
+            "s390x",
+            "x64"
+          ],
+          "maxLength": 32,
+          "type": "string"
+        },
+        "node_version": {
+          "maxLength": 64,
+          "pattern": "^(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)\\.(?:0|[1-9][0-9]*)$",
+          "type": "string"
+        }
+      },
+      "required": ["host_operating_system", "host_architecture", "node_version"],
+      "type": "object"
+    },
+    "command": {
+      "additionalProperties": false,
+      "properties": {
+        "program": {
+          "const": "node"
+        },
+        "arguments": {
+          "items": {
+            "maxLength": 8192,
+            "minLength": 1,
+            "not": {
+              "pattern": "[\\u0000-\\u0008\\u000A-\\u001F\\u007F]"
+            },
+            "type": "string"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "working_directory": {
+          "const": "."
+        }
+      },
+      "required": ["program", "arguments", "working_directory"],
+      "type": "object"
+    },
+    "files": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "maxLength": 512,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+            "type": "string"
+          },
+          "role": {
+            "enum": ["reproduction", "subject"]
+          },
+          "encoding": {
+            "const": "utf8"
+          },
+          "content": {
+            "type": "string"
+          },
+          "sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "type": "string"
+          }
+        },
+        "required": ["path", "role", "encoding", "content", "sha256"],
+        "type": "object"
+      },
+      "maxItems": 100,
+      "minItems": 1,
+      "type": "array"
+    },
+    "expect": {
+      "additionalProperties": false,
+      "properties": {
+        "exit_code": {
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "stdout": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "const": "contains"
+              },
+              "value": {
+                "maxLength": 8192,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["mode", "value"],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "stderr": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "mode": {
+                "const": "contains"
+              },
+              "value": {
+                "maxLength": 8192,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": ["mode", "value"],
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        }
+      },
+      "required": ["exit_code", "stdout", "stderr"],
+      "type": "object"
+    },
+    "limits": {
+      "additionalProperties": false,
+      "properties": {
+        "timeout_seconds": {
+          "maximum": 300,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "memory_mb": {
+          "maximum": 2048,
+          "minimum": 64,
+          "type": "integer"
+        },
+        "cpus": {
+          "maximum": 2,
+          "minimum": 0.25,
+          "multipleOf": 0.25,
+          "type": "number"
+        },
+        "processes": {
+          "maximum": 256,
+          "minimum": 8,
+          "type": "integer"
+        },
+        "output_bytes_per_stream": {
+          "maximum": 1048576,
+          "minimum": 1024,
+          "type": "integer"
+        }
+      },
+      "required": ["timeout_seconds", "memory_mb", "cpus", "processes", "output_bytes_per_stream"],
+      "type": "object"
+    },
+    "redaction": {
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "const": true
+        },
+        "findings": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "enum": [
+                  "api_key",
+                  "authorization_header",
+                  "private_key",
+                  "password",
+                  "sensitive_environment"
+                ]
+              },
+              "target": {
+                "anyOf": [
+                  {
+                    "enum": ["stdout", "stderr"]
+                  },
+                  {
+                    "maxLength": 512,
+                    "minLength": 1,
+                    "pattern": "^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$",
+                    "type": "string"
+                  }
+                ]
+              },
+              "replacement": {
+                "maxLength": 128,
+                "pattern": "^\\[REDACTED:(api_key|authorization_header|password|private_key|sensitive_environment)\\]$",
+                "type": "string"
+              }
+            },
+            "required": ["category", "target", "replacement"],
+            "type": "object"
+          },
+          "maxItems": 100,
+          "type": "array"
+        }
+      },
+      "required": ["enabled", "findings"],
+      "type": "object"
+    }
+  },
+  "required": [
+    "version",
+    "environment",
+    "capture",
+    "command",
+    "files",
+    "expect",
+    "limits",
+    "redaction"
+  ],
+  "title": "ProofIssue artifact version 1",
+  "type": "object"
+}

@@ -9,9 +9,15 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
-    }
+    },
+    "./artifact-v1.schema.json": "./schema/artifact-v1.schema.json"
   },
   "files": [
-    "dist"
-  ]
+    "dist",
+    "schema"
+  ],
+  "dependencies": {
+    "ajv": "8.20.0",
+    "yaml": "2.9.0"
+  }
 }

@@ -4,4 +4,4 @@ This directory retains minimized parser, path, redaction, and presentation input
 
 Corpus files must be bounded, deterministic, and safe to publish. They may contain synthetic secret markers but never real credentials, private repository content, usernames, hostnames, or absolute local paths.
 
-The initial subdirectories are placeholders. Milestone 2 will add seeded restricted-YAML inputs after the parser and exact validation limits exist.
+`yaml/` contains the retained Milestone 2 seeds for the restricted parser: a minimal valid document and deliberately malformed, duplicate-key, alias, multi-document, and traversal inputs. Generated parser tests run raw bounded byte arrays in addition to these reviewable seeds. Any distinct parser crash, timeout, allocation issue, or unsafe conversion found later must be reduced and retained here.

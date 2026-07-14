@@ -77,6 +77,10 @@ Required-status policy is evaluated after classification. It produces adapter su
 
 GitHub-specific annotations, step outputs, and workflow fields do not enter this contract.
 
+## Inspection Envelope
+
+A successful inspection adds a content-free summary of the runtime, pinned image, command shape, declared file paths and hashes, expectation counts, and redaction metadata. Redaction findings are grouped by target and category with counts. File content, command arguments, expected output text, replacement fields, and removed values are not returned by the stable inspection result.
+
 ## Fixtures and Validation
 
 Before compatibility is claimed, retain valid fixtures for every operation and all four replay statuses. Tests verify:
