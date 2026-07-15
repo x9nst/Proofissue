@@ -2,7 +2,7 @@
 
 ProofIssue is an open-source tool for creating portable, inspectable, replayable bug reports.
 
-The project is currently building its technical prototype: one dependency-free Node.js failure recorded into a versioned artifact and replayed under strict Linux-container limits. This is not yet stable support for typical Node.js projects.
+The project has completed its static artifact core and is implementing the recorder and redaction milestone. One dependency-free Node.js command can now be captured into a validated artifact through the application and CLI layers, with file review, bounded output, and secret replacement. The file-role wording remains provisional pending maintainer testing, and isolated replay is still the next milestone. This is not yet stable support for typical Node.js projects.
 
 ## Repository Status
 

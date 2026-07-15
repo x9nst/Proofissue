@@ -12,6 +12,7 @@ An illustrative command is:
 proofissue record \
   --project . \
   --output failure.proofissue \
+  --image node@sha256:<approved-digest> \
   --reproduction test/reproduction.mjs \
   --subject src/calculate.mjs \
   --expect-stderr "Expected 4 from calculate(2)" \
@@ -19,6 +20,8 @@ proofissue record \
 ```
 
 The final CLI spelling and user-facing role labels remain subject to the usability gate in `product-validation.md`; the explicit two-role behavior is fixed by this document.
+
+For automation, add `--yes` only after the project, command, file roles, expectations, and output path have been reviewed. Interactive recording confirms the reproduction-file group, subject-file group, and final write separately. The image must be digest-pinned; Milestone 4 will define the approved replay-image policy, so a syntactically valid digest is not yet permission to replay it.
 
 ## Recording Sequence
 
@@ -52,7 +55,7 @@ Version 1 records only:
 
 It does not collect the username, hostname, home directory, absolute project path, shell history, process list, environment-variable values, npm configuration, Git credentials, or credential files.
 
-The recorded command receives a deliberately defined environment policy during Milestone 3. ProofIssue itself must never enumerate and serialize the host environment.
+The recorded command receives an empty environment on Linux and macOS. On Windows it receives only `SystemRoot`, which is required for normal process startup. The recorder never enumerates or serializes the host environment, and tests verify that unrelated host variables do not reach the child process.
 
 ## File Roles
 
