@@ -2,7 +2,7 @@
 
 ProofIssue is an open-source tool for creating portable, inspectable, replayable bug reports.
 
-The project has completed recording and redaction and is implementing locked-down replay and basic matching. One dependency-free Node.js command can be captured into a validated artifact, replayed through the shared application layer, and classified with exact exit-code and literal output evidence. Hosted Linux container verification is still required before Milestone 4 can be marked complete. This is not yet stable support for typical Node.js projects.
+The project has completed locked-down replay and basic matching. One dependency-free Node.js command can be captured into a validated artifact, replayed in a restricted Linux container through the shared application layer, and classified with exact exit-code and literal output evidence. This is the technical prototype slice, not yet stable support for typical Node.js projects.
 
 ## Repository Status
 
@@ -10,7 +10,7 @@ The project has completed recording and redaction and is implementing locked-dow
 - Repository foundation: complete
 - Static artifact core: complete
 - Recorder and redaction: complete
-- Locked-down replay and basic matching: in progress
+- Locked-down replay and basic matching: complete
 - Fix verification and GitHub Action behavior: not implemented
 
 See `IMPLEMENTATION_PLAN.md` for acceptance criteria and evidence. See `docs/README.md` for the documentation map.

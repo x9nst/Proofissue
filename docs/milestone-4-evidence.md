@@ -2,7 +2,7 @@
 
 ## Status
 
-Milestone 4 — Locked-Down Replay and Basic Matching is in progress. The implementation, pure matching tests, lifecycle fault injection, shared application path, CLI result handling, and Linux container test job are present. The hosted Linux container job must pass before the milestone is marked complete.
+Milestone 4 — Locked-Down Replay and Basic Matching is complete. The implementation, pure matching tests, lifecycle fault injection, shared application path, CLI result handling, local quality gate, and hosted Linux container validation all pass.
 
 ## Implemented workflow
 
@@ -13,15 +13,17 @@ The command runs from a 64 MiB in-memory workspace. The host-side input director
 ## Current evidence
 
 - Matcher tests distinguish an unrelated failure with the same exit code and report insufficient evidence when output was truncated.
-- Runner tests assert the complete Docker security argument set, bounded output, timeout termination, memory-limit classification, structured lifecycle events, and cleanup ordering.
+- Runner tests assert the complete Docker security argument set, bounded output, timeout termination, applied memory and process limits, structured lifecycle events, and cleanup ordering.
 - Fault injection covers container creation, start, stop, kill, removal, and workspace removal. Workspace allocation cleans its own partial directory on reconstruction failure.
 - Application tests prove invalid artifacts never invoke the runner and produce the same classification and evidence five consecutive times through a controlled runner.
 - CLI tests prove classification and required-status policy remain separate, JSON output stays machine-readable, and terminal controls, bidirectional controls, and GitHub workflow-command syntax are neutralized.
-- The Linux container suite checks five real repeated runs, network denial, host-file isolation, non-root execution, zero effective capabilities, absent Docker socket, read-only root, bounded output, process count, workspace storage, CPU/time termination, memory termination, and cleanup.
+- The Linux container suite checks five real repeated runs, network denial, host-file isolation, non-root execution, zero effective capabilities, absent Docker socket, read-only root, bounded output, kernel-applied process and memory limits, workspace storage, CPU/time termination, and cleanup.
 
-## Remaining completion evidence
+## Completion evidence
 
-The real container suite is deliberately skipped during ordinary cross-platform unit tests and enabled by `PROOFISSUE_RUN_CONTAINER_TESTS=1`. The hosted `locked-down-replay` job explicitly pulls the approved image before replay, runs this suite on Ubuntu, and checks that no labeled replay container remains. Its passing hosted result is required before checking the Milestone 4 acceptance boxes or calling the milestone complete.
+The complete local quality gate passed on 2026-07-15 with 89 runnable tests passing and four Docker-only tests skipped on Windows. The [hosted validation run](https://github.com/x9nst/Proofissue/actions/runs/29458384188) then passed on Ubuntu and Windows; its dedicated Linux replay job pulled the approved image, passed all four real-container tests, and confirmed that no labeled replay container remained. The workflow records the Docker engine version, operating system, architecture, and host architecture for future repeatability evidence.
+
+The real container suite remains deliberately skipped during ordinary cross-platform unit tests and is enabled by `PROOFISSUE_RUN_CONTAINER_TESTS=1` in the dedicated hosted job.
 
 ## Security and compatibility impact
 

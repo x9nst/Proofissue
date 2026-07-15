@@ -84,6 +84,11 @@ jobs:
       - name: Prepare the approved image explicitly
         run: docker pull "$PROOFISSUE_IMAGE"
 
+      - name: Record supported replay environment
+        run: |
+          docker version --format 'Docker Engine {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
+          uname -m
+
       - name: Run locked-down replay tests
         run: npm test -- packages/runner/src/container.integration.test.ts
 
