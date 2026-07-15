@@ -12,16 +12,16 @@ An illustrative command is:
 proofissue record \
   --project . \
   --output failure.proofissue \
-  --image node@sha256:<approved-digest> \
+  --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6 \
   --reproduction test/reproduction.mjs \
   --subject src/calculate.mjs \
   --expect-stderr "Expected 4 from calculate(2)" \
   -- node test/reproduction.mjs
 ```
 
-The final CLI spelling and user-facing role labels remain subject to the usability gate in `product-validation.md`; the explicit two-role behavior is fixed by this document.
+The explicit two-role behavior is fixed by this document. Future terminology changes require new maintainer evidence and normal compatibility review.
 
-For automation, add `--yes` only after the project, command, file roles, expectations, and output path have been reviewed. Interactive recording confirms the reproduction-file group, subject-file group, and final write separately. The image must be digest-pinned; Milestone 4 will define the approved replay-image policy, so a syntactically valid digest is not yet permission to replay it.
+For automation, add `--yes` only after the project, command, file roles, expectations, and output path have been reviewed. Interactive recording confirms the reproduction-file group, subject-file group, and final write separately. The shown Node.js 24 Linux amd64 image is the only approved prototype image. A different syntactically valid digest is rejected by local replay policy.
 
 ## Recording Sequence
 
@@ -68,7 +68,7 @@ Misclassification changes the meaning of fix verification:
 - a test or fixture marked as `subject` may be replaced and stop serving as the frozen reproduction;
 - implementation code marked as `reproduction` stays frozen at its original broken contents and may make a real fix appear ineffective.
 
-ProofIssue may show examples and warnings but does not silently guess or change a role in version 1. The role names used in the CLI and preview remain provisional until the task-based maintainer research in `product-validation.md` passes.
+ProofIssue may show examples and warnings but does not silently guess or change a role in version 1. The role names used in the CLI and preview passed the task-based maintainer gate as confirmed by the project owner on 2026-07-15.
 
 Version 1 accepts individual file paths only. Directory recursion and glob patterns are deferred because they make minimal collection and review harder.
 

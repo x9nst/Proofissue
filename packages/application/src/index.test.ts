@@ -1,13 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { parseAndValidateArtifact, serializeArtifact, sha256 } from '@proofissue/artifact-schema';
+import type { Runner } from '@proofissue/runner';
 
 import type { ReplayOperationResult } from './index.js';
 import {
   createRecordApplicationService,
+  createReplayApplicationService,
   createStaticArtifactApplicationServices,
   evaluateRequiredReplayStatus,
   type RecordConfirmation,
@@ -251,5 +253,115 @@ describe('record application service', () => {
     } finally {
       await rm(fixture.root, { force: true, recursive: true });
     }
+  });
+});
+
+describe('replay application service', () => {
+  const runner = (stderr = 'Expected 4 from calculate(2)'): Runner => ({
+    run: () =>
+      Promise.resolve({
+        cleanup: {
+          completed: true,
+          attempted_resources: ['container', 'workspace'],
+          residual_resources: [],
+        },
+        effective_limits: {
+          cpus: 1,
+          memory_mb: 512,
+          output_bytes_per_stream: 1_048_576,
+          processes: 64,
+          timeout_seconds: 60,
+          writable_workspace_mb: 64,
+        },
+        events: [],
+        execution: {
+          duration_ms: 25,
+          exit_code: 1,
+          stdout: {
+            decoded_text: '',
+            discarded_bytes: 0,
+            had_decoding_replacement: false,
+            retained_bytes: 0,
+            total_bytes: 0,
+            truncated: false,
+          },
+          stderr: {
+            decoded_text: stderr,
+            discarded_bytes: 0,
+            had_decoding_replacement: false,
+            retained_bytes: Buffer.byteLength(stderr),
+            total_bytes: Buffer.byteLength(stderr),
+            truncated: false,
+          },
+          termination_reason: 'exited',
+        },
+        substituted_paths: [],
+      }),
+  });
+
+  it('returns the same explainable classification five consecutive times', async () => {
+    const service = createReplayApplicationService({ runner: runner() });
+    const results = await Promise.all(
+      Array.from(
+        { length: 5 },
+        async () =>
+          await service.replay({
+            artifact_path: 'tests/fixtures/artifacts/v1/valid/canonical.proofissue',
+            mode: 'snapshot',
+          }),
+      ),
+    );
+
+    expect(results.map((result) => result.status)).toEqual(Array(5).fill('reproduced'));
+    expect(results.map((result) => result.evidence)).toEqual(
+      Array(5).fill([
+        { kind: 'exit_code', message: 'Exit code matched: 1.' },
+        { kind: 'stderr_contains', message: 'Expected stderr text was present.' },
+      ]),
+    );
+    expect(JSON.stringify(results)).not.toContain('decoded_text');
+  });
+
+  it('explains every mismatch without publishing raw command output', async () => {
+    const result = await createReplayApplicationService({
+      runner: runner('different failure'),
+    }).replay({
+      artifact_path: 'tests/fixtures/artifacts/v1/valid/canonical.proofissue',
+      mode: 'snapshot',
+    });
+
+    expect(result.status).toBe('not_reproduced');
+    expect(result.differences).toEqual([
+      { kind: 'stderr_missing', message: 'Expected stderr text was not present.' },
+    ]);
+    expect(JSON.stringify(result)).not.toContain('different failure');
+  });
+
+  it('validates before invoking the runner', async () => {
+    const unsafeRunner: Runner = {
+      run: () => Promise.reject(new Error('Runner must not be called.')),
+    };
+    const spy = vi.spyOn(unsafeRunner, 'run');
+    const result = await createReplayApplicationService({ runner: unsafeRunner }).replay({
+      artifact_path: 'tests/fixtures/artifacts/v1/invalid/unknown-field.proofissue',
+      mode: 'snapshot',
+    });
+
+    expect(result.status).toBe('invalid_artifact');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('redacts replay output before matching or returning a result', async () => {
+    const synthetic = `Expected 4 from calculate(2)\nAuthorization: ${bearer} synthetic-replay-token`;
+    const result = await createReplayApplicationService({ runner: runner(synthetic) }).replay({
+      artifact_path: 'tests/fixtures/artifacts/v1/valid/canonical.proofissue',
+      mode: 'snapshot',
+    });
+
+    expect(result.status).toBe('reproduced');
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'replay_output_redacted' }),
+    );
+    expect(JSON.stringify(result)).not.toContain('synthetic-replay-token');
   });
 });

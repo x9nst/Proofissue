@@ -7,6 +7,7 @@ import {
   createCliAdapter,
   parseRecordArguments,
   RECORD_HELP,
+  renderReplayResult,
   renderRecordPreview,
   runCli,
   type CliIo,
@@ -18,11 +19,104 @@ describe('CLI application boundary', () => {
   });
 });
 
+describe('replay CLI', () => {
+  const replayResult = {
+    result_schema_version: 1 as const,
+    operation: 'replay' as const,
+    status: 'reproduced' as const,
+    mode: 'snapshot' as const,
+    warnings: [],
+    errors: [],
+    evidence: [
+      { kind: 'exit_code' as const, message: 'Exit code matched: 1.' },
+      { kind: 'stderr_contains' as const, message: 'Expected stderr text was present.' },
+    ],
+    differences: [],
+    substituted_paths: [],
+    scope_limitations: [],
+    cleanup: {
+      completed: true,
+      attempted_resources: ['container', 'workspace'],
+      residual_resources: [],
+    },
+  };
+
+  it('uses the shared replay result and separates classification from required-status policy', async () => {
+    let written = '';
+    const io: CliIo = {
+      confirm: () => Promise.resolve(false),
+      write: (text) => {
+        written += text;
+      },
+    };
+    const application = {
+      replay: () => Promise.resolve(replayResult),
+    };
+
+    const accepted = await runCli(
+      ['replay', 'failure.proofissue', '--require-status', 'reproduced'],
+      io,
+      application,
+    );
+    const rejected = await runCli(
+      ['replay', 'failure.proofissue', '--require-status', 'not_reproduced'],
+      io,
+      application,
+    );
+
+    expect(accepted.exit_code).toBe(0);
+    expect(rejected.exit_code).toBe(1);
+    expect(accepted.result?.status).toBe('reproduced');
+    expect(written).toContain('Replay result: reproduced');
+    expect(written).not.toContain('decoded_text');
+  });
+
+  it('emits the versioned result as valid JSON for automation', async () => {
+    let written = '';
+    const result = await runCli(
+      ['replay', 'failure.proofissue', '--json'],
+      {
+        confirm: () => Promise.resolve(false),
+        write: (text) => {
+          written += text;
+        },
+      },
+      { replay: () => Promise.resolve(replayResult) },
+    );
+
+    expect(result.exit_code).toBe(0);
+    expect(JSON.parse(written)).toMatchObject({
+      result_schema_version: 1,
+      operation: 'replay',
+      status: 'reproduced',
+    });
+  });
+
+  it('neutralizes terminal controls, bidirectional controls, and workflow commands', () => {
+    const rendered = renderReplayResult({
+      ...replayResult,
+      warnings: [
+        {
+          code: 'hostile',
+          message: '\u001b]0;title\u0007\r::error::spoof\u202e',
+        },
+      ],
+    });
+
+    expect(rendered).not.toContain('\u001b');
+    expect(rendered).not.toContain('\r');
+    expect(rendered).not.toContain('\u202e');
+    expect(rendered).not.toContain('::error::');
+    expect(rendered).toContain('\\u{001b}');
+    expect(rendered).toContain('\\:\\:error\\:\\:spoof');
+  });
+});
+
 describe('record CLI', () => {
-  it('documents provisional file roles, direct execution, and explicit automation approval', () => {
+  it('documents file roles, direct execution, and explicit automation approval', () => {
     expect(RECORD_HELP).toContain('--reproduction');
     expect(RECORD_HELP).toContain('--subject');
-    expect(RECORD_HELP).toContain('provisional wording');
+    expect(RECORD_HELP).toContain('File roles:');
     expect(RECORD_HELP).toContain('shell syntax is not interpreted');
     expect(RECORD_HELP).toContain('--yes');
   });

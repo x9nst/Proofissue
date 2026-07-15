@@ -1,7 +1,10 @@
+import { createMatcher } from '@proofissue/matcher';
 import type { Matcher } from '@proofissue/matcher';
 import { createRecorder, RecorderError } from '@proofissue/recorder';
 import type { RecordCapture, Recorder } from '@proofissue/recorder';
+import { createRedactor } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
+import { createDockerRunner, RunnerError } from '@proofissue/runner';
 import type { Runner } from '@proofissue/runner';
 
 export type {
@@ -17,6 +20,8 @@ export type {
 
 import type {
   ArtifactInspectionSummary,
+  BoundedExecutionResult,
+  BoundedExecutionSummary,
   InspectOperationResult,
   RecordOperationResult,
   ReplayOperationResult,
@@ -91,6 +96,7 @@ export interface ReplayApplicationRequest {
   readonly artifact_path: string;
   readonly mode: 'snapshot' | 'current_checkout';
   readonly required_status?: Extract<ReplayStatus, 'not_reproduced' | 'reproduced'>;
+  readonly signal?: AbortSignal;
 }
 
 export interface ApplicationServices {
@@ -102,6 +108,7 @@ export interface ApplicationServices {
 
 export type StaticArtifactApplicationServices = Pick<ApplicationServices, 'inspect' | 'validate'>;
 export type RecordApplicationService = Pick<ApplicationServices, 'record'>;
+export type ReplayApplicationService = Pick<ApplicationServices, 'replay'>;
 
 const withoutDecodedText = (capture: RecordCapture['stdout']) => ({
   discarded_bytes: capture.discarded_bytes,
@@ -360,12 +367,188 @@ export const createStaticArtifactApplicationServices = (): StaticArtifactApplica
   validate: validateArtifact,
 });
 
+const summarizeExecution = (execution: BoundedExecutionResult): BoundedExecutionSummary => ({
+  duration_ms: execution.duration_ms,
+  ...(execution.exit_code === undefined ? {} : { exit_code: execution.exit_code }),
+  ...(execution.signal === undefined ? {} : { signal: execution.signal }),
+  stdout: withoutDecodedText(execution.stdout),
+  stderr: withoutDecodedText(execution.stderr),
+  termination_reason: execution.termination_reason,
+});
+
+const replayBase = (
+  mode: ReplayApplicationRequest['mode'],
+): Pick<
+  ReplayOperationResult,
+  | 'differences'
+  | 'errors'
+  | 'evidence'
+  | 'mode'
+  | 'operation'
+  | 'result_schema_version'
+  | 'scope_limitations'
+  | 'substituted_paths'
+  | 'warnings'
+> => ({
+  result_schema_version: 1,
+  operation: 'replay',
+  mode,
+  warnings: [],
+  errors: [],
+  evidence: [],
+  differences: [],
+  substituted_paths: [],
+  scope_limitations: [],
+});
+
+export interface ReplayApplicationDependencies {
+  readonly matcher?: Matcher;
+  readonly redactor?: Redactor;
+  readonly runner?: Runner;
+}
+
+export const createReplayApplicationService = (
+  dependencies: ReplayApplicationDependencies = {},
+): ReplayApplicationService => {
+  const matcher = dependencies.matcher ?? createMatcher();
+  const redactor = dependencies.redactor ?? createRedactor();
+  const runner = dependencies.runner ?? createDockerRunner();
+
+  return {
+    replay: async (request): Promise<ReplayOperationResult> => {
+      const parsed = await readArtifactFile(request.artifact_path);
+      if (!parsed.ok) {
+        return {
+          ...replayBase(request.mode),
+          status: 'invalid_artifact',
+          errors: parsed.errors.map(toProofIssueError),
+        };
+      }
+
+      const artifact = parsed.artifact;
+      const imageDigest = artifact.environment.image.split('@')[1];
+      try {
+        const result = await runner.run({
+          artifact,
+          ...(request.against_path === undefined ? {} : { against_path: request.against_path }),
+          mode: request.mode,
+          ...(request.signal === undefined ? {} : { signal: request.signal }),
+        });
+        const redactedStdout = redactor.redact(result.execution.stdout.decoded_text);
+        const redactedStderr = redactor.redact(result.execution.stderr.decoded_text);
+        const safeExecution: BoundedExecutionResult = {
+          ...result.execution,
+          stdout: { ...result.execution.stdout, decoded_text: redactedStdout.text },
+          stderr: { ...result.execution.stderr, decoded_text: redactedStderr.text },
+        };
+        const match = matcher.match({
+          execution: safeExecution,
+          expectation: {
+            exit_code: artifact.expect.exit_code,
+            stdout_contains: artifact.expect.stdout.map((item) => item.value),
+            stderr_contains: artifact.expect.stderr.map((item) => item.value),
+          },
+        });
+        const truncated = safeExecution.stdout.truncated || safeExecution.stderr.truncated;
+        return {
+          ...replayBase(request.mode),
+          status: match.reproduced ? 'reproduced' : 'not_reproduced',
+          artifact_version: 1,
+          artifact_digest: artifact.digest,
+          ...(imageDigest === undefined ? {} : { image_digest: imageDigest }),
+          effective_limits: result.effective_limits,
+          execution: summarizeExecution(safeExecution),
+          evidence: match.evidence,
+          differences: match.differences,
+          substituted_paths: result.substituted_paths,
+          scope_limitations: truncated
+            ? [
+                {
+                  code: 'output_truncated',
+                  message: 'Replay output exceeded its retained byte limit.',
+                },
+              ]
+            : [],
+          cleanup: result.cleanup,
+          warnings:
+            redactedStdout.findings.length + redactedStderr.findings.length > 0
+              ? [
+                  {
+                    code: 'replay_output_redacted',
+                    message: 'Likely secrets were removed from replay output before matching.',
+                  },
+                ]
+              : [],
+        };
+      } catch (error: unknown) {
+        if (error instanceof RunnerError) {
+          const cleanupError =
+            error.cleanup !== undefined &&
+            !error.cleanup.completed &&
+            error.code !== 'cleanup_failed'
+              ? [
+                  {
+                    code: 'cleanup_failed' as const,
+                    message: 'Replay cleanup did not complete successfully.',
+                  },
+                ]
+              : [];
+          return {
+            ...replayBase(request.mode),
+            status: 'execution_failed',
+            artifact_version: 1,
+            artifact_digest: artifact.digest,
+            ...(error.code === 'policy_rejection' || imageDigest === undefined
+              ? {}
+              : { image_digest: imageDigest }),
+            ...(error.effective_limits === undefined
+              ? {}
+              : { effective_limits: error.effective_limits }),
+            ...(error.execution === undefined
+              ? {}
+              : { execution: summarizeExecution(error.execution) }),
+            ...(error.cleanup === undefined ? {} : { cleanup: error.cleanup }),
+            errors: [{ code: error.code, message: error.message }, ...cleanupError],
+          };
+        }
+        return {
+          ...replayBase(request.mode),
+          status: 'execution_failed',
+          artifact_version: 1,
+          artifact_digest: artifact.digest,
+          errors: [
+            {
+              code: 'internal_error',
+              message: 'Replay could not be completed safely.',
+            },
+          ],
+        };
+      }
+    },
+  };
+};
+
 export interface ApplicationPorts {
   readonly matcher: Matcher;
   readonly recorder: Recorder;
   readonly redactor: Redactor;
   readonly runner: Runner;
 }
+
+export const createApplicationServices = (
+  confirm: ConfirmRecording,
+  ports: Partial<ApplicationPorts> = {},
+): ApplicationServices => {
+  const recorder = ports.recorder ?? createRecorder();
+  const matcher = ports.matcher ?? createMatcher();
+  const redactor = ports.redactor ?? createRedactor();
+  const runner = ports.runner ?? createDockerRunner();
+  return {
+    ...createRecordApplicationService(confirm, recorder),
+    ...createStaticArtifactApplicationServices(),
+    ...createReplayApplicationService({ matcher, redactor, runner }),
+  };
+};
 
 export interface RequiredStatusEvaluation {
   readonly actual: ReplayStatus;

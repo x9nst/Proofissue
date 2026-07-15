@@ -2,14 +2,16 @@
 
 ProofIssue is an open-source tool for creating portable, inspectable, replayable bug reports.
 
-The project has completed its static artifact core and is implementing the recorder and redaction milestone. One dependency-free Node.js command can now be captured into a validated artifact through the application and CLI layers, with file review, bounded output, and secret replacement. The file-role wording remains provisional pending maintainer testing, and isolated replay is still the next milestone. This is not yet stable support for typical Node.js projects.
+The project has completed recording and redaction and is implementing locked-down replay and basic matching. One dependency-free Node.js command can be captured into a validated artifact, replayed through the shared application layer, and classified with exact exit-code and literal output evidence. Hosted Linux container verification is still required before Milestone 4 can be marked complete. This is not yet stable support for typical Node.js projects.
 
 ## Repository Status
 
 - Product and security contracts: complete as reviewed design documents
 - Repository foundation: complete
-- Static artifact core: not started
-- Recorder, runner, CLI, and GitHub Action behavior: not implemented
+- Static artifact core: complete
+- Recorder and redaction: complete
+- Locked-down replay and basic matching: in progress
+- Fix verification and GitHub Action behavior: not implemented
 
 See `IMPLEMENTATION_PLAN.md` for acceptance criteria and evidence. See `docs/README.md` for the documentation map.
 
@@ -20,7 +22,7 @@ Requirements:
 - Node.js 24
 - npm 11
 - Git
-- Docker Engine only for later replay integration work; it is not required for foundation checks
+- Docker Engine 27 or newer on x86-64 Linux for replay; it is not required for non-container checks
 
 Install and verify:
 

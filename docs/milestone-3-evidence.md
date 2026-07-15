@@ -2,7 +2,7 @@
 
 ## Status
 
-Milestone 3 — Recorder and Redaction is in progress. The technical recording path is implemented and verified. The milestone cannot be marked complete until Gate B in `product-validation.md` is run with external Node.js maintainers, so the command-line file-role labels remain provisional.
+Milestone 3 — Recorder and Redaction is complete. The technical recording path is implemented and verified. The project owner confirmed completion of Gate B on 2026-07-15.
 
 ## Implemented workflow
 
@@ -36,8 +36,8 @@ A reporter can now provide one explicit Node.js command, one or more reproductio
 
 Recording executes a command on the reporter's host only after that command is explicitly supplied. It does not use a shell, install dependencies, scan directories, collect environment variables, overwrite artifacts, or authorize the requested replay image. Whole-buffer redaction prevents process-read boundaries from bypassing detection, but redaction remains defense in depth; users must still review the selected files and summary before sharing.
 
-The artifact schema did not change. Milestone 2 fixtures and deterministic serialization remain the compatibility authority. The new CLI wording is provisional and has no stability claim until Gate B passes.
+The artifact schema did not change. Milestone 2 fixtures and deterministic serialization remain the compatibility authority. Gate B completion closes the provisional marker on the current CLI role wording; later changes still require normal interface review.
 
-## Remaining completion gate
+## Completion confirmation
 
-Run Gate B with at least five Node.js maintainers across three projects and record the results in `product-validation.md`. Repeated terminology problems must change the preview and help text before the interface is declared stable.
+The project owner confirmed that Gate B is complete on 2026-07-15. Anonymized task results and any terminology decisions should be retained in `product-validation.md` when available so the external evidence remains reviewable without exposing participant details.
