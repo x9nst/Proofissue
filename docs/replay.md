@@ -126,7 +126,7 @@ node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
 
 It is the Linux amd64 image digest published for the official `node:24.18.0-bookworm-slim` image. The runner checks that this exact digest is already present and never pulls it. Image preparation is an explicit administrator or CI step.
 
-The runner exposes only a freshly created input directory as a read-only mount. Before the artifact command starts, a trusted Node.js bootstrap copies those declared files into a 64 MiB in-memory workspace. The command receives only a minimal `PATH`, runs without a host shell, and cannot write to the base filesystem.
+The runner exposes only a freshly created input directory as a read-only mount. Before the artifact command starts, a fixed trusted container bootstrap copies those declared files into a 64 MiB in-memory workspace and then replaces itself with the exact `node` argument vector. Artifact arguments are positional values and are never interpolated as shell text. The command receives only a minimal `PATH` and cannot write to the base filesystem. The container's one runner-owned init process is added outside the artifact's declared process budget so the effective artifact limit remains accurate.
 
 ## Dependency Boundary
 

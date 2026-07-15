@@ -105,9 +105,9 @@ const workspace = (): ReplayWorkspace & { readonly calls: string[]; failRemove: 
 };
 
 describe('Docker isolation arguments', () => {
-  it('enforces every Milestone 4 container control without a shell or engine socket', () => {
+  it('enforces every Milestone 4 container control without untrusted shell interpolation or an engine socket', () => {
     const arguments_ = buildDockerCreateArguments({
-      arguments_base64: 'WyJyZXByb2R1Y3Rpb24ubWpzIl0',
+      arguments: ['reproduction.mjs', 'argument with spaces', '&'],
       image: APPROVED_NODE_IMAGE,
       input_path: '/tmp/proofissue-input',
       limits: {
@@ -134,7 +134,7 @@ describe('Docker isolation arguments', () => {
         '--security-opt',
         'no-new-privileges:true',
         '--pids-limit',
-        '8',
+        '9',
         '--memory',
         '64m',
         '--memory-swap',
@@ -142,9 +142,16 @@ describe('Docker isolation arguments', () => {
         '--cpus',
         '0.5',
         '--entrypoint',
-        'node',
+        '/bin/sh',
       ]),
     );
+    expect(arguments_.slice(-5)).toEqual([
+      '--',
+      'node',
+      'reproduction.mjs',
+      'argument with spaces',
+      '&',
+    ]);
     expect(encoded).toContain('dst=/proofissue-input,readonly');
     expect(encoded).toContain('/workspace:rw,nosuid,nodev,noexec,size=67108864,mode=1777');
     expect(encoded).not.toContain('privileged');

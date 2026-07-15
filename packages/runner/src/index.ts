@@ -150,7 +150,7 @@ export const createReplayWorkspace = (): ReplayWorkspace => ({
 });
 
 export interface ContainerCreateSpec {
-  readonly arguments_base64: string;
+  readonly arguments: readonly string[];
   readonly image: string;
   readonly input_path: string;
   readonly limits: EffectiveLimits;
@@ -177,16 +177,8 @@ export interface ContainerEngine {
   remove(name: string): Promise<void>;
 }
 
-const CONTAINER_BOOTSTRAP = [
-  "const fs=require('node:fs');",
-  "const {spawn}=require('node:child_process');",
-  "fs.cpSync('/proofissue-input','/workspace',{recursive:true});",
-  "const args=JSON.parse(Buffer.from(process.argv[1],'base64url').toString('utf8'));",
-  "const child=spawn(process.execPath,args,{cwd:'/workspace',env:{PATH:'/usr/local/bin:/usr/bin:/bin'},stdio:'inherit'});",
-  "for(const signal of ['SIGTERM','SIGINT'])process.on(signal,()=>child.kill(signal));",
-  "child.on('error',()=>{process.exitCode=125;});",
-  "child.on('exit',(code,signal)=>{if(signal)process.kill(process.pid,signal);else process.exitCode=code??125;});",
-].join('');
+const CONTAINER_BOOTSTRAP =
+  'cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"';
 
 export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => [
   'create',
@@ -204,7 +196,7 @@ export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly 
   '--security-opt',
   'no-new-privileges:true',
   '--pids-limit',
-  String(spec.limits.processes),
+  String(spec.limits.processes + 1),
   '--memory',
   `${String(spec.limits.memory_mb)}m`,
   '--memory-swap',
@@ -221,11 +213,13 @@ export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly 
   '--workdir',
   '/workspace',
   '--entrypoint',
-  'node',
+  '/bin/sh',
   spec.image,
-  '-e',
+  '-c',
   CONTAINER_BOOTSTRAP,
-  spec.arguments_base64,
+  '--',
+  'node',
+  ...spec.arguments,
 ];
 
 interface DockerCommandResult {
@@ -508,10 +502,7 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
         event('workspace_created');
         containerAttempted = true;
         await engine.create({
-          arguments_base64: Buffer.from(
-            JSON.stringify(request.artifact.command.arguments),
-            'utf8',
-          ).toString('base64url'),
+          arguments: request.artifact.command.arguments,
           image,
           input_path: root,
           limits: effectiveLimits,
