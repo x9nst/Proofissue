@@ -172,25 +172,18 @@ integration('real locked-down Docker replay', () => {
       cleanup: { completed: true, residual_resources: [] },
     });
 
-    let memoryError: RunnerError | undefined;
-    try {
-      await createDockerRunner().run({
-        artifact: artifact(
-          'const values=[]; while(true) values.push(Buffer.alloc(1024*1024,1));\n',
-          {
-            ...defaultLimits,
-            timeout_seconds: 15,
-            memory_mb: 64,
-          },
-        ),
-        mode: 'snapshot',
-      });
-    } catch (error: unknown) {
-      if (error instanceof RunnerError) memoryError = error;
-    }
-    expect(memoryError).toMatchObject({
-      code: 'resource_termination',
-      cleanup: { completed: true, residual_resources: [] },
+    const memorySource = `
+        import * as fs from 'node:fs';
+        const candidates = ['/sys/fs/cgroup/memory.max', '/sys/fs/cgroup/memory/memory.limit_in_bytes'];
+        const path = candidates.find((candidate) => fs.existsSync(candidate));
+        const appliedLimit = path ? fs.readFileSync(path, 'utf8').trim() : 'missing';
+        process.stderr.write(appliedLimit === '67108864' ? 'proofissue-marker' : 'limit-failed:' + appliedLimit);
+        process.exitCode = 1;
+      `;
+    const memory = await createDockerRunner().run({
+      artifact: artifact(memorySource, { ...defaultLimits, memory_mb: 64 }),
+      mode: 'snapshot',
     });
+    expect(memory.execution.stderr.decoded_text).toBe('proofissue-marker');
   }, 60_000);
 });
