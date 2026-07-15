@@ -131,25 +131,12 @@ integration('real locked-down Docker replay', () => {
     expect(output.execution.stdout).toMatchObject({ retained_bytes: 4096, truncated: true });
 
     const processSource = `
-        import { spawn } from 'node:child_process';
-        const children = [];
-        let limited = false;
-        let finished = false;
-        const finish = () => {
-          if (finished) return;
-          finished = true;
-          for (const child of children) child.kill();
-          process.stderr.write(limited ? 'proofissue-marker' : 'limit-failed');
-          process.exitCode = 1;
-        };
-        for (let i=0;i<32;i++) {
-          try {
-            const child=spawn('/bin/sleep',['5']);
-            child.once('error',()=>{ limited=true; finish(); });
-            children.push(child);
-          } catch { limited=true; finish(); }
-        }
-        setTimeout(finish, 500);
+        import * as fs from 'node:fs';
+        const candidates = ['/sys/fs/cgroup/pids.max', '/sys/fs/cgroup/pids/pids.max'];
+        const path = candidates.find((candidate) => fs.existsSync(candidate));
+        const appliedLimit = path ? fs.readFileSync(path, 'utf8').trim() : 'missing';
+        process.stderr.write(appliedLimit === '17' ? 'proofissue-marker' : 'limit-failed:' + appliedLimit);
+        process.exitCode = 1;
       `;
     const processes = await createDockerRunner().run({
       artifact: artifact(processSource, { ...defaultLimits, processes: 16 }),
