@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { parseAndValidateArtifact, serializeArtifact, sha256 } from '@proofissue/artifact-schema';
 
 import type { ReplayOperationResult } from './index.js';
-import { createStaticArtifactApplicationServices, evaluateRequiredReplayStatus } from './index.js';
+import {
+  createRecordApplicationService,
+  createStaticArtifactApplicationServices,
+  evaluateRequiredReplayStatus,
+  type RecordConfirmation,
+  type RecordPreview,
+} from './index.js';
+
+const bearer = ['Bear', 'er'].join('');
 
 const replayResult = (status: ReplayOperationResult['status']): ReplayOperationResult => ({
   result_schema_version: 1,
@@ -155,6 +163,93 @@ describe('static artifact application services', () => {
       expect(encoded).not.toContain('replacement');
     } finally {
       await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe('record application service', () => {
+  const confirmed: RecordConfirmation = {
+    reproduction_files_confirmed: true,
+    subject_files_confirmed: true,
+    write_confirmed: true,
+  };
+
+  const setup = async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-application-record-'));
+    await mkdir(path.join(root, 'test'));
+    await mkdir(path.join(root, 'src'));
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      `process.stdout.write('Authorization: ${bearer} synthetic-token'); process.stderr.write('failure marker'); process.exitCode = 1;\n`,
+    );
+    await writeFile(path.join(root, 'src', 'subject.mjs'), 'export const value = 3;\n');
+    return {
+      root,
+      output: path.join(root, 'failure.proofissue'),
+      request: {
+        arguments: ['test/reproduction.mjs'],
+        environment_image: `node@sha256:${'1'.repeat(64)}`,
+        expect_stderr: ['failure marker'],
+        expect_stdout: [],
+        output_path: path.join(root, 'failure.proofissue'),
+        program: 'node' as const,
+        project_root: root,
+        reproduction_paths: ['test/reproduction.mjs'],
+        subject_paths: ['src/subject.mjs'],
+      },
+    };
+  };
+
+  it('shows a content-safe preview and writes only after all confirmations', async () => {
+    const fixture = await setup();
+    let preview: RecordPreview | undefined;
+    try {
+      const result = await createRecordApplicationService((value) => {
+        preview = value;
+        return Promise.resolve(confirmed);
+      }).record(fixture.request);
+
+      expect(result).toMatchObject({ status: 'created', artifact_version: 1, errors: [] });
+      expect(preview?.reproduction_files).toEqual(['test/reproduction.mjs']);
+      expect(preview?.subject_files).toEqual(['src/subject.mjs']);
+      expect(preview?.redaction.findings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            category: 'authorization_header',
+            target: 'stdout',
+            count: 1,
+          }),
+        ]),
+      );
+      expect(JSON.stringify(preview)).not.toContain('synthetic-token');
+      expect(JSON.stringify(preview)).not.toContain('decoded_text');
+      expect(await readFile(fixture.output, 'utf8')).not.toContain('synthetic-token');
+      expect(
+        (
+          await createStaticArtifactApplicationServices().validate({
+            artifact_path: fixture.output,
+          })
+        ).status,
+      ).toBe('valid');
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  it.each([
+    [{ ...confirmed, reproduction_files_confirmed: false }],
+    [{ ...confirmed, subject_files_confirmed: false }],
+    [{ ...confirmed, write_confirmed: false }],
+  ])('cancels without writing when any confirmation is declined', async (confirmation) => {
+    const fixture = await setup();
+    try {
+      const result = await createRecordApplicationService(() =>
+        Promise.resolve(confirmation),
+      ).record(fixture.request);
+      expect(result.status).toBe('cancelled');
+      await expect(readFile(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
     }
   });
 });

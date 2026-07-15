@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { decodeBoundedOutput } from './index.js';
+import { BoundedOutputCollector, decodeBoundedOutput } from './index.js';
 
 const encoder = new TextEncoder();
 
@@ -57,6 +57,23 @@ describe('decodeBoundedOutput', () => {
       discarded_bytes: 3,
       retained_bytes: 5,
       total_bytes: 8,
+      truncated: true,
+    });
+  });
+});
+
+describe('BoundedOutputCollector', () => {
+  it('retains bounded bytes while continuing to count drained output', () => {
+    const collector = new BoundedOutputCollector(4);
+    collector.add(Buffer.from('ab'));
+    collector.add(Buffer.from('cdef'));
+
+    expect(collector.finish()).toEqual({
+      decoded_text: 'abcd',
+      discarded_bytes: 2,
+      had_decoding_replacement: false,
+      retained_bytes: 4,
+      total_bytes: 6,
       truncated: true,
     });
   });

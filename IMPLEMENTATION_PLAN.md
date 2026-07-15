@@ -30,7 +30,7 @@ Completing the technical prototype does not complete the initial supported workf
 | 0. Product and security contracts | Complete | None | Decision, architecture, artifact, recording, replay, security, and threat-model documents; acceptance review below |
 | 1. Repository foundation | Complete | Milestone 0 | Apache License 2.0 selected; local checks and hosted Linux and Windows CI pass; see `docs/milestone-1-evidence.md` |
 | 2. Static artifact core | Complete | Milestone 1 | Static validation, safe inspection, schema, compatibility, property, fuzz-corpus, and deterministic serialization evidence; see `docs/milestone-2-evidence.md` |
-| 3. Recorder and redaction | Planned | Milestone 2 | Recording, minimal collection, and secret-leakage tests |
+| 3. Recorder and redaction | In Progress | Milestone 2 | Technical criteria pass; external Gate B remains; see `docs/milestone-3-evidence.md` |
 | 4. Locked-down replay and matching | Planned | Milestones 2-3 | Repeated replay and container security tests |
 | 5. Fix verification | Planned | Milestone 4 | Original and corrected-source end-to-end fixture |
 | 6. GitHub Actions integration | Planned | Milestone 5 | Passing fixture workflow and stable outputs |
@@ -212,7 +212,7 @@ Completion evidence is recorded in `docs/milestone-2-evidence.md`. Artifact pres
 
 ## Milestone 3 — Recorder and Redaction
 
-**Status:** Planned
+**Status:** In Progress
 
 **Target outcome:**
 
@@ -232,14 +232,16 @@ A reporter can create a safe, reviewable artifact from one failing command and a
 
 **Acceptance criteria:**
 
-- [ ] stdout, stderr, and exit code are captured separately.
-- [ ] Only explicitly selected regular files are collected.
-- [ ] Paths outside the selected project, symbolic links, special files, and oversized inputs are rejected.
-- [ ] Representative credentials do not appear in artifacts, logs, snapshots, or terminal summaries.
-- [ ] Canceling confirmation writes no artifact.
-- [ ] Every emitted artifact passes Milestone 2 validation.
-- [ ] Redaction and bounded-output tests vary stream chunk boundaries so split secrets cannot bypass detection.
+- [x] stdout, stderr, and exit code are captured separately.
+- [x] Only explicitly selected regular files are collected.
+- [x] Paths outside the selected project, symbolic links, special files, and oversized inputs are rejected.
+- [x] Representative credentials do not appear in artifacts, logs, snapshots, or terminal summaries.
+- [x] Canceling confirmation writes no artifact.
+- [x] Every emitted artifact passes Milestone 2 validation.
+- [x] Redaction and bounded-output tests vary stream chunk boundaries so split secrets cannot bypass detection.
 - [ ] The file-role terminology and preview meet Gate B in `docs/product-validation.md` before CLI wording is declared stable.
+
+Technical implementation evidence is recorded in `docs/milestone-3-evidence.md`. Milestone 3 remains in progress because Gate B requires task-based sessions with external Node.js maintainers; CLI role wording is explicitly provisional until that research is complete.
 
 ## Milestone 4 — Locked-Down Replay and Basic Matching
 
