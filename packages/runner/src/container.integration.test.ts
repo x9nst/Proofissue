@@ -144,7 +144,7 @@ integration('real locked-down Docker replay', () => {
         };
         for (let i=0;i<32;i++) {
           try {
-            const child=spawn(process.execPath,['-e','setTimeout(()=>{},5000)']);
+            const child=spawn('/bin/sleep',['5']);
             child.once('error',()=>{ limited=true; finish(); });
             children.push(child);
           } catch { limited=true; finish(); }
@@ -152,7 +152,7 @@ integration('real locked-down Docker replay', () => {
         setTimeout(finish, 500);
       `;
     const processes = await createDockerRunner().run({
-      artifact: artifact(processSource, { ...defaultLimits, processes: 8 }),
+      artifact: artifact(processSource, { ...defaultLimits, processes: 16 }),
       mode: 'snapshot',
     });
     expect(processes.execution.stderr.decoded_text).toContain('proofissue-marker');
