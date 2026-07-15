@@ -94,8 +94,8 @@ integration('real locked-down Docker replay', () => {
     const sentinel = path.join(hostRoot, 'secret.txt');
     await writeFile(sentinel, 'host-only');
     const source = `
-        const fs = require('node:fs');
-        const net = require('node:net');
+        import * as fs from 'node:fs';
+        import * as net from 'node:net';
         const failures = [];
         if (process.getuid() === 0) failures.push('root');
         const caps = fs.readFileSync('/proc/self/status', 'utf8').match(/^CapEff:\\s*(.+)$/m)?.[1];
@@ -131,17 +131,25 @@ integration('real locked-down Docker replay', () => {
     expect(output.execution.stdout).toMatchObject({ retained_bytes: 4096, truncated: true });
 
     const processSource = `
-        const {spawn} = require('node:child_process');
+        import { spawn } from 'node:child_process';
         const children = [];
         let limited = false;
+        let finished = false;
+        const finish = () => {
+          if (finished) return;
+          finished = true;
+          for (const child of children) child.kill();
+          process.stderr.write(limited ? 'proofissue-marker' : 'limit-failed');
+          process.exitCode = 1;
+        };
         for (let i=0;i<32;i++) {
           try {
             const child=spawn(process.execPath,['-e','setTimeout(()=>{},5000)']);
-            child.once('error',()=>{limited=true;});
+            child.once('error',()=>{ limited=true; finish(); });
             children.push(child);
-          } catch { limited=true; }
+          } catch { limited=true; finish(); }
         }
-        setTimeout(()=>{ for(const child of children) child.kill(); process.stderr.write(limited?'proofissue-marker':'limit-failed'); process.exitCode=1; },500);
+        setTimeout(finish, 500);
       `;
     const processes = await createDockerRunner().run({
       artifact: artifact(processSource, { ...defaultLimits, processes: 8 }),
@@ -150,7 +158,7 @@ integration('real locked-down Docker replay', () => {
     expect(processes.execution.stderr.decoded_text).toContain('proofissue-marker');
 
     const diskSource = `
-        const fs=require('node:fs');
+        import * as fs from 'node:fs';
         try { fs.writeFileSync('/workspace/fill',Buffer.alloc(70*1024*1024)); process.stderr.write('limit-failed'); }
         catch { process.stderr.write('proofissue-marker'); }
         process.exitCode=1;
