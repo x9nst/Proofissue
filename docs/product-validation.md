@@ -116,9 +116,10 @@ Record preparation time, inspection time, successful reproduction time, follow-u
 | Date | Gate | Participant context | Evidence | Decision or follow-up |
 | --- | --- | --- | --- | --- |
 | Not started | A | — | No sessions completed yet | Recruit Node.js maintainers before Milestone 2 interface freeze |
+| 2026-07-15 | B | Project-owner confirmation | The project owner reported that the Milestone 3 terminology gate is complete; session-level anonymized findings were not supplied in the repository. | Accept Gate B for milestone sequencing and retain the anonymized task results when available. |
 
 ## Status
 
 `In Progress`
 
-The research plan and mock material exist. No maintainer sessions have been completed, so no product-demand or terminology claim has yet been validated.
+The broader validation track remains in progress. Gate B completion was confirmed by the project owner on 2026-07-15, while the repository still needs the anonymized session detail and has no recorded Gate A findings. No broader product-demand claim is made from the confirmation alone.

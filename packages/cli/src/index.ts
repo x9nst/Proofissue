@@ -1,12 +1,15 @@
 import { createInterface } from 'node:readline/promises';
-import { stdin, stdout } from 'node:process';
+import process, { stdin, stdout } from 'node:process';
 
 import {
   createRecordApplicationService,
+  createReplayApplicationService,
+  createStaticArtifactApplicationServices,
+  evaluateRequiredReplayStatus,
   type ApplicationServices,
+  type OperationResult,
   type RecordApplicationRequest,
   type RecordConfirmation,
-  type RecordOperationResult,
   type RecordPreview,
 } from '@proofissue/application';
 
@@ -24,7 +27,7 @@ export const RECORD_HELP = `Usage:
     [--expect-stdout <literal>] [--expect-stderr <literal>]
     [--yes] -- node <arguments...>
 
-File roles (provisional wording):
+File roles:
   --reproduction  A test, fixture, or input kept exactly as recorded during fix checks.
   --subject       Implementation code that may be replaced from the current checkout.
 
@@ -32,6 +35,17 @@ At least one path in each role and one expected output literal are required.
 The command runs directly as Node.js arguments; shell syntax is not interpreted.
 Use --yes only for explicit noninteractive approval after reviewing these selections.
 `;
+
+export const CLI_HELP = `Usage:
+  proofissue record [options] -- node <arguments...>
+  proofissue validate <artifact.proofissue> [--json]
+  proofissue inspect <artifact.proofissue> [--json]
+  proofissue replay <artifact.proofissue> [--require-status reproduced|not_reproduced] [--json]
+
+Replay validates before execution, accepts only the approved digest-pinned image,
+uses a locked-down local Docker Engine on x86-64 Linux, and never pulls an image.
+
+${RECORD_HELP}`;
 
 export interface CliIo {
   readonly confirm: (question: string) => Promise<boolean>;
@@ -176,19 +190,170 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
 
 export interface CliRunResult {
   readonly exit_code: 0 | 1 | 2;
-  readonly result?: RecordOperationResult;
+  readonly result?: OperationResult;
 }
+
+const escapePresentationText = (value: string): string =>
+  Array.from(value)
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      if (
+        code < 32 ||
+        code === 127 ||
+        (code >= 0x80 && code <= 0x9f) ||
+        (code >= 0x202a && code <= 0x202e) ||
+        (code >= 0x2066 && code <= 0x2069)
+      ) {
+        return `\\u{${code.toString(16).padStart(4, '0')}}`;
+      }
+      return character;
+    })
+    .join('')
+    .replaceAll('::', '\\:\\:');
+
+export const renderReplayResult = (
+  result: Awaited<ReturnType<ApplicationServices['replay']>>,
+): string => {
+  const lines = [`Replay result: ${result.status}`];
+  if (result.image_digest !== undefined) lines.push(`Approved image: ${result.image_digest}`);
+  if (result.execution !== undefined) {
+    lines.push(`Termination: ${result.execution.termination_reason}`);
+    if (result.execution.exit_code !== undefined)
+      lines.push(`Exit code: ${String(result.execution.exit_code)}`);
+    lines.push(
+      `Output retained: stdout ${String(result.execution.stdout.retained_bytes)} bytes, stderr ${String(result.execution.stderr.retained_bytes)} bytes`,
+    );
+  }
+  for (const item of result.evidence)
+    lines.push(`Matched: ${escapePresentationText(item.message)}`);
+  for (const item of result.differences)
+    lines.push(`Different: ${escapePresentationText(item.message)}`);
+  for (const item of result.warnings)
+    lines.push(`Warning: ${escapePresentationText(item.message)}`);
+  for (const item of result.errors) lines.push(`Error: ${escapePresentationText(item.message)}`);
+  if (result.cleanup !== undefined)
+    lines.push(`Cleanup complete: ${String(result.cleanup.completed)}`);
+  return `${lines.join('\n')}\n`;
+};
+
+interface ParsedArtifactCommand {
+  readonly artifact_path: string;
+  readonly json: boolean;
+  readonly required_status?: 'not_reproduced' | 'reproduced';
+}
+
+const parseArtifactCommand = (
+  arguments_: readonly string[],
+  allowRequiredStatus: boolean,
+): ParsedArtifactCommand => {
+  const artifactPath = arguments_[0];
+  if (artifactPath === undefined || artifactPath.startsWith('--'))
+    throw new Error('An artifact path is required.');
+  let json = false;
+  let requiredStatus: ParsedArtifactCommand['required_status'];
+  for (let index = 1; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === '--json') {
+      json = true;
+      continue;
+    }
+    if (argument === '--require-status' && allowRequiredStatus) {
+      const value = arguments_[index + 1];
+      if (value !== 'reproduced' && value !== 'not_reproduced')
+        throw new Error('--require-status must be reproduced or not_reproduced.');
+      requiredStatus = value;
+      index += 1;
+      continue;
+    }
+    throw new Error(`Unknown option: ${argument ?? ''}`);
+  }
+  return {
+    artifact_path: artifactPath,
+    json,
+    ...(requiredStatus === undefined ? {} : { required_status: requiredStatus }),
+  };
+};
 
 export const runCli = async (
   arguments_: readonly string[],
   io: CliIo = defaultIo(),
+  application?: Partial<ApplicationServices>,
 ): Promise<CliRunResult> => {
   if (arguments_.length === 0 || arguments_[0] === '--help' || arguments_[0] === '-h') {
-    io.write(RECORD_HELP);
+    io.write(CLI_HELP);
     return { exit_code: 0 };
   }
+
+  if (arguments_[0] === 'validate' || arguments_[0] === 'inspect') {
+    let parsed: ParsedArtifactCommand;
+    try {
+      parsed = parseArtifactCommand(arguments_.slice(1), false);
+    } catch (error: unknown) {
+      io.write(`${error instanceof Error ? error.message : 'Invalid command.'}\n\n${CLI_HELP}`);
+      return { exit_code: 2 };
+    }
+    const staticServices = createStaticArtifactApplicationServices();
+    const result =
+      arguments_[0] === 'validate'
+        ? await (application?.validate ?? staticServices.validate)({
+            artifact_path: parsed.artifact_path,
+          })
+        : await (application?.inspect ?? staticServices.inspect)({
+            artifact_path: parsed.artifact_path,
+          });
+    io.write(
+      parsed.json
+        ? `${JSON.stringify(result)}\n`
+        : `${result.status}\n${result.errors.map((error) => `Error: ${escapePresentationText(error.message)}\n`).join('')}`,
+    );
+    return {
+      exit_code: result.status === 'valid' || result.status === 'inspected' ? 0 : 1,
+      result,
+    };
+  }
+
+  if (arguments_[0] === 'replay') {
+    let parsed: ParsedArtifactCommand;
+    try {
+      parsed = parseArtifactCommand(arguments_.slice(1), true);
+    } catch (error: unknown) {
+      io.write(
+        `${error instanceof Error ? error.message : 'Invalid replay command.'}\n\n${CLI_HELP}`,
+      );
+      return { exit_code: 2 };
+    }
+    const replay = application?.replay ?? createReplayApplicationService().replay;
+    const controller = new AbortController();
+    const interrupt = (): void => {
+      controller.abort();
+    };
+    process.once('SIGINT', interrupt);
+    process.once('SIGTERM', interrupt);
+    let result: Awaited<ReturnType<ApplicationServices['replay']>>;
+    try {
+      result = await replay({
+        artifact_path: parsed.artifact_path,
+        mode: 'snapshot',
+        signal: controller.signal,
+      });
+    } finally {
+      process.removeListener('SIGINT', interrupt);
+      process.removeListener('SIGTERM', interrupt);
+    }
+    io.write(parsed.json ? `${JSON.stringify(result)}\n` : renderReplayResult(result));
+    const classificationCompleted =
+      result.status === 'reproduced' || result.status === 'not_reproduced';
+    const requiredSatisfied =
+      parsed.required_status === undefined ||
+      evaluateRequiredReplayStatus(result, parsed.required_status).satisfied;
+    return {
+      exit_code: classificationCompleted && requiredSatisfied ? 0 : 1,
+      result,
+    };
+  }
+
   if (arguments_[0] !== 'record') {
-    io.write(`Unknown command: ${arguments_[0] ?? ''}\n\n${RECORD_HELP}`);
+    io.write(`Unknown command: ${arguments_[0] ?? ''}\n\n${CLI_HELP}`);
     return { exit_code: 2 };
   }
 

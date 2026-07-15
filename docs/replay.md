@@ -18,6 +18,8 @@ proofissue replay failure.proofissue
 
 Snapshot replay reconstructs every file from the artifact. Its purpose is to prove that the captured failure is portable.
 
+Use `--json` for the versioned machine-readable result. Use `--require-status reproduced` or `--require-status not_reproduced` when the command's process success must require one classification. The underlying classification is unchanged by this process policy.
+
 ## Current-Checkout Replay
 
 ```text
@@ -111,6 +113,20 @@ Replay uses:
 - unconditional container and workspace cleanup.
 
 The exact container-engine arguments are an implementation detail, but tests must prove every listed outcome.
+
+### Technical prototype support matrix
+
+Replay currently supports a local Docker Engine 27 or newer on an x86-64 Linux host, running Linux amd64 containers with Docker's default seccomp profile. Remote Docker contexts are rejected. Docker Desktop, rootless Docker, Podman, macOS replay hosts, Windows replay hosts, and other architectures are not yet supported claims.
+
+The sole approved prototype image is:
+
+```text
+node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
+```
+
+It is the Linux amd64 image digest published for the official `node:24.18.0-bookworm-slim` image. The runner checks that this exact digest is already present and never pulls it. Image preparation is an explicit administrator or CI step.
+
+The runner exposes only a freshly created input directory as a read-only mount. Before the artifact command starts, a fixed trusted container bootstrap copies those declared files into a 64 MiB in-memory workspace and then replaces itself with the exact `node` argument vector. Artifact arguments are positional values and are never interpolated as shell text. The command receives only a minimal `PATH` and cannot write to the base filesystem. The container's one runner-owned init process is added outside the artifact's declared process budget so the effective artifact limit remains accurate.
 
 ## Dependency Boundary
 

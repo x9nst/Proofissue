@@ -30,8 +30,8 @@ Completing the technical prototype does not complete the initial supported workf
 | 0. Product and security contracts | Complete | None | Decision, architecture, artifact, recording, replay, security, and threat-model documents; acceptance review below |
 | 1. Repository foundation | Complete | Milestone 0 | Apache License 2.0 selected; local checks and hosted Linux and Windows CI pass; see `docs/milestone-1-evidence.md` |
 | 2. Static artifact core | Complete | Milestone 1 | Static validation, safe inspection, schema, compatibility, property, fuzz-corpus, and deterministic serialization evidence; see `docs/milestone-2-evidence.md` |
-| 3. Recorder and redaction | In Progress | Milestone 2 | Technical criteria pass; external Gate B remains; see `docs/milestone-3-evidence.md` |
-| 4. Locked-down replay and matching | Planned | Milestones 2-3 | Repeated replay and container security tests |
+| 3. Recorder and redaction | Complete | Milestone 2 | Technical criteria pass and the project owner confirmed Gate B completion on 2026-07-15; see `docs/milestone-3-evidence.md` |
+| 4. Locked-down replay and matching | Complete | Milestones 2-3 | Local quality gates and hosted Linux container validation pass; see `docs/milestone-4-evidence.md` |
 | 5. Fix verification | Planned | Milestone 4 | Original and corrected-source end-to-end fixture |
 | 6. GitHub Actions integration | Planned | Milestone 5 | Passing fixture workflow and stable outputs |
 | 7. Initial supported Node.js workflow | Planned | Milestone 6 | Progressive real-project trials, compatibility suite, and security suite |
@@ -212,7 +212,7 @@ Completion evidence is recorded in `docs/milestone-2-evidence.md`. Artifact pres
 
 ## Milestone 3 — Recorder and Redaction
 
-**Status:** In Progress
+**Status:** Complete
 
 **Target outcome:**
 
@@ -239,13 +239,13 @@ A reporter can create a safe, reviewable artifact from one failing command and a
 - [x] Canceling confirmation writes no artifact.
 - [x] Every emitted artifact passes Milestone 2 validation.
 - [x] Redaction and bounded-output tests vary stream chunk boundaries so split secrets cannot bypass detection.
-- [ ] The file-role terminology and preview meet Gate B in `docs/product-validation.md` before CLI wording is declared stable.
+- [x] The file-role terminology and preview meet Gate B in `docs/product-validation.md` before CLI wording is declared stable.
 
-Technical implementation evidence is recorded in `docs/milestone-3-evidence.md`. Milestone 3 remains in progress because Gate B requires task-based sessions with external Node.js maintainers; CLI role wording is explicitly provisional until that research is complete.
+Technical implementation evidence is recorded in `docs/milestone-3-evidence.md`. The project owner confirmed Gate B completion on 2026-07-15. Anonymized research detail should remain in `docs/product-validation.md` so later wording decisions stay auditable.
 
 ## Milestone 4 — Locked-Down Replay and Basic Matching
 
-**Status:** Planned
+**Status:** Complete
 
 **Target outcome:**
 
@@ -267,15 +267,15 @@ A valid artifact can reproduce its captured failure in a locked-down Linux conta
 
 **Acceptance criteria:**
 
-- [ ] The dependency-free example produces the same classification and expected evidence five consecutive times under documented supported conditions.
-- [ ] Network-access attempts fail.
-- [ ] CPU, memory, process-count, output, and timeout limits are demonstrated by tests.
-- [ ] The container cannot read host files outside its temporary workspace.
-- [ ] Invalid artifacts never start a container.
-- [ ] Interrupted and timed-out runs leave no container or workspace behind.
-- [ ] Results explain every matched and mismatched expectation.
-- [ ] Cleanup fault injection covers failures during container start, stop, kill, removal, workspace creation, and workspace removal.
-- [ ] Terminal-control-sequence tests prove that hostile output cannot alter terminal structure or CI annotations.
+- [x] The dependency-free example produces the same classification and expected evidence five consecutive times under documented supported conditions.
+- [x] Network-access attempts fail.
+- [x] CPU, memory, process-count, output, and timeout limits are demonstrated by tests.
+- [x] The container cannot read host files outside its temporary workspace.
+- [x] Invalid artifacts never start a container.
+- [x] Interrupted and timed-out runs leave no container or workspace behind.
+- [x] Results explain every matched and mismatched expectation.
+- [x] Cleanup fault injection covers failures during container start, stop, kill, removal, workspace creation, and workspace removal.
+- [x] Terminal-control-sequence tests prove that hostile output cannot alter terminal structure or CI annotations.
 
 ## Milestone 5 — Fix Verification
 

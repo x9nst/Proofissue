@@ -57,3 +57,41 @@ jobs:
 
       - name: Confirm tracked files were not rewritten
         run: git diff --exit-code
+
+  locked-down-replay:
+    name: Locked-down replay (Linux)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PROOFISSUE_IMAGE: node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
+      PROOFISSUE_RUN_CONTAINER_TESTS: '1'
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Prepare the approved image explicitly
+        run: docker pull "$PROOFISSUE_IMAGE"
+
+      - name: Record supported replay environment
+        run: |
+          docker version --format 'Docker Engine {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
+          uname -m
+
+      - name: Run locked-down replay tests
+        run: npm test -- packages/runner/src/container.integration.test.ts
+
+      - name: Confirm replay left no containers
+        if: always()
+        run: test -z "$(docker ps --all --quiet --filter label=org.proofissue.replay=true)"
