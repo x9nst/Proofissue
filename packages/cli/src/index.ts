@@ -40,10 +40,14 @@ export const CLI_HELP = `Usage:
   proofissue record [options] -- node <arguments...>
   proofissue validate <artifact.proofissue> [--json]
   proofissue inspect <artifact.proofissue> [--json]
-  proofissue replay <artifact.proofissue> [--require-status reproduced|not_reproduced] [--json]
+  proofissue replay <artifact.proofissue> [--against <directory>]
+    [--require-status reproduced|not_reproduced] [--json]
 
 Replay validates before execution, accepts only the approved digest-pinned image,
 uses a locked-down local Docker Engine on x86-64 Linux, and never pulls an image.
+Without --against, replay uses every file embedded in the artifact. With --against,
+only declared subject paths are replaced; undeclared additions, removals, and renames
+are not evaluated.
 
 ${RECORD_HELP}`;
 
@@ -214,7 +218,7 @@ const escapePresentationText = (value: string): string =>
 export const renderReplayResult = (
   result: Awaited<ReturnType<ApplicationServices['replay']>>,
 ): string => {
-  const lines = [`Replay result: ${result.status}`];
+  const lines = [`Replay result: ${result.status}`, `Mode: ${result.mode}`];
   if (result.image_digest !== undefined) lines.push(`Approved image: ${result.image_digest}`);
   if (result.execution !== undefined) {
     lines.push(`Termination: ${result.execution.termination_reason}`);
@@ -231,12 +235,17 @@ export const renderReplayResult = (
   for (const item of result.warnings)
     lines.push(`Warning: ${escapePresentationText(item.message)}`);
   for (const item of result.errors) lines.push(`Error: ${escapePresentationText(item.message)}`);
+  for (const substitutedPath of result.substituted_paths)
+    lines.push(`Substituted subject: ${escapePresentationText(substitutedPath)}`);
+  for (const limitation of result.scope_limitations)
+    lines.push(`Scope: ${escapePresentationText(limitation.message)}`);
   if (result.cleanup !== undefined)
     lines.push(`Cleanup complete: ${String(result.cleanup.completed)}`);
   return `${lines.join('\n')}\n`;
 };
 
 interface ParsedArtifactCommand {
+  readonly against_path?: string;
   readonly artifact_path: string;
   readonly json: boolean;
   readonly required_status?: 'not_reproduced' | 'reproduced';
@@ -250,6 +259,7 @@ const parseArtifactCommand = (
   if (artifactPath === undefined || artifactPath.startsWith('--'))
     throw new Error('An artifact path is required.');
   let json = false;
+  let againstPath: string | undefined;
   let requiredStatus: ParsedArtifactCommand['required_status'];
   for (let index = 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -265,11 +275,20 @@ const parseArtifactCommand = (
       index += 1;
       continue;
     }
+    if (argument === '--against' && allowRequiredStatus) {
+      const value = arguments_[index + 1];
+      if (value === undefined || value.startsWith('--'))
+        throw new Error('--against requires a checkout directory.');
+      againstPath = value;
+      index += 1;
+      continue;
+    }
     throw new Error(`Unknown option: ${argument ?? ''}`);
   }
   return {
     artifact_path: artifactPath,
     json,
+    ...(againstPath === undefined ? {} : { against_path: againstPath }),
     ...(requiredStatus === undefined ? {} : { required_status: requiredStatus }),
   };
 };
@@ -332,8 +351,9 @@ export const runCli = async (
     let result: Awaited<ReturnType<ApplicationServices['replay']>>;
     try {
       result = await replay({
+        ...(parsed.against_path === undefined ? {} : { against_path: parsed.against_path }),
         artifact_path: parsed.artifact_path,
-        mode: 'snapshot',
+        mode: parsed.against_path === undefined ? 'snapshot' : 'current_checkout',
         signal: controller.signal,
       });
     } finally {

@@ -92,6 +92,48 @@ describe('replay CLI', () => {
     });
   });
 
+  it('selects current-checkout mode and visibly reports every substitution and limitation', async () => {
+    let written = '';
+    let received: { readonly against_path?: string; readonly mode: string } | undefined;
+    const currentResult = {
+      ...replayResult,
+      status: 'not_reproduced' as const,
+      mode: 'current_checkout' as const,
+      substituted_paths: ['calculate.mjs'],
+      scope_limitations: [
+        {
+          code: 'declared_subject_paths_only' as const,
+          message:
+            'Only listed subject paths were substituted; undeclared additions, removals, and renames were not evaluated.',
+        },
+      ],
+    };
+    const result = await runCli(
+      ['replay', 'failure.proofissue', '--against', 'corrected-checkout'],
+      {
+        confirm: () => Promise.resolve(false),
+        write: (text) => {
+          written += text;
+        },
+      },
+      {
+        replay: (request) => {
+          received = request;
+          return Promise.resolve(currentResult);
+        },
+      },
+    );
+
+    expect(result.exit_code).toBe(0);
+    expect(received).toMatchObject({
+      against_path: 'corrected-checkout',
+      mode: 'current_checkout',
+    });
+    expect(written).toContain('Mode: current_checkout');
+    expect(written).toContain('Substituted subject: calculate.mjs');
+    expect(written).toContain('undeclared additions, removals, and renames were not evaluated');
+  });
+
   it('neutralizes terminal controls, bidirectional controls, and workflow commands', () => {
     const rendered = renderReplayResult({
       ...replayResult,

@@ -29,4 +29,4 @@ The real container suite remains deliberately skipped during ordinary cross-plat
 
 The new trust boundary executes validated artifact commands only inside the documented Linux Docker baseline. Artifacts cannot authorize images, network access, extra mounts, root, capabilities, larger resource limits, or image pulls. Cleanup failures prevent a successful classification and report only generic residual resource kinds.
 
-The artifact schema did not change. The provisional replay result envelope is now produced by the shared application service and still omits full stdout and stderr. Snapshot replay is implemented; current-checkout substitution remains Milestone 5 and fails closed if requested through the runner.
+The artifact schema did not change. The provisional replay result envelope is produced by the shared application service and still omits full stdout and stderr. At Milestone 4 completion, snapshot replay was implemented and current-checkout substitution still failed closed; `milestone-5-evidence.md` records its later implementation.

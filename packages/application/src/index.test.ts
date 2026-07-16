@@ -257,7 +257,11 @@ describe('record application service', () => {
 });
 
 describe('replay application service', () => {
-  const runner = (stderr = 'Expected 4 from calculate(2)'): Runner => ({
+  const runner = (
+    stderr = 'Expected 4 from calculate(2)',
+    exitCode = 1,
+    substitutedPaths: readonly string[] = [],
+  ): Runner => ({
     run: () =>
       Promise.resolve({
         cleanup: {
@@ -276,7 +280,7 @@ describe('replay application service', () => {
         events: [],
         execution: {
           duration_ms: 25,
-          exit_code: 1,
+          exit_code: exitCode,
           stdout: {
             decoded_text: '',
             discarded_bytes: 0,
@@ -295,7 +299,7 @@ describe('replay application service', () => {
           },
           termination_reason: 'exited',
         },
-        substituted_paths: [],
+        substituted_paths: substitutedPaths,
       }),
   });
 
@@ -363,5 +367,28 @@ describe('replay application service', () => {
       expect.objectContaining({ code: 'replay_output_redacted' }),
     );
     expect(JSON.stringify(result)).not.toContain('synthetic-replay-token');
+  });
+
+  it('reports corrected declared subjects and the exact current-checkout limitation', async () => {
+    const service = createReplayApplicationService({ runner: runner('', 0, ['calculate.mjs']) });
+    const result = await service.replay({
+      artifact_path: 'tests/fixtures/artifacts/v1/valid/canonical.proofissue',
+      mode: 'current_checkout',
+      against_path: '.',
+    });
+
+    expect(result.status).toBe('not_reproduced');
+    expect(result.substituted_paths).toEqual(['calculate.mjs']);
+    expect(result.scope_limitations).toEqual([
+      {
+        code: 'declared_subject_paths_only',
+        message:
+          'Only listed subject paths were substituted; undeclared additions, removals, and renames were not evaluated.',
+      },
+    ]);
+    expect(result.differences).toEqual([
+      { kind: 'exit_code', message: 'Expected exit code 1 but received 0.' },
+      { kind: 'stderr_missing', message: 'Expected stderr text was not present.' },
+    ]);
   });
 });

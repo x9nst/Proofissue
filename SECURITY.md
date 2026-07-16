@@ -2,7 +2,7 @@
 
 ## Current Status
 
-ProofIssue is pre-release software. No artifact or CLI compatibility version is supported yet, and replay execution is not implemented.
+ProofIssue is pre-release software. No artifact or CLI compatibility version is supported yet. The dependency-free technical prototype can replay validated artifacts in the documented restricted Linux container and can substitute only explicitly declared subject files from a selected current checkout. It is not yet a supported workflow for typical Node.js projects.
 
 ## Reporting a Vulnerability
 
