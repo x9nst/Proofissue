@@ -398,7 +398,16 @@ const replayBase = (
   evidence: [],
   differences: [],
   substituted_paths: [],
-  scope_limitations: [],
+  scope_limitations:
+    mode === 'current_checkout'
+      ? [
+          {
+            code: 'declared_subject_paths_only',
+            message:
+              'Only listed subject paths were substituted; undeclared additions, removals, and renames were not evaluated.',
+          },
+        ]
+      : [],
 });
 
 export interface ReplayApplicationDependencies {
@@ -461,14 +470,17 @@ export const createReplayApplicationService = (
           evidence: match.evidence,
           differences: match.differences,
           substituted_paths: result.substituted_paths,
-          scope_limitations: truncated
-            ? [
-                {
-                  code: 'output_truncated',
-                  message: 'Replay output exceeded its retained byte limit.',
-                },
-              ]
-            : [],
+          scope_limitations: [
+            ...replayBase(request.mode).scope_limitations,
+            ...(truncated
+              ? [
+                  {
+                    code: 'output_truncated' as const,
+                    message: 'Replay output exceeded its retained byte limit.',
+                  },
+                ]
+              : []),
+          ],
           cleanup: result.cleanup,
           warnings:
             redactedStdout.findings.length + redactedStderr.findings.length > 0

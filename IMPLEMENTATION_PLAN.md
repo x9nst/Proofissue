@@ -32,7 +32,7 @@ Completing the technical prototype does not complete the initial supported workf
 | 2. Static artifact core | Complete | Milestone 1 | Static validation, safe inspection, schema, compatibility, property, fuzz-corpus, and deterministic serialization evidence; see `docs/milestone-2-evidence.md` |
 | 3. Recorder and redaction | Complete | Milestone 2 | Technical criteria pass and the project owner confirmed Gate B completion on 2026-07-15; see `docs/milestone-3-evidence.md` |
 | 4. Locked-down replay and matching | Complete | Milestones 2-3 | Local quality gates and hosted Linux container validation pass; see `docs/milestone-4-evidence.md` |
-| 5. Fix verification | Planned | Milestone 4 | Original and corrected-source end-to-end fixture |
+| 5. Fix verification | Complete | Milestone 4 | Original and corrected-source end-to-end fixture; see `docs/milestone-5-evidence.md` |
 | 6. GitHub Actions integration | Planned | Milestone 5 | Passing fixture workflow and stable outputs |
 | 7. Initial supported Node.js workflow | Planned | Milestone 6 | Progressive real-project trials, compatibility suite, and security suite |
 | Early maintainer validation track | In Progress | Runs alongside Milestones 1-7 | Task-based artifact, role, replay, and demand research in `docs/product-validation.md` |
@@ -279,7 +279,7 @@ A valid artifact can reproduce its captured failure in a locked-down Linux conta
 
 ## Milestone 5 — Fix Verification
 
-**Status:** Planned
+**Status:** Complete
 
 **Target outcome:**
 
@@ -295,14 +295,16 @@ The same artifact can reproduce the original snapshot and test corrected content
 
 **Acceptance criteria:**
 
-- [ ] Snapshot replay reports `reproduced`.
-- [ ] Replay against the corrected subject file reports `not_reproduced`.
-- [ ] Reproduction files remain byte-for-byte identical in both modes.
-- [ ] Only declared subject paths are read from the current checkout.
-- [ ] Missing, escaping, symbolic-link, and changed-type subject paths fail safely.
-- [ ] Results list every substituted subject path and state that undeclared additions, removals, and renames were not evaluated.
-- [ ] Fixtures prove that new files are ignored and removed or renamed declared subject files fail safely rather than being treated as a complete fix verdict.
-- [ ] Machine output distinguishes all four version 1 result states.
+- [x] Snapshot replay reports `reproduced`.
+- [x] Replay against the corrected subject file reports `not_reproduced`.
+- [x] Reproduction files remain byte-for-byte identical in both modes.
+- [x] Only declared subject paths are read from the current checkout.
+- [x] Missing, escaping, symbolic-link, and changed-type subject paths fail safely.
+- [x] Results list every substituted subject path and state that undeclared additions, removals, and renames were not evaluated.
+- [x] Fixtures prove that new files are ignored and removed or renamed declared subject files fail safely rather than being treated as a complete fix verdict.
+- [x] Machine output distinguishes all four version 1 result states.
+
+Completion evidence, security analysis, compatibility impact, and validation commands are recorded in `docs/milestone-5-evidence.md`.
 
 ## Milestone 6 — GitHub Actions Integration
 

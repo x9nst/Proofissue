@@ -1,12 +1,17 @@
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { constants } from 'node:fs';
+import { chmod, lstat, mkdir, mkdtemp, open, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 
-import { resolveArtifactPath } from '@proofissue/artifact-schema';
-import type { ArtifactLimitsV1, ValidatedArtifactV1 } from '@proofissue/artifact-schema';
+import { ARTIFACT_LIMITS, resolveArtifactPath, sha256 } from '@proofissue/artifact-schema';
+import type {
+  ArtifactFileV1,
+  ArtifactLimitsV1,
+  ValidatedArtifactV1,
+} from '@proofissue/artifact-schema';
 import type {
   BoundedExecutionResult,
   CleanupSummary,
@@ -63,6 +68,7 @@ export type RunnerErrorCode = Extract<
   | 'policy_rejection'
   | 'resource_termination'
   | 'timeout'
+  | 'unsafe_checkout_file'
 >;
 
 interface RunnerErrorDetails {
@@ -124,19 +130,33 @@ export const calculateEffectiveLimits = (
 });
 
 export interface ReplayWorkspace {
-  create(artifact: ValidatedArtifactV1): Promise<string>;
+  create(
+    artifact: ValidatedArtifactV1,
+    subjectReplacements?: ReadonlyMap<string, string>,
+  ): Promise<string>;
   remove(root: string): Promise<void>;
 }
 
 export const createReplayWorkspace = (): ReplayWorkspace => ({
-  create: async (artifact) => {
+  create: async (artifact, subjectReplacements = new Map()) => {
     const root = await mkdtemp(path.join(tmpdir(), 'proofissue-replay-'));
     try {
       await chmod(root, 0o755);
       for (const file of artifact.files) {
+        const replacement = subjectReplacements.get(file.path);
+        if (replacement !== undefined && file.role !== 'subject') {
+          throw new RunnerError(
+            'unsafe_checkout_file',
+            'A reproduction file cannot be replaced during current-checkout replay.',
+          );
+        }
         const target = resolveArtifactPath(root, file.path);
         await mkdir(path.dirname(target), { recursive: true });
-        await writeFile(target, file.content, { encoding: 'utf8', flag: 'wx', mode: 0o444 });
+        await writeFile(target, replacement ?? file.content, {
+          encoding: 'utf8',
+          flag: 'wx',
+          mode: 0o444,
+        });
       }
       return root;
     } catch (error: unknown) {
@@ -146,6 +166,163 @@ export const createReplayWorkspace = (): ReplayWorkspace => ({
   },
   remove: async (root) => {
     await rm(root, { force: true, maxRetries: 2, recursive: true, retryDelay: 50 });
+  },
+});
+
+export interface SubjectReplacement {
+  readonly content: string;
+  readonly path: string;
+  readonly sha256: string;
+}
+
+export interface CurrentCheckoutReader {
+  read(
+    checkoutRoot: string,
+    subjectFiles: readonly ArtifactFileV1[],
+  ): Promise<readonly SubjectReplacement[]>;
+}
+
+const isMissing = (error: unknown): boolean =>
+  typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
+
+const unsafeCheckout = (message: string): RunnerError =>
+  new RunnerError('unsafe_checkout_file', message);
+
+const prepareCheckoutRoot = async (requestedRoot: string): Promise<string> => {
+  const absolute = path.resolve(requestedRoot);
+  let rootStat;
+  try {
+    rootStat = await lstat(absolute);
+  } catch (error: unknown) {
+    throw unsafeCheckout(
+      isMissing(error)
+        ? 'The selected current checkout does not exist.'
+        : 'The selected current checkout could not be inspected safely.',
+    );
+  }
+  if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) {
+    throw unsafeCheckout('The selected current checkout must be a directory, not a symbolic link.');
+  }
+  try {
+    return await realpath(absolute);
+  } catch {
+    throw unsafeCheckout('The selected current checkout could not be resolved safely.');
+  }
+};
+
+const isWithinRoot = (root: string, candidate: string): boolean => {
+  const relative = path.relative(root, candidate);
+  return (
+    relative !== '' &&
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+};
+
+const assertSafeCheckoutPath = async (root: string, artifactPath: string): Promise<string> => {
+  let current = root;
+  const segments = artifactPath.split('/');
+  for (let index = 0; index < segments.length; index += 1) {
+    const segment = segments[index];
+    if (segment === undefined) throw unsafeCheckout('A declared subject path is invalid.');
+    current = path.join(current, segment);
+    let currentStat;
+    try {
+      currentStat = await lstat(current);
+    } catch (error: unknown) {
+      throw unsafeCheckout(
+        isMissing(error)
+          ? `Declared subject file is missing from the current checkout: ${artifactPath}`
+          : `Declared subject file could not be inspected safely: ${artifactPath}`,
+      );
+    }
+    if (currentStat.isSymbolicLink()) {
+      throw unsafeCheckout(`Declared subject paths cannot contain symbolic links: ${artifactPath}`);
+    }
+    const isLast = index === segments.length - 1;
+    if ((!isLast && !currentStat.isDirectory()) || (isLast && !currentStat.isFile())) {
+      throw unsafeCheckout(
+        `Declared subject path is not the same regular-file type: ${artifactPath}`,
+      );
+    }
+  }
+  return current;
+};
+
+const readSubjectReplacement = async (
+  root: string,
+  subjectFile: ArtifactFileV1,
+): Promise<SubjectReplacement> => {
+  const absolute = await assertSafeCheckoutPath(root, subjectFile.path);
+  const initialStat = await lstat(absolute);
+  if (initialStat.size > ARTIFACT_LIMITS.scalar_bytes) {
+    throw unsafeCheckout(
+      `Declared subject file exceeds the replacement byte limit: ${subjectFile.path}`,
+    );
+  }
+
+  let handle;
+  try {
+    const noFollow = 'O_NOFOLLOW' in constants ? constants.O_NOFOLLOW : 0;
+    handle = await open(absolute, constants.O_RDONLY | noFollow);
+    const openedStat = await handle.stat();
+    const resolved = await realpath(absolute);
+    if (
+      !isWithinRoot(root, resolved) ||
+      !openedStat.isFile() ||
+      openedStat.size !== initialStat.size ||
+      openedStat.dev !== initialStat.dev ||
+      openedStat.ino !== initialStat.ino ||
+      openedStat.size > ARTIFACT_LIMITS.scalar_bytes
+    ) {
+      throw unsafeCheckout(
+        `Declared subject file changed or escaped while opening: ${subjectFile.path}`,
+      );
+    }
+
+    const buffer = Buffer.alloc(openedStat.size + 1);
+    let offset = 0;
+    while (offset < buffer.byteLength) {
+      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset);
+      if (bytesRead === 0) break;
+      offset += bytesRead;
+    }
+    if (offset !== openedStat.size) {
+      throw unsafeCheckout(`Declared subject file changed while reading: ${subjectFile.path}`);
+    }
+    let content: string;
+    try {
+      content = new TextDecoder('utf-8', { fatal: true }).decode(buffer.subarray(0, offset));
+    } catch {
+      throw unsafeCheckout(`Declared subject file is not valid UTF-8: ${subjectFile.path}`);
+    }
+    return { content, path: subjectFile.path, sha256: sha256(content) };
+  } catch (error: unknown) {
+    if (error instanceof RunnerError) throw error;
+    throw unsafeCheckout(`Declared subject file could not be read safely: ${subjectFile.path}`);
+  } finally {
+    await handle?.close().catch(() => undefined);
+  }
+};
+
+export const createCurrentCheckoutReader = (): CurrentCheckoutReader => ({
+  read: async (checkoutRoot, subjectFiles) => {
+    const root = await prepareCheckoutRoot(checkoutRoot);
+    const replacements: SubjectReplacement[] = [];
+    let totalBytes = 0;
+    for (const subjectFile of subjectFiles) {
+      if (subjectFile.role !== 'subject') {
+        throw unsafeCheckout('Only declared subject files may be read from the current checkout.');
+      }
+      const replacement = await readSubjectReplacement(root, subjectFile);
+      totalBytes += Buffer.byteLength(replacement.content, 'utf8');
+      if (totalBytes > ARTIFACT_LIMITS.total_file_content_bytes) {
+        throw unsafeCheckout('Current-checkout subject files exceed the aggregate content limit.');
+      }
+      replacements.push(replacement);
+    }
+    return replacements;
   },
 });
 
@@ -396,6 +573,7 @@ export const createDockerEngine = (): ContainerEngine => ({
 });
 
 export interface DockerRunnerOptions {
+  readonly checkout?: CurrentCheckoutReader;
   readonly engine?: ContainerEngine;
   readonly policy?: RunnerPolicy;
   readonly workspace?: ReplayWorkspace;
@@ -451,6 +629,7 @@ const safeCleanup = async (
 };
 
 export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner => {
+  const checkout = options.checkout ?? createCurrentCheckoutReader();
   const engine = options.engine ?? createDockerEngine();
   const policy = options.policy ?? DEFAULT_RUNNER_POLICY;
   const workspace = options.workspace ?? createReplayWorkspace();
@@ -464,10 +643,17 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
       };
       const effectiveLimits = calculateEffectiveLimits(request.artifact.limits, policy);
       const image = request.artifact.environment.image;
-      if (request.mode !== 'snapshot') {
+      if (request.mode === 'current_checkout' && request.against_path === undefined) {
         throw new RunnerError(
           'policy_rejection',
-          'Current-checkout replay is introduced in Milestone 5; use snapshot replay for now.',
+          'Current-checkout replay requires an explicitly selected checkout directory.',
+          { effective_limits: effectiveLimits, events },
+        );
+      }
+      if (request.mode === 'snapshot' && request.against_path !== undefined) {
+        throw new RunnerError(
+          'policy_rejection',
+          'Snapshot replay cannot read from a current checkout.',
           { effective_limits: effectiveLimits, events },
         );
       }
@@ -493,12 +679,37 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
       let needsTermination = false;
       let primaryError: RunnerError | undefined;
       let execution: BoundedExecutionResult | undefined;
+      let subjectReplacements: readonly SubjectReplacement[] = [];
       const stdout = new BoundedOutputCollector(effectiveLimits.output_bytes_per_stream);
       const stderr = new BoundedOutputCollector(effectiveLimits.output_bytes_per_stream);
       const executionStartedAt = performance.now();
 
       try {
-        root = await workspace.create(request.artifact);
+        if (request.mode === 'current_checkout') {
+          const checkoutPath = request.against_path;
+          if (checkoutPath === undefined) {
+            throw new RunnerError(
+              'policy_rejection',
+              'Current-checkout replay requires an explicitly selected checkout directory.',
+            );
+          }
+          subjectReplacements = await checkout.read(
+            checkoutPath,
+            request.artifact.files.filter((file) => file.role === 'subject'),
+          );
+        }
+        const replacementsByPath = new Map(
+          subjectReplacements.map((replacement) => [replacement.path, replacement.content]),
+        );
+        const reconstructedBytes = request.artifact.files.reduce(
+          (total, file) =>
+            total + Buffer.byteLength(replacementsByPath.get(file.path) ?? file.content, 'utf8'),
+          0,
+        );
+        if (reconstructedBytes > ARTIFACT_LIMITS.total_file_content_bytes) {
+          throw unsafeCheckout('The reconstructed current-checkout workspace exceeds file limits.');
+        }
+        root = await workspace.create(request.artifact, replacementsByPath);
         event('workspace_created');
         containerAttempted = true;
         await engine.create({
@@ -625,7 +836,7 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
         effective_limits: effectiveLimits,
         events,
         execution,
-        substituted_paths: [],
+        substituted_paths: subjectReplacements.map((replacement) => replacement.path),
       };
     },
   };

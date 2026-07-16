@@ -8,6 +8,7 @@
 - `milestone-2-evidence.md` records the static artifact core implementation and acceptance evidence.
 - `milestone-3-evidence.md` records recorder and redaction implementation and completion evidence.
 - `milestone-4-evidence.md` records locked-down replay implementation, tests, and the remaining hosted-container evidence.
+- `milestone-5-evidence.md` records declared-path fix verification, security cases, result presentation, and validation evidence.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.

@@ -89,8 +89,8 @@ jobs:
           docker version --format 'Docker Engine {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
           uname -m
 
-      - name: Run locked-down replay tests
-        run: npm test -- packages/runner/src/container.integration.test.ts
+      - name: Run locked-down replay and fix-verification tests
+        run: npm test -- packages/runner/src/container.integration.test.ts packages/application/src/fix-verification.integration.test.ts
 
       - name: Confirm replay left no containers
         if: always()

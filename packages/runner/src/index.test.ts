@@ -1,8 +1,10 @@
-import { readFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { parseAndValidateArtifact } from '@proofissue/artifact-schema';
+import { ARTIFACT_LIMITS, parseAndValidateArtifact } from '@proofissue/artifact-schema';
 
 import {
   APPROVED_NODE_IMAGE,
@@ -11,6 +13,7 @@ import {
   RunnerError,
   type ContainerEngine,
   type ContainerState,
+  type CurrentCheckoutReader,
   type ReplayWorkspace,
   type RunnerPolicy,
 } from './index.js';
@@ -345,5 +348,177 @@ describe('runner lifecycle', () => {
       code: 'cleanup_failed',
       cleanup: { completed: false, residual_resources: ['workspace'] },
     });
+  });
+
+  it('substitutes only declared subject files and keeps reproduction files byte-identical', async () => {
+    const checkout = await mkdtemp(path.join(tmpdir(), 'proofissue-current-checkout-'));
+    const input = await artifact();
+    const originalReproduction = input.files.find((file) => file.role === 'reproduction');
+    if (originalReproduction === undefined) throw new Error('Fixture has no reproduction file.');
+    await writeFile(path.join(checkout, 'calculate.mjs'), 'export const fixed = true;\n');
+    await writeFile(
+      path.join(checkout, 'reproduction.mjs'),
+      'throw new Error("must be ignored");\n',
+    );
+    await writeFile(path.join(checkout, 'new-file.mjs'), 'export const added = true;\n');
+
+    const captured = new Map<string, string>();
+    const files: ReplayWorkspace = {
+      create: (artifactValue, replacements = new Map()) => {
+        for (const file of artifactValue.files) {
+          captured.set(file.path, replacements.get(file.path) ?? file.content);
+        }
+        return Promise.resolve('/tmp/proofissue-test-workspace');
+      },
+      remove: () => Promise.resolve(),
+    };
+    try {
+      const result = await createDockerRunner({
+        engine: new FakeEngine(),
+        policy: policy(),
+        workspace: files,
+      }).run({ artifact: input, mode: 'current_checkout', against_path: checkout });
+
+      expect(result.substituted_paths).toEqual(['calculate.mjs']);
+      expect(captured.get('calculate.mjs')).toBe('export const fixed = true;\n');
+      expect(captured.get('reproduction.mjs')).toBe(originalReproduction.content);
+      expect(captured.has('new-file.mjs')).toBe(false);
+    } finally {
+      await rm(checkout, { force: true, recursive: true });
+    }
+  });
+
+  it('gives the checkout reader only manifest entries declared as subjects', async () => {
+    let receivedRoles: readonly string[] = [];
+    let receivedPaths: readonly string[] = [];
+    const checkout: CurrentCheckoutReader = {
+      read: (_root, subjectFiles) => {
+        receivedRoles = subjectFiles.map((file) => file.role);
+        receivedPaths = subjectFiles.map((file) => file.path);
+        return Promise.resolve(
+          subjectFiles.map((file) => ({
+            content: file.content,
+            path: file.path,
+            sha256: file.sha256,
+          })),
+        );
+      },
+    };
+
+    await createDockerRunner({
+      checkout,
+      engine: new FakeEngine(),
+      policy: policy(),
+      workspace: workspace(),
+    }).run({
+      artifact: await artifact(),
+      mode: 'current_checkout',
+      against_path: 'unused-by-injected-reader',
+    });
+
+    expect(receivedRoles).toEqual(['subject']);
+    expect(receivedPaths).toEqual(['calculate.mjs']);
+  });
+
+  it.each([
+    [
+      'removed or renamed',
+      async (root: string) => {
+        await rm(path.join(root, 'calculate.mjs'), { force: true });
+      },
+    ],
+    [
+      'changed to a directory',
+      async (root: string) => {
+        await mkdir(path.join(root, 'calculate.mjs'));
+      },
+    ],
+    [
+      'changed to invalid UTF-8',
+      async (root: string) => {
+        await writeFile(path.join(root, 'calculate.mjs'), Buffer.from([0xff]));
+      },
+    ],
+    [
+      'changed to an oversized file',
+      async (root: string) => {
+        await writeFile(
+          path.join(root, 'calculate.mjs'),
+          Buffer.alloc(ARTIFACT_LIMITS.scalar_bytes + 1),
+        );
+      },
+    ],
+  ] as const)(
+    'rejects a declared subject that was %s before creating a workspace',
+    async (_case, prepare) => {
+      const checkout = await mkdtemp(path.join(tmpdir(), 'proofissue-unsafe-checkout-'));
+      const engine = new FakeEngine();
+      const files = workspace();
+      try {
+        await prepare(checkout);
+        await expect(
+          createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+            artifact: await artifact(),
+            mode: 'current_checkout',
+            against_path: checkout,
+          }),
+        ).rejects.toMatchObject({ code: 'unsafe_checkout_file' });
+        expect(engine.calls).toEqual(['capabilities', 'image']);
+        expect(files.calls).toEqual([]);
+      } finally {
+        await rm(checkout, { force: true, recursive: true });
+      }
+    },
+  );
+
+  it('rejects a symbolic-link subject that escapes the selected checkout', async () => {
+    const checkout = await mkdtemp(path.join(tmpdir(), 'proofissue-symlink-checkout-'));
+    const outside = await mkdtemp(path.join(tmpdir(), 'proofissue-symlink-outside-'));
+    const outsideFile = path.join(outside, 'calculate.mjs');
+    await writeFile(outsideFile, 'export const escaped = true;\n');
+    try {
+      try {
+        await symlink(outsideFile, path.join(checkout, 'calculate.mjs'), 'file');
+      } catch (error: unknown) {
+        const code =
+          typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+        if (code === 'EPERM') return;
+        throw error;
+      }
+      const engine = new FakeEngine();
+      const files = workspace();
+      await expect(
+        createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+          artifact: await artifact(),
+          mode: 'current_checkout',
+          against_path: checkout,
+        }),
+      ).rejects.toMatchObject({ code: 'unsafe_checkout_file' });
+      expect(engine.calls).toEqual(['capabilities', 'image']);
+      expect(files.calls).toEqual([]);
+    } finally {
+      await rm(checkout, { force: true, recursive: true });
+      await rm(outside, { force: true, recursive: true });
+    }
+  });
+
+  it('requires an explicit checkout only for current-checkout mode', async () => {
+    const engine = new FakeEngine();
+    const files = workspace();
+    await expect(
+      createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+        artifact: await artifact(),
+        mode: 'current_checkout',
+      }),
+    ).rejects.toMatchObject({ code: 'policy_rejection' });
+    await expect(
+      createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+        artifact: await artifact(),
+        mode: 'snapshot',
+        against_path: '.',
+      }),
+    ).rejects.toMatchObject({ code: 'policy_rejection' });
+    expect(engine.calls).toEqual([]);
+    expect(files.calls).toEqual([]);
   });
 });

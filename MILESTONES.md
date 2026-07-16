@@ -932,13 +932,10 @@ Phases may overlap when work is independent, but Phase 1 and Phase 2 should be p
 
 # Immediate Next Actions
 
-1. implement Milestone 1 repository foundation from `IMPLEMENTATION_PLAN.md`
-2. turn the documented version 1 model into JSON Schema and TypeScript types
-3. implement bounded static artifact validation
-4. implement one dependency-free replay example
-5. add the first Node.js recorder workflow
-6. add deterministic exit-code and literal stderr matching
-7. prove snapshot and current-checkout fix verification end to end
-8. add the GitHub Action integration
-9. run the workflow against real public bug reports
-10. revise the roadmap based on measured evidence
+1. add the GitHub Action integration through the shared application layer
+2. expose stable structured Action outputs and required-status behavior
+3. choose and document the bounded dependency strategy for normal Node.js projects
+4. expand matching only within the accepted initial-workflow scope
+5. run progressive trials against real public Node.js failures
+6. complete the security and compatibility suites for the supported workflow
+7. revise the roadmap based on measured evidence

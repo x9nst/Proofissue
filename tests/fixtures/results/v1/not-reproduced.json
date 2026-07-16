@@ -31,7 +31,7 @@
   "scope_limitations": [
     {
       "code": "declared_subject_paths_only",
-      "message": "Only declared, existing subject paths were substituted."
+      "message": "Only listed subject paths were substituted; undeclared additions, removals, and renames were not evaluated."
     }
   ],
   "cleanup": {
