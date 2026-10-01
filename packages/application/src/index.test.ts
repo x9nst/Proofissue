@@ -11,6 +11,7 @@ import {
   createRecordApplicationService,
   createReplayApplicationService,
   createStaticArtifactApplicationServices,
+  evaluateReplayPolicy,
   evaluateRequiredReplayStatus,
   type RecordConfirmation,
   type RecordPreview,
@@ -53,6 +54,30 @@ describe('evaluateRequiredReplayStatus', () => {
     });
     expect(result.status).toBe('not_reproduced');
   });
+});
+
+describe('evaluateReplayPolicy', () => {
+  it.each([
+    ['reproduced', undefined, true, true, true],
+    ['not_reproduced', undefined, true, true, true],
+    ['reproduced', 'reproduced', true, true, true],
+    ['reproduced', 'not_reproduced', true, false, false],
+    ['not_reproduced', 'not_reproduced', true, true, true],
+    ['not_reproduced', 'reproduced', true, false, false],
+    ['invalid_artifact', undefined, false, true, false],
+    ['execution_failed', undefined, false, true, false],
+    ['invalid_artifact', 'reproduced', false, false, false],
+    ['execution_failed', 'not_reproduced', false, false, false],
+  ] as const)(
+    'maps %s with required %s to completed=%s satisfied=%s success=%s',
+    (status, required, completed, satisfied, success) => {
+      expect(evaluateReplayPolicy(replayResult(status), required)).toEqual({
+        classification_completed: completed,
+        required_status_satisfied: satisfied,
+        success,
+      });
+    },
+  );
 });
 
 describe('static artifact application services', () => {

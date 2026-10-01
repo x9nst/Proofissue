@@ -5,7 +5,7 @@ import {
   createRecordApplicationService,
   createReplayApplicationService,
   createStaticArtifactApplicationServices,
-  evaluateRequiredReplayStatus,
+  evaluateReplayPolicy,
   type ApplicationServices,
   type OperationResult,
   type RecordApplicationRequest,
@@ -361,13 +361,8 @@ export const runCli = async (
       process.removeListener('SIGTERM', interrupt);
     }
     io.write(parsed.json ? `${JSON.stringify(result)}\n` : renderReplayResult(result));
-    const classificationCompleted =
-      result.status === 'reproduced' || result.status === 'not_reproduced';
-    const requiredSatisfied =
-      parsed.required_status === undefined ||
-      evaluateRequiredReplayStatus(result, parsed.required_status).satisfied;
     return {
-      exit_code: classificationCompleted && requiredSatisfied ? 0 : 1,
+      exit_code: evaluateReplayPolicy(result, parsed.required_status).success ? 0 : 1,
       result,
     };
   }
