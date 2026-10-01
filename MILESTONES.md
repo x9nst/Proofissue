@@ -229,7 +229,7 @@ A user can:
 
 ## Status
 
-`Planned`
+`In Progress` — the technical prototype slice and the GitHub Action are complete (`IMPLEMENTATION_PLAN.md` Milestones 0–6). The initial supported Node.js workflow, the remaining deliverables, and the success metrics above are not.
 
 ---
 
@@ -932,10 +932,10 @@ Phases may overlap when work is independent, but Phase 1 and Phase 2 should be p
 
 # Immediate Next Actions
 
-1. add the GitHub Action integration through the shared application layer
-2. expose stable structured Action outputs and required-status behavior
-3. choose and document the bounded dependency strategy for normal Node.js projects
-4. expand matching only within the accepted initial-workflow scope
-5. run progressive trials against real public Node.js failures
-6. complete the security and compatibility suites for the supported workflow
-7. revise the roadmap based on measured evidence
+Completed since the last revision: the GitHub Action integration through the shared application layer, with stable structured outputs and required-status behavior.
+
+1. choose and document the bounded dependency strategy for normal Node.js projects; this is the decision that gates the initial supported workflow
+2. expand matching only within the accepted initial-workflow scope
+3. run progressive trials against real public Node.js failures
+4. complete the security and compatibility suites for the supported workflow
+5. revise the roadmap based on measured evidence

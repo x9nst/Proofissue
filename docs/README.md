@@ -9,7 +9,7 @@
 - `milestone-3-evidence.md` records recorder and redaction implementation and completion evidence.
 - `milestone-4-evidence.md` records locked-down replay implementation, tests, and the remaining hosted-container evidence.
 - `milestone-5-evidence.md` records declared-path fix verification, security cases, result presentation, and validation evidence.
-- `milestone-6-evidence.md` records the GitHub Action implementation, security analysis, local evidence, and hosted Linux completion gate.
+- `milestone-6-evidence.md` records the GitHub Action implementation, security analysis, dependency advisory triage, local evidence, and the hosted Linux run that completed the milestone.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.
@@ -23,6 +23,7 @@
 - `artifact-io-contract.md` defines exact parser limits, deterministic serialization, and no-overwrite atomic publication.
 - `output-handling.md` defines raw-byte capture, UTF-8 decoding, truncation, whole-buffer redaction, and matching input.
 - `result-contract.md` defines neutral versioned operation results and the error taxonomy.
+- `cli.md` is the command reference: syntax, options, examples, exit codes, failure behavior, and security notes for `record`, `validate`, `inspect`, and `replay`.
 - `recording.md` defines command authorization, file selection, capture, redaction, confirmation, and recording failures.
 - `replay.md` defines static inspection, snapshot replay, current-checkout replay, result states, and failure behavior.
 - `github-action.md` documents Action inputs, outputs, permissions, summaries, failure behavior, and complete workflow examples.
@@ -38,7 +39,7 @@
 
 ## Foundation and Planned Documentation
 
-Contributor, conduct, security, support-matrix, license-decision, and GitHub Action documents now exist. Later implementation milestones will add complete command reference material, schema-version migration guidance, executable examples, and measured real-project results.
+Contributor, conduct, security, support-matrix, license-decision, command-reference, and GitHub Action documents now exist, along with one runnable example in `../examples/failing-node-test`. Later implementation milestones will add schema-version migration guidance, further examples, and measured real-project results.
 
 The canonical contributor guide is `../CONTRIBUTING.md`; vulnerability reporting is in `../SECURITY.md`; community expectations are in `../CODE_OF_CONDUCT.md`.
 
