@@ -173,6 +173,12 @@ export interface ArtifactInspectionRedactionFinding {
   readonly count: number;
 }
 
+/** How one output expectation compares, never its value. An empty `normalize` means raw. */
+export interface ArtifactInspectionOutputExpectation {
+  readonly mode: 'contains' | 'exact';
+  readonly normalize: readonly OutputNormalizationRule[];
+}
+
 export interface ArtifactInspectionSummary {
   readonly runtime: 'node';
   readonly runtime_version: string;
@@ -188,6 +194,8 @@ export interface ArtifactInspectionSummary {
     readonly exit_code: number;
     readonly stdout_count: number;
     readonly stderr_count: number;
+    readonly stdout_expectations: readonly ArtifactInspectionOutputExpectation[];
+    readonly stderr_expectations: readonly ArtifactInspectionOutputExpectation[];
   };
   readonly limits: {
     readonly cpus: number;

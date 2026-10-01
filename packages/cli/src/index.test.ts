@@ -603,7 +603,11 @@ describe('record CLI', () => {
       command: { program: 'node', arguments: ['test/reproduction.mjs'] },
       reproduction_files: ['test/reproduction.mjs'],
       subject_files: ['src/subject.mjs'],
-      expectations: { exit_code: 1, stdout: [], stderr: ['failure marker'] },
+      expectations: {
+        exit_code: 1,
+        stdout: [],
+        stderr: [{ mode: 'contains' as const, normalize: [], value: 'failure marker' }],
+      },
       limits: {
         timeout_seconds: 60,
         memory_mb: 512,
@@ -645,6 +649,99 @@ describe('record CLI', () => {
     expect(preview).toContain('may hide a real fix');
     expect(preview).toContain('stdout: api_key × 1');
     expect(preview).not.toContain('synthetic-secret');
+  });
+
+  it('renders each expectation mode with its normalization', () => {
+    const stream = {
+      discarded_bytes: 0,
+      had_decoding_replacement: false,
+      retained_bytes: 0,
+      total_bytes: 0,
+      truncated: false,
+    };
+    const all = [
+      'line_endings',
+      'ansi_escapes',
+      'trailing_whitespace',
+      'paths',
+      'node_version',
+      'node_internal_locations',
+      'process_ids',
+      'durations',
+    ] as const;
+    const preview = renderRecordPreview({
+      command: { program: 'node', arguments: ['test/reproduction.mjs'] },
+      reproduction_files: ['test/reproduction.mjs'],
+      subject_files: ['src/subject.mjs'],
+      expectations: {
+        exit_code: 1,
+        stdout: [{ mode: 'exact', normalize: [], value: 'checking\n' }],
+        stderr: [
+          { mode: 'contains', normalize: [], value: 'raw' },
+          { mode: 'contains', normalize: all, value: 'took <duration>' },
+          { mode: 'exact', normalize: all, value: 'whole <tmp>\n' },
+          { mode: 'exact', normalize: ['line_endings', 'paths'], value: 'other\n' },
+        ],
+      },
+      limits: {
+        timeout_seconds: 60,
+        memory_mb: 512,
+        cpus: 1,
+        processes: 64,
+        output_bytes_per_stream: 1024,
+      },
+      output: { stdout: stream, stderr: stream },
+      redaction: { finding_count: 0, findings: [] },
+    });
+
+    expect(preview).toContain(
+      [
+        'Expected failure:',
+        '  exit code: 1',
+        '  stdout is exactly: "checking\\n"',
+        '  stderr contains: "raw"',
+        '  stderr contains after normalization: "took <duration>"',
+        '  stderr after normalization is exactly: "whole <tmp>\\n"',
+        '  stderr after normalization is exactly: "other\\n"',
+        '  normalization: line endings, terminal escape sequences, trailing whitespace, paths (<project>, <tmp>), Node.js version, Node.js internal locations, process IDs, durations',
+        '  normalization: line endings, paths (<project>, <tmp>)',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('escapes characters that could hide or reorder an expected value in the preview', () => {
+    const stream = {
+      discarded_bytes: 0,
+      had_decoding_replacement: false,
+      retained_bytes: 0,
+      total_bytes: 0,
+      truncated: false,
+    };
+    const hidden = `a${String.fromCharCode(0x202e)}b${String.fromCharCode(0x85)}c${String.fromCharCode(127)}`;
+    const preview = renderRecordPreview({
+      command: { program: 'node', arguments: ['x.mjs'] },
+      reproduction_files: ['x.mjs'],
+      subject_files: ['y.mjs'],
+      expectations: {
+        exit_code: 1,
+        stdout: [],
+        stderr: [{ mode: 'exact', normalize: [], value: hidden }],
+      },
+      limits: {
+        timeout_seconds: 60,
+        memory_mb: 512,
+        cpus: 1,
+        processes: 64,
+        output_bytes_per_stream: 1024,
+      },
+      output: { stdout: stream, stderr: stream },
+      redaction: { finding_count: 0, findings: [] },
+    });
+
+    expect(preview).toContain('  stderr is exactly: "a\\u{202e}b\\u{0085}c\\u{007f}"');
+    expect(preview).not.toContain(String.fromCharCode(0x202e));
+    expect(preview).not.toContain(String.fromCharCode(0x85));
   });
 
   it('creates a validated artifact with explicit noninteractive confirmation', async () => {
@@ -710,7 +807,11 @@ describe('record CLI dependency capture', () => {
     command: { program: 'node' as const, arguments: ['test/reproduction.mjs'] },
     reproduction_files: ['test/reproduction.mjs'],
     subject_files: ['src/subject.mjs'],
-    expectations: { exit_code: 1, stdout: [], stderr: ['failure marker'] },
+    expectations: {
+      exit_code: 1,
+      stdout: [],
+      stderr: [{ mode: 'contains' as const, normalize: [], value: 'failure marker' }],
+    },
     limits: {
       timeout_seconds: 60,
       memory_mb: 512,

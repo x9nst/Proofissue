@@ -9,10 +9,12 @@ import {
   evaluateReplayPolicy,
   type ApplicationServices,
   type OperationResult,
+  type OutputNormalizationRule,
   type PrepareOperationResult,
   type RecordApplicationRequest,
   type RecordConfirmation,
   type RecordPreview,
+  type RecordPreviewExpectation,
 } from '@proofissue/application';
 
 export interface CliAdapter {
@@ -105,6 +107,62 @@ const renderDependencySection = (preview: RecordPreview): readonly string[] => {
   ];
 };
 
+// Wording for the preview: what each rule treats as noise, in canonical order.
+const RULE_PREVIEW_LABELS: Readonly<Record<OutputNormalizationRule, string>> = {
+  line_endings: 'line endings',
+  ansi_escapes: 'terminal escape sequences',
+  trailing_whitespace: 'trailing whitespace',
+  paths: 'paths (<project>, <tmp>)',
+  node_version: 'Node.js version',
+  node_internal_locations: 'Node.js internal locations',
+  process_ids: 'process IDs',
+  durations: 'durations',
+};
+
+// The expected text is shown for review, so characters a terminal could use to hide or
+// reorder text are escaped as well as control characters.
+const isUnsafePresentationCode = (code: number): boolean =>
+  code < 32 ||
+  code === 127 ||
+  (code >= 0x80 && code <= 0x9f) ||
+  (code >= 0x202a && code <= 0x202e) ||
+  (code >= 0x2066 && code <= 0x2069);
+
+const quoteExpectation = (value: string): string =>
+  Array.from(JSON.stringify(value))
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return isUnsafePresentationCode(code)
+        ? `\\u{${code.toString(16).padStart(4, '0')}}`
+        : character;
+    })
+    .join('');
+
+const describeExpectation = (
+  stream: 'stderr' | 'stdout',
+  item: RecordPreviewExpectation,
+): string => {
+  const normalized = item.normalize.length > 0;
+  const value = quoteExpectation(item.value);
+  if (item.mode === 'exact') {
+    return `  ${stream} ${normalized ? 'after normalization is' : 'is'} exactly: ${value}`;
+  }
+  return `  ${stream} contains${normalized ? ' after normalization' : ''}: ${value}`;
+};
+
+const describeNormalizations = (preview: RecordPreview): readonly string[] => {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const item of [...preview.expectations.stdout, ...preview.expectations.stderr]) {
+    if (item.normalize.length === 0) continue;
+    const description = item.normalize.map((rule) => RULE_PREVIEW_LABELS[rule]).join(', ');
+    if (seen.has(description)) continue;
+    seen.add(description);
+    lines.push(`  normalization: ${description}`);
+  }
+  return lines;
+};
+
 export const renderRecordPreview = (preview: RecordPreview): string => {
   const lines = [
     'ProofIssue recording preview',
@@ -123,8 +181,9 @@ export const renderRecordPreview = (preview: RecordPreview): string => {
     ...renderDependencySection(preview),
     'Expected failure:',
     `  exit code: ${String(preview.expectations.exit_code)}`,
-    ...preview.expectations.stdout.map((value) => `  stdout contains: ${quoteArgument(value)}`),
-    ...preview.expectations.stderr.map((value) => `  stderr contains: ${quoteArgument(value)}`),
+    ...preview.expectations.stdout.map((item) => describeExpectation('stdout', item)),
+    ...preview.expectations.stderr.map((item) => describeExpectation('stderr', item)),
+    ...describeNormalizations(preview),
     '',
     'Limits:',
     `  timeout: ${String(preview.limits.timeout_seconds)} seconds`,
