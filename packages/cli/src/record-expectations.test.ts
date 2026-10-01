@@ -4,7 +4,16 @@ import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { CLI_HELP, parseRecordArguments, RECORD_HELP, runCli, type CliIo } from './index.js';
+import type { ReplayOperationResult } from '@proofissue/application';
+
+import {
+  CLI_HELP,
+  parseRecordArguments,
+  RECORD_HELP,
+  renderReplayResult,
+  runCli,
+  type CliIo,
+} from './index.js';
 
 const roots: string[] = [];
 
@@ -300,6 +309,36 @@ describe('record with output expectations', () => {
     expect(result.exit_code).toBe(1);
     expect(output()).toContain(
       'Recording failed: An expected stderr literal was not observed in the normalized output.',
+    );
+  });
+});
+
+describe('replay rendering of output matching', () => {
+  const read = async (name: string): Promise<ReplayOperationResult> =>
+    JSON.parse(
+      await readFile(`tests/fixtures/results/v1/${name}`, 'utf8'),
+    ) as ReplayOperationResult;
+
+  it('renders normalized evidence from the result fixture', async () => {
+    const rendered = renderReplayResult(await read('reproduced-normalized.json'));
+
+    expect(rendered).toContain('Replay result: reproduced');
+    expect(rendered).toContain('Matched: Replay stdout matched the expected output exactly.');
+    expect(rendered).toContain(
+      'Matched: Expected stderr text was present after normalization; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.',
+    );
+    expect(rendered).toContain(
+      'Matched: Normalized replay stderr matched the expected output exactly; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.',
+    );
+  });
+
+  it('renders what a fix changed, with positions and without output text', async () => {
+    const rendered = renderReplayResult(await read('not-reproduced-output-modes.json'));
+
+    expect(rendered).toContain('Replay result: not_reproduced');
+    expect(rendered).toContain('Different: Expected exit code 1 but received 0.');
+    expect(rendered).toContain(
+      'Different: Normalized replay stderr differed from the expected output at line 1, column 1 (expected 76 characters, received 0); normalization changed nothing in the replay output.',
     );
   });
 });

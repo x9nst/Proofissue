@@ -6,7 +6,7 @@ Fixtures are public compatibility and security evidence. They must be minimal, r
 
 - `artifacts/v1`: permanent version 1 valid, invalid, and canonical-byte compatibility fixtures. Public presentation wording remains provisional until maintainer Gate A.
 - `artifacts/v1/legacy-schema`: frozen copies of earlier published schemas, used only to prove that a consumer which predates an additive change rejects the new content instead of misreading it. Never edited.
-- `results/v1`: provisional machine-result fixtures until the result contract is accepted; `results/v1/prepare` holds the dependency-preparation results.
+- `results/v1`: provisional machine-result fixtures until the result contract is accepted; `results/v1/prepare` holds the dependency-preparation results. `reproduced-normalized.json` and `not-reproduced-output-modes.json` show the exact and normalized output-matching evidence and differences; their messages are checked against the matcher, and they carry counts only, never output text.
 - `action`: the approved-image failure and corrected declared subject used by the Linux
   GitHub Action integration workflow.
 - `synthetic-secrets`: unmistakably fake values used only to prove redaction and leakage checks.

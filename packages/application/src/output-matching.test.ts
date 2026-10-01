@@ -282,6 +282,52 @@ describe('replay interprets output expectations by their mode', () => {
   });
 });
 
+describe('committed result fixtures', () => {
+  const fixtureExpectation = {
+    stdout: [{ mode: 'exact', value: 'checking calculate(2)\n' }],
+    stderr: [
+      {
+        mode: 'contains',
+        normalize: [...DEFAULT_OUTPUT_NORMALIZATION],
+        value: 'Expected 4 from calculate(2) (<duration>)',
+      },
+      {
+        mode: 'exact',
+        normalize: [...DEFAULT_OUTPUT_NORMALIZATION],
+        value: 'Expected 4 from calculate(2) (<duration>)\n    at <project>/reproduction.mjs\n',
+      },
+    ],
+  } as const;
+
+  const readFixture = async (name: string) =>
+    JSON.parse(await readFile(`tests/fixtures/results/v1/${name}`, 'utf8')) as {
+      differences: unknown;
+      evidence: unknown;
+    };
+
+  it('hold exactly the evidence and differences the matcher produces', async () => {
+    const file = await artifactFile(fixtureExpectation.stdout, fixtureExpectation.stderr);
+    const failing = await replay(
+      file,
+      'checking calculate(2)\n',
+      `${ESC}[31mExpected 4 from calculate(2) (12ms)${ESC}[0m\r\n    at file:///workspace/reproduction.mjs\r\n`,
+    );
+    const corrected = await createReplayApplicationService({
+      runner: runnerPrinting('checking calculate(2)\n', '', 0),
+    }).replay({ artifact_path: file, mode: 'current_checkout', against_path: '.' });
+
+    const reproducedFixture = await readFixture('reproduced-normalized.json');
+    const correctedFixture = await readFixture('not-reproduced-output-modes.json');
+
+    expect(failing.status).toBe('reproduced');
+    expect(failing.evidence).toEqual(reproducedFixture.evidence);
+    expect(failing.differences).toEqual(reproducedFixture.differences);
+    expect(corrected.status).toBe('not_reproduced');
+    expect(corrected.evidence).toEqual(correctedFixture.evidence);
+    expect(corrected.differences).toEqual(correctedFixture.differences);
+  });
+});
+
 describe('inspection of output expectations', () => {
   it('inspection reports modes and rules but never expected values', async () => {
     const file = await artifactFile(
