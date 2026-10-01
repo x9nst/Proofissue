@@ -35,13 +35,15 @@ const runBundledAction = async (
   });
 
 describe('bundled GitHub Action', () => {
-  it('carries no package download or store code', async () => {
-    // The Action only replays. Downloading packages is a separate, explicit step, and until
-    // the Action intentionally offers it, an accidental import must not add network access.
+  it('carries no package download code', async () => {
+    // The Action only replays. Downloading packages is a separate, explicit step that needs
+    // the network, and until the Action intentionally offers it, an accidental import must not
+    // add network access. The read side of the prepared store is expected here, because replay
+    // checks a store before it mounts it; the code that makes requests is not.
     // Remove or update this test in the change that adds that step to the Action.
     const bundle = await readFile('action/dist/index.js', 'utf8');
 
-    for (const marker of ['proofissue-prepare', 'redirect_refused', 'integrity_mismatch']) {
+    for (const marker of ['proofissue-prepare', 'redirect_refused', 'content_encoding_refused']) {
       expect(bundle, marker).not.toContain(marker);
     }
   });
