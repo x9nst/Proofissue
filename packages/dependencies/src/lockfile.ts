@@ -46,7 +46,18 @@ export interface LockfileWarning {
   readonly package_path: string;
 }
 
-export interface LockedPackage {
+/**
+ * Platform restrictions copied from the lockfile entry, in npm's notation: a bare value
+ * allows only that value and a value starting with `!` excludes it. Absent means no
+ * restriction.
+ */
+export interface PlatformRestrictions {
+  readonly cpu?: readonly string[];
+  readonly libc?: readonly string[];
+  readonly os?: readonly string[];
+}
+
+export interface LockedPackage extends PlatformRestrictions {
   readonly has_install_script: boolean;
   /** `sha512-` followed by 88 base64 characters. */
   readonly integrity: string;
@@ -76,6 +87,25 @@ const INTEGRITY = /^sha512-[A-Za-z0-9+/]{86}==$/u;
 const VERSION = /^(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?$/u;
 
 type JsonObject = Readonly<Record<string, unknown>>;
+
+const PLATFORM_VALUE = /^!?[a-z0-9_-]{1,32}$/u;
+const MAX_PLATFORM_VALUES = 32;
+
+/**
+ * Reads an `os`, `cpu`, or `libc` list. Returns undefined when absent and null when
+ * present but not a short list of plain platform words, which is rejected: these values
+ * decide what is downloaded, so they are not trusted to be arbitrary strings.
+ */
+const readPlatformList = (value: unknown): readonly string[] | null | undefined => {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value) || value.length > MAX_PLATFORM_VALUES) return null;
+  const list: string[] = [];
+  for (const item of value as unknown[]) {
+    if (typeof item !== 'string' || !PLATFORM_VALUE.test(item)) return null;
+    list.push(item);
+  }
+  return list;
+};
 
 const isObject = (value: unknown): value is JsonObject =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -285,6 +315,18 @@ export const validateNpmLockfile = (text: string): LockfileValidation => {
       continue;
     }
 
+    const os = readPlatformList(entry.os);
+    const cpu = readPlatformList(entry.cpu);
+    const libc = readPlatformList(entry.libc);
+    if (os === null || cpu === null || libc === null) {
+      fail({
+        code: 'invalid_structure',
+        message: 'A package platform restriction is not a short list of plain platform names.',
+        package_path: key,
+      });
+      continue;
+    }
+
     const hasInstallScript = entry.hasInstallScript === true;
     if (hasInstallScript) {
       warnings.push({
@@ -294,9 +336,12 @@ export const validateNpmLockfile = (text: string): LockfileValidation => {
       });
     }
     packages.push({
+      ...(cpu === undefined ? {} : { cpu }),
       has_install_script: hasInstallScript,
       integrity,
+      ...(libc === undefined ? {} : { libc }),
       name,
+      ...(os === undefined ? {} : { os }),
       package_path: key,
       resolved,
       version,
