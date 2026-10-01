@@ -263,6 +263,25 @@ describe('record application service', () => {
     }
   });
 
+  it('reports the same digest from record, validate, and inspect for the written file', async () => {
+    const fixture = await setup();
+    try {
+      const recorded = await createRecordApplicationService(() =>
+        Promise.resolve(confirmed),
+      ).record(fixture.request);
+      const services = createStaticArtifactApplicationServices();
+      const validated = await services.validate({ artifact_path: fixture.output });
+      const inspected = await services.inspect({ artifact_path: fixture.output });
+      const fileDigest = sha256(await readFile(fixture.output));
+
+      expect(recorded).toMatchObject({ status: 'created', artifact_digest: fileDigest });
+      expect(validated).toMatchObject({ status: 'valid', artifact_digest: fileDigest });
+      expect(inspected).toMatchObject({ artifact_digest: fileDigest });
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
   it.each([
     [{ ...confirmed, reproduction_files_confirmed: false }],
     [{ ...confirmed, subject_files_confirmed: false }],

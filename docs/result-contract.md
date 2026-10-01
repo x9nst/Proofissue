@@ -20,6 +20,11 @@ warnings: bounded typed warning list
 errors: bounded typed error list
 ```
 
+`artifact_digest` is the lowercase hexadecimal SHA-256 of the exact bytes of the
+`.proofissue` file. `record`, `validate`, `inspect`, and `replay` report the same
+value for the same file, so a digest printed when an artifact is created can be
+compared with the digest reported when it is later validated or replayed.
+
 Limits:
 
 - at most 50 warnings;

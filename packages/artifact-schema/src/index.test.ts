@@ -399,6 +399,18 @@ describe('artifact file input and publication', () => {
     expect((await readdir(root)).filter((name) => name.endsWith('.tmp'))).toEqual([]);
   });
 
+  it('returns the digest a later read of the written file reports', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-artifact-digest-'));
+    roots.push(root);
+    const output = path.join(root, 'failure.proofissue');
+
+    const written = await writeArtifactFile(output, artifact());
+    const read = await readArtifactFile(output);
+
+    expect(written.digest).toBe(sha256(await readFile(output)));
+    expect(read.ok && read.artifact.digest).toBe(written.digest);
+  });
+
   it('rejects non-regular and oversized input files', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'proofissue-input-'));
     roots.push(root);
