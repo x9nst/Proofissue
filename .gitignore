@@ -5,6 +5,9 @@ dist/
 !action/dist/
 !action/dist/index.js
 !action/dist/third-party-licenses.txt
+!action/prepare/dist/
+!action/prepare/dist/index.js
+!action/prepare/dist/third-party-licenses.txt
 coverage/
 *.tsbuildinfo
 .eslintcache

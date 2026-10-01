@@ -14,7 +14,9 @@
   "files": [
     "action.yml",
     "dist",
-    "lib"
+    "lib",
+    "prepare/action.yml",
+    "prepare/dist"
   ],
   "dependencies": {
     "@proofissue/application": "0.0.0"
