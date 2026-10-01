@@ -42,6 +42,8 @@ export interface RecordApplicationRequest {
   readonly environment_image: string;
   readonly expect_stderr: readonly string[];
   readonly expect_stdout: readonly string[];
+  /** Also record package.json and package-lock.json from the project root. */
+  readonly include_dependencies?: boolean;
   readonly limits?: ArtifactLimitsV1;
   readonly output_path: string;
   readonly program: 'node';
@@ -52,6 +54,12 @@ export interface RecordApplicationRequest {
 
 export interface RecordPreview {
   readonly command: { readonly program: 'node'; readonly arguments: readonly string[] };
+  /** Present only when dependency files are being recorded. */
+  readonly dependencies?: {
+    readonly files: readonly string[];
+    readonly install_script_packages: number;
+    readonly package_count: number;
+  };
   readonly reproduction_files: readonly string[];
   readonly subject_files: readonly string[];
   readonly expectations: {
@@ -134,6 +142,17 @@ const createRecordPreview = (capture: RecordCapture): RecordPreview => {
       program: capture.artifact.command.program,
       arguments: capture.artifact.command.arguments,
     },
+    ...(capture.dependencies === undefined
+      ? {}
+      : {
+          dependencies: {
+            files: capture.artifact.files
+              .filter((file) => file.role === 'dependency')
+              .map((file) => file.path),
+            install_script_packages: capture.dependencies.install_script_packages,
+            package_count: capture.dependencies.package_count,
+          },
+        }),
     reproduction_files: capture.artifact.files
       .filter((file) => file.role === 'reproduction')
       .map((file) => file.path),
@@ -207,6 +226,9 @@ export const createRecordApplicationService = (
         environment_image: request.environment_image,
         expect_stderr: request.expect_stderr,
         expect_stdout: request.expect_stdout,
+        ...(request.include_dependencies === undefined
+          ? {}
+          : { include_dependencies: request.include_dependencies }),
         ...(request.limits === undefined ? {} : { limits: request.limits }),
         program: request.program,
         project_root: request.project_root,

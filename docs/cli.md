@@ -33,7 +33,7 @@ proofissue record --project <directory> --output <file.proofissue>
   --image <repository@sha256:digest>
   --reproduction <path> --subject <path>
   [--expect-stdout <literal>] [--expect-stderr <literal>]
-  [--yes] -- node <arguments...>
+  [--dependencies] [--yes] -- node <arguments...>
 ```
 
 ### Options
@@ -46,6 +46,7 @@ proofissue record --project <directory> --output <file.proofissue>
 | `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. |
 | `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. |
 | `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain. Repeatable. |
+| `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Artifacts with dependency files cannot be replayed yet. See `dependencies.md`. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. |
 
@@ -105,6 +106,7 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 - A command that cannot start, runs out of time, is ended by a signal, or returns no usable exit code exits `1` and writes no artifact.
 - A selected path that is missing, a directory, a symbolic link, larger than the limit, not valid UTF-8, or outside the project exits `1` and writes no artifact.
 - An `--output` path that already exists exits `1`; artifacts are never overwritten.
+- With `--dependencies`, a missing `package.json` or `package-lock.json`, an unsupported lockfile, or a likely secret in either file exits `1` before anything is written. An unsupported lockfile is reported before the command runs.
 - Content that cannot be redacted safely, or that holds more secrets than an artifact can describe, exits `1`.
 - A declined confirmation exits `0` and writes no artifact.
 

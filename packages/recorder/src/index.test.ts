@@ -281,3 +281,244 @@ describe('captureRecording', () => {
     await expect(readFile(sentinel)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 });
+
+describe('dependency capture', () => {
+  const integrity = `sha512-${'A'.repeat(86)}==`;
+  const tarball = (name: string): string =>
+    `https://registry.npmjs.org/${name}/-/${name}-1.0.0.tgz`;
+  const manifest = '{\n  "name": "synthetic",\n  "version": "1.0.0",\n  "private": true\n}\n';
+  const lockfile = (packages: Record<string, unknown> = {}): string =>
+    `${JSON.stringify({
+      name: 'synthetic',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      packages: { '': { name: 'synthetic', version: '1.0.0' }, ...packages },
+    })}\n`;
+  const dep = (name: string, extra: Record<string, unknown> = {}): Record<string, unknown> => ({
+    version: '1.0.0',
+    resolved: tarball(name),
+    integrity,
+    ...extra,
+  });
+  const withDependencies = async (
+    packages: Record<string, unknown> = { 'node_modules/left-pad': dep('left-pad') },
+  ): Promise<string> => {
+    const root = await project();
+    await writeFile(path.join(root, 'package.json'), manifest);
+    await writeFile(path.join(root, 'package-lock.json'), lockfile(packages));
+    return root;
+  };
+  const asking = (root: string, overrides: Partial<RecordRequest> = {}): RecordRequest =>
+    request(root, { include_dependencies: true, ...overrides });
+
+  it('records the manifest and lockfile with the dependency role, and summarizes them', async () => {
+    const root = await withDependencies({
+      'node_modules/left-pad': dep('left-pad'),
+      'node_modules/native': dep('native', { hasInstallScript: true }),
+    });
+
+    const capture = await captureRecording(asking(root));
+
+    expect(capture.artifact.files.map((file) => `${file.role}:${file.path}`).sort()).toEqual([
+      'dependency:package-lock.json',
+      'dependency:package.json',
+      'reproduction:test/reproduction.mjs',
+      'subject:src/subject.mjs',
+    ]);
+    expect(capture.dependencies).toEqual({ install_script_packages: 1, package_count: 2 });
+    expect(validateArtifactValue(capture.artifact).ok).toBe(true);
+  });
+
+  it('records the files exactly as they are on disk', async () => {
+    const root = await withDependencies();
+
+    const capture = await captureRecording(asking(root));
+
+    const byPath = new Map(capture.artifact.files.map((file) => [file.path, file.content]));
+    expect(byPath.get('package.json')).toBe(
+      await readFile(path.join(root, 'package.json'), 'utf8'),
+    );
+    expect(byPath.get('package-lock.json')).toBe(
+      await readFile(path.join(root, 'package-lock.json'), 'utf8'),
+    );
+  });
+
+  it('collects nothing extra unless asked, even when the files exist', async () => {
+    const root = await withDependencies();
+
+    const capture = await captureRecording(request(root));
+
+    expect(capture.artifact.files.map((file) => file.path).sort()).toEqual([
+      'src/subject.mjs',
+      'test/reproduction.mjs',
+    ]);
+    expect(capture.dependencies).toBeUndefined();
+    expect(JSON.stringify(capture.artifact)).not.toContain('left-pad');
+  });
+
+  it('refuses when either file is missing', async () => {
+    const onlyManifest = await project();
+    await writeFile(path.join(onlyManifest, 'package.json'), manifest);
+    const onlyLockfile = await project();
+    await writeFile(path.join(onlyLockfile, 'package-lock.json'), lockfile());
+
+    for (const root of [onlyManifest, onlyLockfile, await project()]) {
+      await expect(captureRecording(asking(root))).rejects.toMatchObject({
+        code: 'unsafe_file',
+      } satisfies Partial<RecorderError>);
+    }
+  });
+
+  it.each([
+    [
+      'a git source',
+      { 'node_modules/a': dep('a', { resolved: 'git+ssh://git@example.test/a.git' }) },
+    ],
+    [
+      'another registry',
+      {
+        'node_modules/a': dep('a', { resolved: 'https://registry.example.test/a/-/a-1.0.0.tgz' }),
+      },
+    ],
+    [
+      'a missing integrity hash',
+      { 'node_modules/a': { version: '1.0.0', resolved: tarball('a') } },
+    ],
+    [
+      'a weak integrity hash',
+      { 'node_modules/a': dep('a', { integrity: `sha1-${'A'.repeat(27)}=` }) },
+    ],
+    ['an escaping location', { '../escape': dep('a') }],
+    ['a linked package', { 'node_modules/a': dep('a', { link: true }) }],
+  ])('refuses a lockfile with %s, before running the command', async (_name, packages) => {
+    const root = await withDependencies(packages);
+    const marker = path.join(root, 'ran.txt');
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'x'); console.error('failure marker'); process.exitCode = 1;\n`,
+    );
+
+    await expect(captureRecording(asking(root))).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: expect.stringContaining('lockfile') as string,
+    });
+    await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses a lockfile that repeats a key', async () => {
+    const root = await withDependencies();
+    await writeFile(
+      path.join(root, 'package-lock.json'),
+      '{"lockfileVersion":3,"lockfileVersion":3,"packages":{}}\n',
+    );
+
+    await expect(captureRecording(asking(root))).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: expect.stringContaining('duplicate_key') as string,
+    });
+  });
+
+  it('reports at most three problems and escapes the location text', async () => {
+    const escape = String.fromCharCode(27);
+    const root = await withDependencies({
+      'node_modules/a': { version: '1.0.0' },
+      'node_modules/b': { version: '1.0.0' },
+      'node_modules/c': { version: '1.0.0' },
+      'node_modules/d': { version: '1.0.0' },
+      [`../bad${escape}[31mpath`]: dep('x'),
+    });
+
+    const error = await captureRecording(asking(root)).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: 'invalid_request' });
+    const message = (error as RecorderError).message;
+    expect(message).toContain('more');
+    expect(message).not.toContain(escape);
+  });
+
+  it.each([
+    ['text that is not JSON', 'not json'],
+    ['a JSON array', '[]'],
+    ['a JSON string', '"x"'],
+    ['JSON null', 'null'],
+  ])('refuses a package.json that is %s', async (_name, content) => {
+    const root = await withDependencies();
+    await writeFile(path.join(root, 'package.json'), content);
+
+    await expect(captureRecording(asking(root))).rejects.toMatchObject({
+      code: 'invalid_request',
+      message: expect.stringContaining('package.json') as string,
+    });
+  });
+
+  it('refuses to alter a dependency file that contains a likely secret', async () => {
+    const root = await withDependencies();
+    const awsKey = ['AK', 'IA', '0123456789ABCDEF'].join('');
+    await writeFile(
+      path.join(root, 'package.json'),
+      `{"name":"synthetic","description":"key ${awsKey}"}\n`,
+    );
+
+    const error = await captureRecording(asking(root)).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: 'redaction_failed' });
+    expect((error as RecorderError).message).not.toContain(awsKey);
+  });
+
+  it('refuses a lockfile larger than the per-file limit', async () => {
+    const root = await withDependencies();
+    await writeFile(
+      path.join(root, 'package-lock.json'),
+      `{"lockfileVersion":3,"packages":{},"pad":"${'x'.repeat(ARTIFACT_LIMITS.scalar_bytes)}"}`,
+    );
+
+    await expect(captureRecording(asking(root))).rejects.toMatchObject({
+      code: 'unsafe_file',
+    } satisfies Partial<RecorderError>);
+  });
+
+  it('refuses a symbolic-link lockfile', async (context) => {
+    const root = await withDependencies();
+    await writeFile(path.join(root, 'real-lock.json'), lockfile());
+    await rm(path.join(root, 'package-lock.json'));
+    await symlinkOrSkip(
+      context,
+      path.join(root, 'real-lock.json'),
+      path.join(root, 'package-lock.json'),
+    );
+
+    await expect(captureRecording(asking(root))).rejects.toMatchObject({
+      code: 'unsafe_file',
+    } satisfies Partial<RecorderError>);
+  });
+
+  it.each(['package.json', 'package-lock.json'])(
+    'refuses when %s is also selected as a subject file',
+    async (name) => {
+      const root = await withDependencies();
+      const marker = path.join(root, 'ran.txt');
+      await writeFile(
+        path.join(root, 'test', 'reproduction.mjs'),
+        `import { writeFileSync } from 'node:fs'; writeFileSync(${JSON.stringify(marker)}, 'x'); console.error('failure marker'); process.exitCode = 1;\n`,
+      );
+
+      await expect(
+        captureRecording(asking(root, { subject_paths: ['src/subject.mjs', name] })),
+      ).rejects.toMatchObject({ code: 'invalid_request' } satisfies Partial<RecorderError>);
+      // The conflict is caught up front, not after the command has already run.
+      await expect(readFile(marker)).rejects.toMatchObject({ code: 'ENOENT' });
+    },
+  );
+
+  it('still allows package.json as an ordinary subject when dependencies are not requested', async () => {
+    const root = await withDependencies();
+
+    const capture = await captureRecording(
+      request(root, { subject_paths: ['src/subject.mjs', 'package.json'] }),
+    );
+
+    expect(capture.artifact.files.find((file) => file.path === 'package.json')?.role).toBe(
+      'subject',
+    );
+  });
+});

@@ -433,3 +433,247 @@ describe('record CLI', () => {
     }
   });
 });
+
+describe('record CLI dependency capture', () => {
+  const stream = {
+    discarded_bytes: 0,
+    had_decoding_replacement: false,
+    retained_bytes: 0,
+    total_bytes: 0,
+    truncated: false,
+  };
+  const basePreview = {
+    command: { program: 'node' as const, arguments: ['test/reproduction.mjs'] },
+    reproduction_files: ['test/reproduction.mjs'],
+    subject_files: ['src/subject.mjs'],
+    expectations: { exit_code: 1, stdout: [], stderr: ['failure marker'] },
+    limits: {
+      timeout_seconds: 60,
+      memory_mb: 512,
+      cpus: 1,
+      processes: 64,
+      output_bytes_per_stream: 1024,
+    },
+    output: { stdout: stream, stderr: stream },
+    redaction: { finding_count: 0, findings: [] },
+  };
+  const dependencies = (packageCount: number, installScripts: number) => ({
+    files: ['package.json', 'package-lock.json'],
+    install_script_packages: installScripts,
+    package_count: packageCount,
+  });
+  const requiredArguments = [
+    '--project',
+    '.',
+    '--output',
+    'failure.proofissue',
+    '--image',
+    `node@sha256:${'1'.repeat(64)}`,
+    '--reproduction',
+    'test/a.mjs',
+    '--subject',
+    'src/a.mjs',
+    '--expect-stderr',
+    'failure marker',
+  ];
+
+  it('documents the flag and its limits', () => {
+    expect(RECORD_HELP).toContain('--dependencies');
+    expect(RECORD_HELP).toContain('lockfile version 3');
+    expect(RECORD_HELP).toContain('public npm registry');
+    expect(RECORD_HELP).toContain('not supported yet');
+  });
+
+  it('asks for dependency files only when --dependencies is given', () => {
+    const without = parseRecordArguments([...requiredArguments, '--', 'node', 'test/a.mjs']);
+    const withFlag = parseRecordArguments([
+      ...requiredArguments,
+      '--dependencies',
+      '--',
+      'node',
+      'test/a.mjs',
+    ]);
+
+    expect(without.request).not.toHaveProperty('include_dependencies');
+    expect(withFlag.request.include_dependencies).toBe(true);
+    expect(withFlag.request.arguments).toEqual(['test/a.mjs']);
+  });
+
+  it('accepts the flag anywhere before the command', () => {
+    const parsed = parseRecordArguments([
+      '--dependencies',
+      ...requiredArguments,
+      '--yes',
+      '--',
+      'node',
+      'test/a.mjs',
+    ]);
+
+    expect(parsed.request.include_dependencies).toBe(true);
+    expect(parsed.noninteractive_confirmation).toBe(true);
+  });
+
+  it('does not take the next argument as the flag value', () => {
+    const parsed = parseRecordArguments([
+      ...requiredArguments,
+      '--dependencies',
+      '--yes',
+      '--',
+      'node',
+      'test/a.mjs',
+    ]);
+
+    expect(parsed.noninteractive_confirmation).toBe(true);
+  });
+
+  it('shows the dependency files, package count, and the replay limitation', () => {
+    const rendered = renderRecordPreview({ ...basePreview, dependencies: dependencies(42, 0) });
+
+    expect(rendered).toContain('Dependency files (recorded exactly as they are');
+    expect(rendered).toContain('  package.json\n  package-lock.json');
+    expect(rendered).toContain('42 packages from the public npm registry');
+    expect(rendered).toContain('Replaying an artifact with dependency files is not supported yet.');
+    expect(rendered).not.toContain('install scripts');
+  });
+
+  it('uses the singular for one package and names install scripts when present', () => {
+    const rendered = renderRecordPreview({ ...basePreview, dependencies: dependencies(1, 1) });
+
+    expect(rendered).toContain('1 package from the public npm registry');
+    expect(rendered).toContain('1 package declares install scripts, which are never run.');
+    expect(renderRecordPreview({ ...basePreview, dependencies: dependencies(5, 3) })).toContain(
+      '3 packages declare install scripts, which are never run.',
+    );
+  });
+
+  it('places the dependency section between the file groups and the expectations', () => {
+    const rendered = renderRecordPreview({ ...basePreview, dependencies: dependencies(2, 0) });
+
+    const subjectAt = rendered.indexOf('Files that may be replaced');
+    const dependencyAt = rendered.indexOf('Dependency files');
+    const expectedAt = rendered.indexOf('Expected failure:');
+    expect(subjectAt).toBeLessThan(dependencyAt);
+    expect(dependencyAt).toBeLessThan(expectedAt);
+  });
+
+  it('adds no dependency section to a preview without dependencies', () => {
+    expect(renderRecordPreview(basePreview)).not.toContain('Dependency files');
+  });
+
+  it('records dependency files end to end and shows them before writing', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-deps-'));
+    await mkdir(path.join(root, 'test'));
+    await mkdir(path.join(root, 'src'));
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      "process.stderr.write('failure marker'); process.exitCode = 1;\n",
+    );
+    await writeFile(path.join(root, 'src', 'subject.mjs'), 'export const value = 3;\n');
+    await writeFile(path.join(root, 'package.json'), '{"name":"synthetic"}\n');
+    await writeFile(
+      path.join(root, 'package-lock.json'),
+      JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          '': { name: 'synthetic' },
+          'node_modules/synthetic-dep': {
+            version: '1.0.0',
+            resolved: 'https://registry.npmjs.org/synthetic-dep/-/synthetic-dep-1.0.0.tgz',
+            integrity: `sha512-${'A'.repeat(86)}==`,
+          },
+        },
+      }),
+    );
+    const output = path.join(root, 'failure.proofissue');
+    let written = '';
+    const io: CliIo = {
+      write: (text) => {
+        written += text;
+      },
+      confirm: () => Promise.reject(new Error('Noninteractive mode must not prompt.')),
+    };
+    try {
+      const result = await runCli(
+        [
+          'record',
+          '--project',
+          root,
+          '--output',
+          output,
+          '--image',
+          `node@sha256:${'1'.repeat(64)}`,
+          '--reproduction',
+          'test/reproduction.mjs',
+          '--subject',
+          'src/subject.mjs',
+          '--expect-stderr',
+          'failure marker',
+          '--dependencies',
+          '--yes',
+          '--',
+          'node',
+          'test/reproduction.mjs',
+        ],
+        io,
+      );
+
+      expect(result.exit_code).toBe(0);
+      expect(written).toContain('1 package from the public npm registry');
+      expect(written).not.toContain('synthetic-dep');
+      expect(written).toContain('Artifact created.');
+      const artifactText = await readFile(output, 'utf8');
+      expect(artifactText).toContain('role: dependency');
+      const validated = await runCli(['validate', output], capture().io);
+      expect(validated.exit_code).toBe(0);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it('fails with a clear message and writes nothing when the lockfile is unusable', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-deps-bad-'));
+    await mkdir(path.join(root, 'test'));
+    await mkdir(path.join(root, 'src'));
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      "process.stderr.write('failure marker'); process.exitCode = 1;\n",
+    );
+    await writeFile(path.join(root, 'src', 'subject.mjs'), 'export const value = 3;\n');
+    await writeFile(path.join(root, 'package.json'), '{"name":"synthetic"}\n');
+    await writeFile(path.join(root, 'package-lock.json'), '{"lockfileVersion":2,"packages":{}}');
+    const output = path.join(root, 'failure.proofissue');
+    const { io, output: text } = capture();
+    try {
+      const result = await runCli(
+        [
+          'record',
+          '--project',
+          root,
+          '--output',
+          output,
+          '--image',
+          `node@sha256:${'1'.repeat(64)}`,
+          '--reproduction',
+          'test/reproduction.mjs',
+          '--subject',
+          'src/subject.mjs',
+          '--expect-stderr',
+          'failure marker',
+          '--dependencies',
+          '--yes',
+          '--',
+          'node',
+          'test/reproduction.mjs',
+        ],
+        io,
+      );
+
+      expect(result.exit_code).toBe(1);
+      expect(text()).toContain('Recording failed:');
+      expect(text()).toContain('unsupported_lockfile_version');
+      await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});

@@ -25,13 +25,16 @@ export const RECORD_HELP = `Usage:
     --image <repository@sha256:digest>
     --reproduction <path> --subject <path>
     [--expect-stdout <literal>] [--expect-stderr <literal>]
-    [--yes] -- node <arguments...>
+    [--dependencies] [--yes] -- node <arguments...>
 
 File roles:
   --reproduction  A test, fixture, or input kept exactly as recorded during fix checks.
   --subject       Implementation code that may be replaced from the current checkout.
 
 At least one path in each role and one expected output literal are required.
+--dependencies also records package.json and package-lock.json from the project root so the
+locked npm packages can be installed later. The lockfile must use lockfile version 3 and the
+public npm registry. Replay of artifacts with dependency files is not supported yet.
 The command runs directly as Node.js arguments; shell syntax is not interpreted.
 Use --yes only for explicit noninteractive approval after reviewing these selections.
 `;
@@ -71,6 +74,26 @@ const defaultIo = (): CliIo => ({
 
 const quoteArgument = (value: string): string => JSON.stringify(value);
 
+const plural = (count: number, noun: string): string =>
+  `${String(count)} ${noun}${count === 1 ? '' : 's'}`;
+
+const renderDependencySection = (preview: RecordPreview): readonly string[] => {
+  const dependencies = preview.dependencies;
+  if (dependencies === undefined) return [];
+  return [
+    'Dependency files (recorded exactly as they are and never replaced during a fix check):',
+    ...dependencies.files.map((file) => `  ${file}`),
+    `  ${plural(dependencies.package_count, 'package')} from the public npm registry, each pinned by an integrity hash.`,
+    ...(dependencies.install_script_packages > 0
+      ? [
+          `  ${plural(dependencies.install_script_packages, 'package')} ${dependencies.install_script_packages === 1 ? 'declares' : 'declare'} install scripts, which are never run.`,
+        ]
+      : []),
+    '  Replaying an artifact with dependency files is not supported yet.',
+    '',
+  ];
+};
+
 export const renderRecordPreview = (preview: RecordPreview): string => {
   const lines = [
     'ProofIssue recording preview',
@@ -86,6 +109,7 @@ export const renderRecordPreview = (preview: RecordPreview): string => {
     ...preview.subject_files.map((file) => `  ${file}`),
     '  Implementation code placed in the first group stays frozen and may hide a real fix.',
     '',
+    ...renderDependencySection(preview),
     'Expected failure:',
     `  exit code: ${String(preview.expectations.exit_code)}`,
     ...preview.expectations.stdout.map((value) => `  stdout contains: ${quoteArgument(value)}`),
@@ -124,6 +148,7 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
   let outputPath: string | undefined;
   let image: string | undefined;
   let noninteractive = false;
+  let includeDependencies = false;
   const reproductionPaths: string[] = [];
   const subjectPaths: string[] = [];
   const expectStdout: string[] = [];
@@ -138,6 +163,10 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
     }
     if (argument === '--yes') {
       noninteractive = true;
+      continue;
+    }
+    if (argument === '--dependencies') {
+      includeDependencies = true;
       continue;
     }
     if (argument === undefined) continue;
@@ -183,6 +212,7 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
       environment_image: image,
       expect_stderr: expectStderr,
       expect_stdout: expectStdout,
+      ...(includeDependencies ? { include_dependencies: true } : {}),
       output_path: outputPath,
       program: 'node',
       project_root: projectRoot,

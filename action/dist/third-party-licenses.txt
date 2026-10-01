@@ -4,6 +4,8 @@
 
 @proofissue/artifact-schema
 
+@proofissue/dependencies
+
 @proofissue/matcher
 
 @proofissue/process-output

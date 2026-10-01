@@ -105,7 +105,7 @@ Allowed dependencies point inward toward pure contracts and rules, then outward 
 cli ───────────────┐
 action ────────────┴→ application
 application ────────→ artifact-schema, contracts, matcher, process-output, recorder, redactor, runner
-recorder ───────────→ artifact-schema, contracts, process-output, redactor
+recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, process-output
 process-output ─────→ contracts
 dependencies ───────→ (none)
