@@ -2,7 +2,7 @@ export const RESULT_SCHEMA_VERSION = 1 as const;
 
 export type ResultSchemaVersion = typeof RESULT_SCHEMA_VERSION;
 export type ArtifactVersion = 1;
-export type OperationName = 'record' | 'validate' | 'inspect' | 'replay';
+export type OperationName = 'record' | 'validate' | 'inspect' | 'prepare' | 'replay';
 
 export type ProofIssueErrorCode =
   | 'malformed_input'
@@ -20,6 +20,9 @@ export type ProofIssueErrorCode =
   | 'cleanup_failed'
   | 'dependencies_not_prepared'
   | 'dependency_install_failed'
+  | 'lockfile_rejected'
+  | 'dependency_download_failed'
+  | 'dependency_store_unusable'
   | 'record_command_failed'
   | 'atomic_write_failed'
   | 'internal_error';
@@ -167,6 +170,33 @@ export interface InspectOperationResult extends OperationResultBase {
   readonly inspection?: ArtifactInspectionSummary;
 }
 
+export type PrepareStatus =
+  'prepared' | 'not_required' | 'invalid_input' | 'invalid_artifact' | 'execution_failed';
+
+/** Counts only: never package names, tarball paths, or the store location. */
+export interface DependencyPreparationSummary {
+  /** Install locations for the replay platform (a tarball counts once per place it installs). */
+  readonly packages: number;
+  readonly downloaded_tarballs: number;
+  readonly downloaded_bytes: number;
+  readonly reused_tarballs: number;
+  readonly skipped_for_platform: number;
+  readonly install_script_packages: number;
+}
+
+/**
+ * Result of preparing an artifact's locked npm packages for a later offline replay.
+ *
+ * `not_required` means the artifact has no dependency files: nothing was fetched and no store
+ * was created. `error.details` keys are limited to `reason`, `package_path`, and `http_status`.
+ */
+export interface PrepareOperationResult extends OperationResultBase {
+  readonly operation: 'prepare';
+  readonly status: PrepareStatus;
+  /** Present only when status is `prepared`. */
+  readonly preparation?: DependencyPreparationSummary;
+}
+
 export type ReplayStatus =
   'reproduced' | 'not_reproduced' | 'invalid_artifact' | 'execution_failed';
 
@@ -185,4 +215,8 @@ export interface ReplayOperationResult extends OperationResultBase {
 }
 
 export type OperationResult =
-  InspectOperationResult | RecordOperationResult | ReplayOperationResult | ValidateOperationResult;
+  | InspectOperationResult
+  | PrepareOperationResult
+  | RecordOperationResult
+  | ReplayOperationResult
+  | ValidateOperationResult;

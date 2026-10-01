@@ -39,3 +39,44 @@ describe('provisional replay result fixtures', () => {
     );
   });
 });
+
+const prepareFixtureNames = [
+  'prepared.json',
+  'not-required.json',
+  'invalid-artifact.json',
+  'execution-failed.json',
+] as const;
+
+async function readPrepareFixtures(): Promise<Record<string, unknown>[]> {
+  return Promise.all(
+    prepareFixtureNames.map(async (name) => {
+      const content = await readFile(path.join(fixtureDirectory, 'prepare', name), 'utf8');
+      return JSON.parse(content) as Record<string, unknown>;
+    }),
+  );
+}
+
+describe('provisional prepare result fixtures', () => {
+  it('covers every completed prepare status without package contents', async () => {
+    const fixtures = await readPrepareFixtures();
+
+    expect(JSON.stringify(fixtures)).not.toContain('decoded_text');
+    for (const fixture of fixtures) {
+      expect(fixture).toMatchObject({ operation: 'prepare', result_schema_version: 1 });
+      expect(fixture).toHaveProperty('errors');
+      expect(fixture).toHaveProperty('warnings');
+    }
+
+    expect(new Set(fixtures.map((fixture) => fixture['status']))).toEqual(
+      new Set(['prepared', 'not_required', 'invalid_artifact', 'execution_failed']),
+    );
+  });
+
+  it('reports a preparation summary only when prepared', async () => {
+    const fixtures = await readPrepareFixtures();
+
+    for (const fixture of fixtures) {
+      expect('preparation' in fixture).toBe(fixture['status'] === 'prepared');
+    }
+  });
+});

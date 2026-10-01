@@ -1,0 +1,22 @@
+{
+  "result_schema_version": 1,
+  "operation": "prepare",
+  "status": "prepared",
+  "artifact_version": 1,
+  "artifact_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "warnings": [
+    {
+      "code": "install_scripts_not_run",
+      "message": "1 package declares install scripts, which are never run."
+    }
+  ],
+  "errors": [],
+  "preparation": {
+    "packages": 3,
+    "downloaded_tarballs": 2,
+    "downloaded_bytes": 2048,
+    "reused_tarballs": 1,
+    "skipped_for_platform": 1,
+    "install_script_packages": 1
+  }
+}
