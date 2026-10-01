@@ -27,6 +27,11 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['action/**/*.test.ts', 'packages/**/*.test.ts', 'tests/**/*.test.ts'],
+    include: [
+      'action/**/*.test.ts',
+      'benchmarks/**/*.test.ts',
+      'packages/**/*.test.ts',
+      'tests/**/*.test.ts',
+    ],
   },
 });
