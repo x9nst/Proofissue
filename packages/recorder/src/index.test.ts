@@ -239,6 +239,54 @@ describe('captureRecording', () => {
     }
   });
 
+  it('gives the recorded command exactly the documented environment variable names', async () => {
+    const root = await project();
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      "process.stdout.write(JSON.stringify(Object.keys(process.env).sort())); process.stderr.write('failure marker'); process.exitCode = 1;\n",
+    );
+
+    const result = await captureRecording(request(root));
+
+    // The recorder passes SystemRoot; on Windows, process creation then copies each other
+    // name from the recorder's own environment when the host has it. See docs/recording.md.
+    const windowsNames = [
+      'HOMEDRIVE',
+      'HOMEPATH',
+      'LOGONSERVER',
+      'PATH',
+      'SYSTEMDRIVE',
+      'SystemRoot',
+      'TEMP',
+      'USERDOMAIN',
+      'USERNAME',
+      'USERPROFILE',
+      'WINDIR',
+    ];
+    const expected =
+      process.platform === 'win32'
+        ? windowsNames.filter((name) => process.env[name] !== undefined).sort()
+        : [];
+    expect(JSON.parse(result.stdout.decoded_text)).toEqual(expected);
+  });
+
+  it('keeps the environment the command prints, and other unchosen output, out of the artifact', async () => {
+    const root = await project();
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      "if (process.argv[2] === 'print') process.stdout.write(JSON.stringify({ ...process.env, marker: 'unchosen' }));\nprocess.stderr.write('failure marker');\nprocess.exitCode = 1;\n",
+    );
+
+    const silent = await captureRecording(request(root));
+    const printing = await captureRecording(
+      request(root, { arguments: ['test/reproduction.mjs', 'print'] }),
+    );
+
+    expect(printing.stdout.decoded_text).toContain('"marker":"unchosen"');
+    // Only the reporter's own arguments differ; nothing the command printed was kept.
+    expect({ ...printing.artifact, command: silent.artifact.command }).toEqual(silent.artifact);
+  });
+
   it('rejects expectations that were not observed or contain likely secrets', async () => {
     const root = await project();
     await expect(
