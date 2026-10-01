@@ -433,6 +433,10 @@ const DEPENDENCY_BOOTSTRAP = [
   ': > /tmp/npmrc-global || fail',
   'mkdir /tmp/npm-logs || fail',
   `env -i PATH=${SANDBOX_PATH} HOME=/tmp npm ${INSTALL_ARGUMENTS.join(' ')} >>/tmp/proofissue-setup.log 2>&1 || fail`,
+  // npm can report success when extraction ran out of space, leaving a truncated package. A
+  // workspace with under 1 MiB free after the install is treated as that, so the command
+  // never runs against an incomplete tree.
+  `df -P /workspace | awk 'NR==2 { exit ($4 < 1024) }' || { echo 'npm error code ENOSPC' >>/tmp/proofissue-setup.log; fail; }`,
   `exec env -i PATH=${SANDBOX_PATH} "$@"`,
 ].join('\n');
 

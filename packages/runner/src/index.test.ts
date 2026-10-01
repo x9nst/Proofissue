@@ -1009,7 +1009,7 @@ describe('Docker arguments for dependencies', () => {
     expect(install).toBeGreaterThan(0);
     expect(install).toBeLessThan(lines.length - 1);
     expect(lines[install]).toMatch(/\|\| fail$/u);
-    for (const line of lines.slice(1, -1)) expect(line).toMatch(/\|\| fail$/u);
+    for (const line of lines.slice(1, -1)) expect(line).toMatch(/\|\| (\{ .*; fail; \}|fail)$/u);
     expect(script).not.toContain('--registry');
     expect(script).not.toMatch(/npm (install|i|add)\b/u);
   });

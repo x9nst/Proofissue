@@ -312,6 +312,8 @@ integration('replay with prepared dependencies in the real container', () => {
     );
 
     expect(error.code).toBe('dependency_install_failed');
+    // npm itself reports success when extraction runs out of space, so the bootstrap checks.
+    expect(error.message).toContain('ENOSPC');
     expect(error.cleanup).toMatchObject({ completed: true, residual_resources: [] });
     // The command never started.
     expect(error.execution?.stderr.decoded_text ?? '').not.toContain('proofissue-marker');
