@@ -13,6 +13,9 @@ inputs:
   checkout-path:
     description: Checkout root for current-checkout replay. Defaults to GITHUB_WORKSPACE.
     required: false
+  dependency-store:
+    description: Directory prepared by the ProofIssue prepare action. Needed only for artifacts with dependency files. Replay never uses the network.
+    required: false
   required-status:
     description: Optionally require reproduced or not_reproduced for the step to pass.
     required: false

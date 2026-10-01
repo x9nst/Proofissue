@@ -1,0 +1,25 @@
+name: ProofIssue prepare dependencies
+description: Download and verify the npm packages a ProofIssue artifact locks, for a later offline replay step.
+author: ProofIssue contributors
+
+inputs:
+  artifact-path:
+    description: Path to the .proofissue artifact.
+    required: true
+  dependency-store:
+    description: Directory for the verified package store. Pass the same directory to the replay action, for example a directory under the runner's temporary directory.
+    required: true
+
+outputs:
+  status:
+    description: prepared, not_required, invalid_input, invalid_artifact, or execution_failed.
+  result:
+    description: Versioned JSON prepare result without package names or paths.
+
+runs:
+  using: node24
+  main: dist/index.js
+
+branding:
+  icon: download
+  color: green

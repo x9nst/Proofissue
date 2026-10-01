@@ -23,6 +23,7 @@ export type RequiredReplayStatus = 'not_reproduced' | 'reproduced';
 export interface ActionInputs {
   readonly against_path?: string;
   readonly artifact_path: string;
+  readonly dependency_store?: string;
   readonly mode: ReplayOperationResult['mode'];
   readonly required_status?: RequiredReplayStatus;
 }
@@ -43,6 +44,7 @@ export interface ActionRunResult {
 const INPUT_NAMES = {
   artifactPath: 'artifact-path',
   checkoutPath: 'checkout-path',
+  dependencyStore: 'dependency-store',
   replayMode: 'replay-mode',
   requiredStatus: 'required-status',
 } as const;
@@ -108,6 +110,7 @@ export const parseActionInputs = (
     throw new Error('required-status must be reproduced or not_reproduced.');
   }
 
+  const dependencyStore = getInput(INPUT_NAMES.dependencyStore);
   const checkoutInput = getInput(INPUT_NAMES.checkoutPath);
   const checkoutPath = checkoutInput || workspace?.trim();
   if (replayMode === 'current-checkout' && !checkoutPath) {
@@ -120,6 +123,7 @@ export const parseActionInputs = (
   return {
     artifact_path: artifactPath,
     mode: replayMode === 'snapshot' ? 'snapshot' : 'current_checkout',
+    ...(dependencyStore.length === 0 ? {} : { dependency_store: dependencyStore }),
     ...(replayMode === 'current-checkout' && checkoutPath !== undefined
       ? { against_path: checkoutPath }
       : {}),
@@ -227,7 +231,7 @@ export const runAction = async (
     runtime.setFailed('ProofIssue action input is invalid. Review the documented inputs.');
     try {
       await runtime.writeSummary(
-        '## ProofIssue replay\n\nThe action input is invalid. Review the configured artifact path, replay mode, checkout path, and required result.\n',
+        '## ProofIssue replay\n\nThe action input is invalid. Review the configured artifact path, replay mode, checkout path, dependency store, and required result.\n',
       );
     } catch {
       // The original input failure remains the actionable result.
@@ -239,6 +243,9 @@ export const runAction = async (
     const result = await application.replay({
       ...(inputs.against_path === undefined ? {} : { against_path: inputs.against_path }),
       artifact_path: inputs.artifact_path,
+      ...(inputs.dependency_store === undefined
+        ? {}
+        : { dependency_store: inputs.dependency_store }),
       mode: inputs.mode,
       ...(signal === undefined ? {} : { signal }),
     });
