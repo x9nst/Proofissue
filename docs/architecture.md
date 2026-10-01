@@ -64,7 +64,7 @@ It may depend on shared types from `artifact-schema` only when the type is part 
 
 ### `packages/matcher`
 
-Compares expected evidence with a bounded execution result and returns explicit matches and differences. It performs no command execution, filesystem access, or container control.
+Compares expected evidence with a bounded execution result and returns explicit matches and differences. Each output expectation names a mode (`contains` or `exact`) and optionally the normalization rules applied to the replay output first; the explanation says which rules changed it. It performs no command execution, filesystem access, or container control.
 
 ### `packages/recorder`
 
@@ -115,13 +115,13 @@ Allowed dependencies point inward toward pure contracts and rules, then outward 
 ```text
 cli ───────────────┐
 action ────────────┴→ application
-application ────────→ artifact-schema, contracts, dependencies, matcher, process-output, recorder, redactor, runner
+application ────────→ artifact-schema, contracts, dependencies, matcher, output-rules, process-output, recorder, redactor, runner
 recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts
 output-rules ───────→ contracts
 dependencies ───────→ (none)
-matcher ────────────→ contracts
+matcher ────────────→ contracts, output-rules
 report-ui ──────────→ contracts
 ```
 

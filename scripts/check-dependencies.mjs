@@ -17,7 +17,7 @@ const allowedDependencies = new Map([
   ['@proofissue/artifact-schema', new Set()],
   ['@proofissue/dependencies', new Set()],
   ['@proofissue/redactor', new Set()],
-  ['@proofissue/matcher', new Set(['@proofissue/contracts'])],
+  ['@proofissue/matcher', new Set(['@proofissue/contracts', '@proofissue/output-rules'])],
   [
     '@proofissue/recorder',
     new Set([
@@ -44,6 +44,7 @@ const allowedDependencies = new Map([
       '@proofissue/contracts',
       '@proofissue/dependencies',
       '@proofissue/matcher',
+      '@proofissue/output-rules',
       '@proofissue/process-output',
       '@proofissue/recorder',
       '@proofissue/redactor',

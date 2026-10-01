@@ -2,9 +2,15 @@ import { createMatcher } from '@proofissue/matcher';
 import type { Matcher } from '@proofissue/matcher';
 import { createRecorder, RecorderError } from '@proofissue/recorder';
 import type { RecordCapture, Recorder } from '@proofissue/recorder';
+import { createOutputPathContext } from '@proofissue/output-rules';
 import { createRedactor } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
-import { createDockerRunner, RunnerError } from '@proofissue/runner';
+import {
+  createDockerRunner,
+  REPLAY_TEMPORARY_DIRECTORY,
+  REPLAY_WORKSPACE_PATH,
+  RunnerError,
+} from '@proofissue/runner';
 import type { Runner } from '@proofissue/runner';
 
 export type {
@@ -435,6 +441,16 @@ const replayBase = (
       : [],
 });
 
+/**
+ * The directories a replayed command can print. Replay always runs in the same two locations,
+ * so normalization needs nothing from the host that runs ProofIssue.
+ */
+const REPLAY_PATH_CONTEXT = createOutputPathContext({
+  platform: 'posix',
+  project_roots: [REPLAY_WORKSPACE_PATH],
+  temporary_roots: [REPLAY_TEMPORARY_DIRECTORY],
+});
+
 export interface ReplayApplicationDependencies {
   readonly matcher?: Matcher;
   readonly redactor?: Redactor;
@@ -482,9 +498,10 @@ export const createReplayApplicationService = (
           execution: safeExecution,
           expectation: {
             exit_code: artifact.expect.exit_code,
-            stdout_contains: artifact.expect.stdout.map((item) => item.value),
-            stderr_contains: artifact.expect.stderr.map((item) => item.value),
+            stdout: artifact.expect.stdout,
+            stderr: artifact.expect.stderr,
           },
+          path_context: REPLAY_PATH_CONTEXT,
         });
         const truncated = safeExecution.stdout.truncated || safeExecution.stderr.truncated;
         return {
