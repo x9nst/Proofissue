@@ -330,6 +330,42 @@ describe('runner lifecycle', () => {
     });
   });
 
+  it('treats a SIGKILL exit as resource termination even when the engine misses the OOM flag', async () => {
+    // The engine can report the exit before it records the kernel's OOM kill, so a process
+    // killed for memory may arrive here as exit status 137 with oom_killed false.
+    const engine = new FakeEngine();
+    engine.state = { exit_code: 137, oom_killed: false };
+    const files = workspace();
+    await expect(
+      createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+        artifact: await artifact(),
+        mode: 'snapshot',
+      }),
+    ).rejects.toMatchObject({
+      code: 'resource_termination',
+      execution: { exit_code: 137, termination_reason: 'resource_limit' },
+      cleanup: { completed: true },
+    });
+  });
+
+  it.each([0, 1, 2, 126, 127, 130, 134, 139, 143])(
+    'still reports exit status %i as an ordinary exit',
+    async (exitCode) => {
+      const engine = new FakeEngine();
+      engine.state = { exit_code: exitCode, oom_killed: false };
+      const result = await createDockerRunner({
+        engine,
+        policy: policy(),
+        workspace: workspace(),
+      }).run({ artifact: await artifact(), mode: 'snapshot' });
+
+      expect(result.execution).toMatchObject({
+        exit_code: exitCode,
+        termination_reason: 'exited',
+      });
+    },
+  );
+
   it('terminates and cleans an interrupted run', async () => {
     const engine = new FakeEngine();
     engine.hang = true;

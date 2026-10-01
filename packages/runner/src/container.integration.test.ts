@@ -238,8 +238,9 @@ integration('real locked-down Docker replay', () => {
         process.exitCode = 1;
       `;
     let failure: RunnerError | undefined;
+    let completed: Awaited<ReturnType<ReturnType<typeof createDockerRunner>['run']>> | undefined;
     try {
-      await createDockerRunner().run({
+      completed = await createDockerRunner().run({
         artifact: artifact(source, { ...defaultLimits, memory_mb: 64 }),
         mode: 'snapshot',
       });
@@ -247,7 +248,12 @@ integration('real locked-down Docker replay', () => {
       if (error instanceof RunnerError) failure = error;
     }
 
-    expect(failure).toMatchObject({
+    // If the run resolves instead of throwing, say what it did rather than "undefined".
+    const observed =
+      completed === undefined
+        ? 'the run threw'
+        : `the run resolved with exit_code=${String(completed.execution.exit_code)} termination_reason=${completed.execution.termination_reason}`;
+    expect(failure, observed).toMatchObject({
       code: 'resource_termination',
       cleanup: { completed: true, residual_resources: [] },
     });

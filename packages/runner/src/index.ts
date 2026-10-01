@@ -354,6 +354,13 @@ export interface ContainerEngine {
   remove(name: string): Promise<void>;
 }
 
+// The container's init process exits with 128 + the signal that ended the replayed process.
+// The engine can report that exit before it records the kernel's out-of-memory kill, so a
+// process killed for memory may arrive with oom_killed false. A SIGKILL exit is therefore
+// treated as resource termination: reporting it as an ordinary exit could classify a killed
+// replay as a clean failure to reproduce.
+const SIGKILL_EXIT_CODE = 137;
+
 const CONTAINER_BOOTSTRAP =
   'cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"';
 
@@ -801,6 +808,8 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
         } else {
           needsTermination = false;
           event('container_exited');
+          const resourceTerminated =
+            outcome.state.oom_killed || outcome.state.exit_code === SIGKILL_EXIT_CODE;
           execution = {
             duration_ms: Math.max(0, Math.round(performance.now() - executionStartedAt)),
             ...(outcome.state.exit_code === undefined
@@ -809,9 +818,9 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
             ...(outcome.state.signal === undefined ? {} : { signal: outcome.state.signal }),
             stdout: stdout.finish(),
             stderr: stderr.finish(),
-            termination_reason: outcome.state.oom_killed ? 'resource_limit' : 'exited',
+            termination_reason: resourceTerminated ? 'resource_limit' : 'exited',
           };
-          if (outcome.state.oom_killed) {
+          if (resourceTerminated) {
             primaryError = new RunnerError(
               'resource_termination',
               'Replay was terminated by an enforced resource limit.',
