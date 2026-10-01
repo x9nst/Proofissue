@@ -1,3 +1,4 @@
+import { OUTPUT_NORMALIZATION_RULES } from '@proofissue/output-rules';
 import type { AnySchema } from 'ajv';
 
 import { ARTIFACT_PATH_PATTERN, REDACTION_REPLACEMENT_PATTERN } from './limits.js';
@@ -21,7 +22,14 @@ const pathSchema: AnySchema = {
 
 const expectationSchema = closedObject(
   {
-    mode: { const: 'contains' },
+    mode: { enum: ['contains', 'exact'] },
+    normalize: {
+      items: { enum: [...OUTPUT_NORMALIZATION_RULES] },
+      maxItems: OUTPUT_NORMALIZATION_RULES.length,
+      minItems: 1,
+      type: 'array',
+      uniqueItems: true,
+    },
     value: { maxLength: 8192, minLength: 1, type: 'string' },
   },
   ['mode', 'value'],

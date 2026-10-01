@@ -41,6 +41,19 @@ Recording is different from replay: the reporter explicitly authorizes the recor
 
 Command output is untrusted data. It may contain credentials, huge streams, invalid Unicode, terminal control characters, or misleading text. Output is bounded, redacted, and escaped before display or logging.
 
+## Matching Safety
+
+Output matching and normalization read untrusted output and untrusted artifact content on the host, so they are bounded the same way as redaction.
+
+- **Time.** Every normalization rule is linear in the length of its input: escape sequences use a hand-written scanner that never rescans bytes after a failed attempt, trailing whitespace uses a single pass, and the remaining rules use anchored patterns with no nested repetition. The test suite enforces a time budget against 1 MiB adversarial inputs for each rule.
+- **Determinism.** Normalization is a pure function of redacted text, the rule list, and a path context. Replay always uses the fixed directories `/workspace` and `/tmp`, so classification does not depend on the machine that runs ProofIssue.
+- **Order.** Normalization runs after redaction and never on raw bytes. A stored value is checked for secrets again after normalization, because removing escape sequences can join text that redaction did not see.
+- **Privacy.** The recorder replaces the exact project and temporary directories it knows, and refuses a stored value that still contains the project or home directory. Results, summaries, and Action outputs carry counts and positions, never expected values or output text.
+- **Visibility.** Each expectation lists its rules, and every result says which rules changed the replay output. The exit code is always compared exactly.
+- **Compatibility.** An artifact consumer that predates these fields rejects them as a schema violation instead of misreading them.
+
+Normalization hides differences by design. It is explicit, per expectation, and visible in the result, but a fix that only changes a normalized token is invisible to that expectation. See `output-matching.md`.
+
 ## Static Safety Rules
 
 Validation must:
@@ -69,6 +82,7 @@ The recorder:
 - captures stdout and stderr in bounded memory;
 - applies redaction before terminal display, logging, serialization, or snapshots;
 - shows a redaction and collection summary before confirmation;
+- derives exact and normalized expectation values from the recording, refuses a value that holds a likely secret after normalization or a path from this computer, and checks that the recording satisfies its own expectations before writing;
 - writes a validated artifact atomically only after confirmation.
 
 The recorder cannot guarantee detection of every secret. Explicit minimal collection and user review remain required controls.

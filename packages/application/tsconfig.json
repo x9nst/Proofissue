@@ -11,6 +11,7 @@
     { "path": "../contracts" },
     { "path": "../dependencies" },
     { "path": "../matcher" },
+    { "path": "../output-rules" },
     { "path": "../process-output" },
     { "path": "../recorder" },
     { "path": "../redactor" },

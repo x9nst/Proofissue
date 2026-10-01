@@ -1,15 +1,24 @@
 import { createMatcher } from '@proofissue/matcher';
 import type { Matcher } from '@proofissue/matcher';
 import { createRecorder, RecorderError } from '@proofissue/recorder';
-import type { RecordCapture, Recorder } from '@proofissue/recorder';
+import type { RecordCapture, RecordOutputExpectation, Recorder } from '@proofissue/recorder';
+import { createOutputPathContext } from '@proofissue/output-rules';
 import { createRedactor } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
-import { createDockerRunner, RunnerError } from '@proofissue/runner';
+import {
+  createDockerRunner,
+  REPLAY_TEMPORARY_DIRECTORY,
+  REPLAY_WORKSPACE_PATH,
+  RunnerError,
+} from '@proofissue/runner';
 import type { Runner } from '@proofissue/runner';
+
+export type { RecordOutputExpectation } from '@proofissue/recorder';
 
 export type {
   InspectOperationResult,
   OperationResult,
+  OutputNormalizationRule,
   PrepareOperationResult,
   PrepareStatus,
   ProofIssueError,
@@ -21,10 +30,12 @@ export type {
 } from '@proofissue/contracts';
 
 import type {
+  ArtifactInspectionOutputExpectation,
   ArtifactInspectionSummary,
   BoundedExecutionResult,
   BoundedExecutionSummary,
   InspectOperationResult,
+  OutputNormalizationRule,
   PrepareOperationResult,
   RecordOperationResult,
   ReplayOperationResult,
@@ -54,8 +65,9 @@ import type { PackageFetcher } from '@proofissue/dependencies';
 export interface RecordApplicationRequest {
   readonly arguments: readonly string[];
   readonly environment_image: string;
-  readonly expect_stderr: readonly string[];
-  readonly expect_stdout: readonly string[];
+  /** Output expectations; a plain string is a raw literal that must appear in the stream. */
+  readonly expect_stderr: readonly RecordOutputExpectation[];
+  readonly expect_stdout: readonly RecordOutputExpectation[];
   /** Also record package.json and package-lock.json from the project root. */
   readonly include_dependencies?: boolean;
   readonly limits?: ArtifactLimitsV1;
@@ -64,6 +76,14 @@ export interface RecordApplicationRequest {
   readonly project_root: string;
   readonly reproduction_paths: readonly string[];
   readonly subject_paths: readonly string[];
+}
+
+/** An expectation as the recording derived it: the text that will be stored. */
+export interface RecordPreviewExpectation {
+  readonly mode: 'contains' | 'exact';
+  /** Empty means the raw redacted stream. */
+  readonly normalize: readonly OutputNormalizationRule[];
+  readonly value: string;
 }
 
 export interface RecordPreview {
@@ -78,8 +98,8 @@ export interface RecordPreview {
   readonly subject_files: readonly string[];
   readonly expectations: {
     readonly exit_code: number;
-    readonly stdout: readonly string[];
-    readonly stderr: readonly string[];
+    readonly stdout: readonly RecordPreviewExpectation[];
+    readonly stderr: readonly RecordPreviewExpectation[];
   };
   readonly limits: ArtifactLimitsV1;
   readonly output: {
@@ -142,6 +162,14 @@ const withoutDecodedText = (capture: RecordCapture['stdout']) => ({
   truncated: capture.truncated,
 });
 
+const previewExpectation = (
+  item: RecordCapture['artifact']['expect']['stdout'][number],
+): RecordPreviewExpectation => ({
+  mode: item.mode,
+  normalize: item.normalize === undefined ? [] : [...item.normalize],
+  value: item.value,
+});
+
 const createRecordPreview = (capture: RecordCapture): RecordPreview => {
   const grouped = new Map<string, RecordPreview['redaction']['findings'][number]>();
   for (const finding of capture.artifact.redaction.findings) {
@@ -178,8 +206,8 @@ const createRecordPreview = (capture: RecordCapture): RecordPreview => {
       .map((file) => file.path),
     expectations: {
       exit_code: capture.artifact.expect.exit_code,
-      stdout: capture.artifact.expect.stdout.map((item) => item.value),
-      stderr: capture.artifact.expect.stderr.map((item) => item.value),
+      stdout: capture.artifact.expect.stdout.map(previewExpectation),
+      stderr: capture.artifact.expect.stderr.map(previewExpectation),
     },
     limits: capture.artifact.limits,
     output: {
@@ -232,9 +260,39 @@ const recordFailure = (error: unknown): RecordOperationResult => {
   };
 };
 
+/**
+ * Replays the recording's own output against the expectations it derived, using the same
+ * matcher a replay uses. A recording that does not satisfy its own expectations could never
+ * reproduce, so it is rejected before anything is previewed or written. Returns the first
+ * explanation (which never contains output text or expected values), or undefined.
+ */
+const selfCheckFailure = (capture: RecordCapture, matcher: Matcher): string | undefined => {
+  const expectation = capture.artifact.expect;
+  const execution: BoundedExecutionResult = {
+    duration_ms: capture.duration_ms,
+    exit_code: expectation.exit_code,
+    stderr: capture.stderr,
+    stdout: capture.stdout,
+    termination_reason: 'exited',
+  };
+  const result = matcher.match({
+    execution,
+    expectation: {
+      exit_code: expectation.exit_code,
+      stderr: expectation.stderr,
+      stdout: expectation.stdout,
+    },
+    path_context: capture.path_context,
+  });
+  return result.reproduced
+    ? undefined
+    : (result.differences[0]?.message ?? 'The recording did not match its own output.');
+};
+
 export const createRecordApplicationService = (
   confirm: ConfirmRecording,
   recorder: Recorder = createRecorder(),
+  matcher: Matcher = createMatcher(),
 ): RecordApplicationService => ({
   record: async (request): Promise<RecordOperationResult> => {
     try {
@@ -252,6 +310,15 @@ export const createRecordApplicationService = (
         reproduction_paths: request.reproduction_paths,
         subject_paths: request.subject_paths,
       });
+      const mismatch = selfCheckFailure(capture, matcher);
+      if (mismatch !== undefined) {
+        return recordFailure(
+          new RecorderError(
+            'invalid_request',
+            `The recording does not satisfy its own expectations (${mismatch}); no artifact was written.`,
+          ),
+        );
+      }
       const preview = createRecordPreview(capture);
       const confirmation = await confirm(preview);
       if (
@@ -318,6 +385,13 @@ export const validateArtifact = async (
   };
 };
 
+const inspectExpectation = (
+  item: ValidatedArtifactV1['expect']['stdout'][number],
+): ArtifactInspectionOutputExpectation => ({
+  mode: item.mode,
+  normalize: item.normalize === undefined ? [] : [...item.normalize],
+});
+
 const inspectArtifactModel = (artifact: ValidatedArtifactV1): ArtifactInspectionSummary => {
   const findingGroups = new Map<
     string,
@@ -352,6 +426,8 @@ const inspectArtifactModel = (artifact: ValidatedArtifactV1): ArtifactInspection
       exit_code: artifact.expect.exit_code,
       stdout_count: artifact.expect.stdout.length,
       stderr_count: artifact.expect.stderr.length,
+      stdout_expectations: artifact.expect.stdout.map(inspectExpectation),
+      stderr_expectations: artifact.expect.stderr.map(inspectExpectation),
     },
     limits: { ...artifact.limits },
     redaction: {
@@ -435,6 +511,16 @@ const replayBase = (
       : [],
 });
 
+/**
+ * The directories a replayed command can print. Replay always runs in the same two locations,
+ * so normalization needs nothing from the host that runs ProofIssue.
+ */
+const REPLAY_PATH_CONTEXT = createOutputPathContext({
+  platform: 'posix',
+  project_roots: [REPLAY_WORKSPACE_PATH],
+  temporary_roots: [REPLAY_TEMPORARY_DIRECTORY],
+});
+
 export interface ReplayApplicationDependencies {
   readonly matcher?: Matcher;
   readonly redactor?: Redactor;
@@ -482,9 +568,10 @@ export const createReplayApplicationService = (
           execution: safeExecution,
           expectation: {
             exit_code: artifact.expect.exit_code,
-            stdout_contains: artifact.expect.stdout.map((item) => item.value),
-            stderr_contains: artifact.expect.stderr.map((item) => item.value),
+            stdout: artifact.expect.stdout,
+            stderr: artifact.expect.stderr,
           },
+          path_context: REPLAY_PATH_CONTEXT,
         });
         const truncated = safeExecution.stdout.truncated || safeExecution.stderr.truncated;
         return {
@@ -585,7 +672,7 @@ export const createApplicationServices = (
   const redactor = ports.redactor ?? createRedactor();
   const runner = ports.runner ?? createDockerRunner();
   return {
-    ...createRecordApplicationService(confirm, recorder),
+    ...createRecordApplicationService(confirm, recorder, matcher),
     ...createStaticArtifactApplicationServices(),
     ...createPrepareApplicationService(
       ports.fetcher === undefined ? {} : { fetcher: ports.fetcher },

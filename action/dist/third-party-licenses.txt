@@ -8,6 +8,8 @@
 
 @proofissue/matcher
 
+@proofissue/output-rules
+
 @proofissue/process-output
 
 @proofissue/recorder

@@ -23,6 +23,14 @@ import { BoundedOutputCollector } from '@proofissue/process-output';
 
 export const APPROVED_NODE_IMAGE =
   'node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6';
+/**
+ * Where the replayed command runs, and what its `import.meta.url` and `process.cwd()` show.
+ * Output matching relies on these two names: a replayed program's own paths always start
+ * with the workspace, and `os.tmpdir()` is the temporary directory because `TMPDIR` is unset.
+ */
+export const REPLAY_WORKSPACE_PATH = '/workspace';
+/** The temporary directory of the replayed command (a size-limited in-memory filesystem). */
+export const REPLAY_TEMPORARY_DIRECTORY = '/tmp';
 export const WRITABLE_WORKSPACE_MB = 64;
 /** Room for an installed dependency tree. In memory, so it counts against the memory limit. */
 export const DEPENDENCY_WORKSPACE_MB = 256;
@@ -386,8 +394,7 @@ export interface ContainerEngine {
 // replay as a clean failure to reproduce.
 const SIGKILL_EXIT_CODE = 137;
 
-const CONTAINER_BOOTSTRAP =
-  'cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"';
+const CONTAINER_BOOTSTRAP = `cp -R /proofissue-input/. ${REPLAY_WORKSPACE_PATH}/ && cd ${REPLAY_WORKSPACE_PATH} && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"`;
 
 const SANDBOX_PATH = '/usr/local/bin:/usr/bin:/bin';
 const DEPENDENCY_CACHE_MOUNT = '/proofissue-cache';
@@ -407,9 +414,9 @@ const installFailureMessage = (setupOutput: string): string => {
 // cannot slip a shell metacharacter into the script.
 const INSTALL_ARGUMENTS = offlineInstallArguments({
   cache_directory: DEPENDENCY_CACHE_MOUNT,
-  global_config: '/tmp/npmrc-global',
-  logs_directory: '/tmp/npm-logs',
-  user_config: '/tmp/npmrc-user',
+  global_config: `${REPLAY_TEMPORARY_DIRECTORY}/npmrc-global`,
+  logs_directory: `${REPLAY_TEMPORARY_DIRECTORY}/npm-logs`,
+  user_config: `${REPLAY_TEMPORARY_DIRECTORY}/npmrc-user`,
 });
 if (!INSTALL_ARGUMENTS.every((item) => /^[A-Za-z0-9/_.=-]+$/u.test(item))) {
   throw new Error('The install arguments must be plain words.');
@@ -426,17 +433,17 @@ if (!INSTALL_ARGUMENTS.every((item) => /^[A-Za-z0-9/_.=-]+$/u.test(item))) {
  * reads a single error code out of it and nothing else.
  */
 const DEPENDENCY_BOOTSTRAP = [
-  `fail() { tail -c 4096 /tmp/proofissue-setup.log >&2; exit ${String(DEPENDENCY_INSTALL_FAILED_EXIT_CODE)}; }`,
-  'cp -R /proofissue-input/. /workspace/ >/tmp/proofissue-setup.log 2>&1 || fail',
-  'cd /workspace || fail',
-  ': > /tmp/npmrc-user || fail',
-  ': > /tmp/npmrc-global || fail',
-  'mkdir /tmp/npm-logs || fail',
-  `env -i PATH=${SANDBOX_PATH} HOME=/tmp npm ${INSTALL_ARGUMENTS.join(' ')} >>/tmp/proofissue-setup.log 2>&1 || fail`,
+  `fail() { tail -c 4096 ${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log >&2; exit ${String(DEPENDENCY_INSTALL_FAILED_EXIT_CODE)}; }`,
+  `cp -R /proofissue-input/. ${REPLAY_WORKSPACE_PATH}/ >${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log 2>&1 || fail`,
+  `cd ${REPLAY_WORKSPACE_PATH} || fail`,
+  `: > ${REPLAY_TEMPORARY_DIRECTORY}/npmrc-user || fail`,
+  `: > ${REPLAY_TEMPORARY_DIRECTORY}/npmrc-global || fail`,
+  `mkdir ${REPLAY_TEMPORARY_DIRECTORY}/npm-logs || fail`,
+  `env -i PATH=${SANDBOX_PATH} HOME=${REPLAY_TEMPORARY_DIRECTORY} npm ${INSTALL_ARGUMENTS.join(' ')} >>${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log 2>&1 || fail`,
   // npm can report success when extraction ran out of space, leaving a truncated package. A
   // workspace with under 1 MiB free after the install is treated as that, so the command
   // never runs against an incomplete tree.
-  `df -P /workspace | awk 'NR==2 { exit ($4 < 1024) }' || { echo 'npm error code ENOSPC' >>/tmp/proofissue-setup.log; fail; }`,
+  `df -P ${REPLAY_WORKSPACE_PATH} | awk 'NR==2 { exit ($4 < 1024) }' || { echo 'npm error code ENOSPC' >>${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log; fail; }`,
   `exec env -i PATH=${SANDBOX_PATH} "$@"`,
 ].join('\n');
 
@@ -478,11 +485,11 @@ const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => 
     ? []
     : ['--mount', `type=bind,src=${spec.dependency_cache},dst=${DEPENDENCY_CACHE_MOUNT},readonly`]),
   '--tmpfs',
-  `/workspace:rw,nosuid,nodev,noexec,size=${String(spec.limits.writable_workspace_mb * 1_048_576)},mode=1777`,
+  `${REPLAY_WORKSPACE_PATH}:rw,nosuid,nodev,noexec,size=${String(spec.limits.writable_workspace_mb * 1_048_576)},mode=1777`,
   '--tmpfs',
-  '/tmp:rw,nosuid,nodev,noexec,size=16777216,mode=1777',
+  `${REPLAY_TEMPORARY_DIRECTORY}:rw,nosuid,nodev,noexec,size=16777216,mode=1777`,
   '--workdir',
-  '/workspace',
+  REPLAY_WORKSPACE_PATH,
   '--entrypoint',
   '/bin/sh',
   spec.image,

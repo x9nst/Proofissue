@@ -26,11 +26,19 @@ Validation occurs before any workspace creation or container execution. Replay d
 
 ## Package Boundaries
 
+### `packages/output-rules`
+
+Owns the documented output normalization rules and the exact-directory path contexts the `paths` rule uses. It is a pure package: strings in, strings and replacement counts out, with no filesystem, process, or network access, and every rule is linear in the length of its input.
+
+It exists so that static validation, matching, recording, and the application's self-check all use the same rule names and the same definitions. A normalization rule name has one frozen definition; see `output-matching.md` and `decisions/0003-output-matching-modes.md`.
+
+It depends only on `contracts`, for the rule-name type.
+
 ### `packages/artifact-schema`
 
 Owns the versioned canonical model, JSON Schema, bounded YAML parsing, semantic validation, deterministic serialization, file hashes, and compatibility fixtures.
 
-It depends on no other ProofIssue package.
+It depends on `output-rules` only, for the normalization rule names and the check that a normalized expectation value is unchanged by its own rules.
 
 ### `packages/dependencies`
 
@@ -56,11 +64,13 @@ It may depend on shared types from `artifact-schema` only when the type is part 
 
 ### `packages/matcher`
 
-Compares expected evidence with a bounded execution result and returns explicit matches and differences. It performs no command execution, filesystem access, or container control.
+Compares expected evidence with a bounded execution result and returns explicit matches and differences. Each output expectation names a mode (`contains` or `exact`) and optionally the normalization rules applied to the replay output first; the explanation says which rules changed it. It performs no command execution, filesystem access, or container control.
 
 ### `packages/recorder`
 
 Runs one user-authorized host command, captures bounded output, reads explicitly selected regular files, gathers allowlisted environment metadata, invokes redaction, constructs the canonical artifact, and requests confirmation before serialization.
+
+For exact and normalized output expectations it derives the stored value from the recording itself, with the host's real project and temporary directories replaced by tokens, and refuses a value that is unsafe to store: a truncated, empty, oversized, or redacted exact stream, a likely secret that normalization reveals, or a path from this computer.
 
 It does not own YAML details or CLI presentation.
 
@@ -74,7 +84,7 @@ It does not decide whether the failure matched.
 
 Owns the product use cases shared by every delivery adapter:
 
-- record and write an artifact;
+- record and write an artifact, after checking with the matcher that the recording satisfies its own expectations;
 - validate an artifact;
 - inspect an artifact;
 - prepare an artifact's locked npm packages into a verified local store, validating the artifact and lockfile before any request;
@@ -107,12 +117,14 @@ Allowed dependencies point inward toward pure contracts and rules, then outward 
 ```text
 cli ───────────────┐
 action ────────────┴→ application
-application ────────→ artifact-schema, contracts, dependencies, matcher, process-output, recorder, redactor, runner
-recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
+application ────────→ artifact-schema, contracts, dependencies, matcher, output-rules, process-output, recorder, redactor, runner
+recorder ───────────→ artifact-schema, contracts, dependencies, output-rules, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts
+output-rules ───────→ contracts
+artifact-schema ────→ output-rules
 dependencies ───────→ (none)
-matcher ────────────→ contracts
+matcher ────────────→ contracts, output-rules
 report-ui ──────────→ contracts
 ```
 

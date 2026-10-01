@@ -10,6 +10,7 @@
     { "path": "../artifact-schema" },
     { "path": "../contracts" },
     { "path": "../dependencies" },
+    { "path": "../output-rules" },
     { "path": "../process-output" },
     { "path": "../redactor" }
   ]

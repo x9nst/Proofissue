@@ -72,7 +72,7 @@ Replay adds:
 - `mode`: `snapshot` or `current_checkout`;
 - approved image digest and effective limits when authorized;
 - bounded execution summary when execution began;
-- evidence and differences;
+- evidence and differences, each a kind and a fixed message, and for a normalized expectation a `normalization` summary;
 - substituted subject paths;
 - explicit scope limitations;
 - cleanup summary.
@@ -80,6 +80,32 @@ Replay adds:
 The public execution summary includes byte counts, truncation, decoding-replacement flags, duration, exit or signal facts, and termination reason. Full stdout and stderr are absent by default.
 
 Cleanup errors do not erase the original error. An incomplete required cleanup prevents a successful replay classification.
+
+### Evidence and difference kinds
+
+| Kind | Meaning |
+| --- | --- |
+| `exit_code` | The exit code matched, or differed (a difference). |
+| `stdout_contains`, `stderr_contains` | A `contains` expectation found its value. |
+| `stdout_exact`, `stderr_exact` | An `exact` expectation's value equalled the whole stream. |
+| `stdout_missing`, `stderr_missing` | A `contains` expectation did not find its value. |
+| `stdout_differs`, `stderr_differs` | An `exact` expectation's value differed from the whole stream. The message gives the first difference as a 1-based line and column in Unicode code points and both lengths. |
+| `insufficient_output` | The stream was truncated, so the expectation could not be established. |
+
+Messages are fixed sentences built from counts and positions. They never contain an expected value or any output text. The wording is listed in `output-matching.md`.
+
+An evidence or difference item for an expectation that compares normalized output carries an optional `normalization` object:
+
+```json
+{
+  "rules": ["line_endings", "ansi_escapes", "paths", "durations"],
+  "changes": [{ "rule": "line_endings", "count": 2 }, { "rule": "paths", "count": 1 }]
+}
+```
+
+`rules` are the rules the expectation requested, in canonical order. `changes` lists how many replacements each rule made in the replay output, in rule order, with rules that changed nothing omitted. Counts only: the object never holds the replaced text. The field is absent for an expectation without normalization.
+
+Adding kinds and the `normalization` object is additive. A consumer should treat an unknown kind as a check it does not recognize rather than fail.
 
 ## Prepare Envelope
 
@@ -102,11 +128,11 @@ GitHub-specific annotations, step outputs, and workflow fields do not enter this
 
 ## Inspection Envelope
 
-A successful inspection adds a content-free summary of the runtime, pinned image, command shape, declared file paths and hashes, expectation counts, and redaction metadata. Redaction findings are grouped by target and category with counts. File content, command arguments, expected output text, replacement fields, and removed values are not returned by the stable inspection result.
+A successful inspection adds a content-free summary of the runtime, pinned image, command shape, declared file paths and hashes, expectation counts, redaction metadata, and, for each stdout and stderr expectation, its mode and normalization rules (`stdout_expectations` and `stderr_expectations`; an empty `normalize` list means the raw stream). Redaction findings are grouped by target and category with counts. File content, command arguments, expected output text, replacement fields, and removed values are not returned by the stable inspection result.
 
 ## Fixtures and Validation
 
-Before compatibility is claimed, retain valid fixtures for every operation and all four replay statuses. Prepare results are kept in `tests/fixtures/results/v1/prepare`. Tests verify:
+Before compatibility is claimed, retain valid fixtures for every operation and all four replay statuses. Prepare results are kept in `tests/fixtures/results/v1/prepare`. `reproduced-normalized.json` and `not-reproduced-output-modes.json` carry the exact and normalized evidence and differences; the application tests check them against the matcher's own output. Tests verify:
 
 - result version and operation-specific status;
 - bounds on every list and string;

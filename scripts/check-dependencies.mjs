@@ -13,16 +13,18 @@ const packageDirectories = [
 const allowedDependencies = new Map([
   ['@proofissue/contracts', new Set()],
   ['@proofissue/process-output', new Set(['@proofissue/contracts'])],
-  ['@proofissue/artifact-schema', new Set()],
+  ['@proofissue/output-rules', new Set(['@proofissue/contracts'])],
+  ['@proofissue/artifact-schema', new Set(['@proofissue/output-rules'])],
   ['@proofissue/dependencies', new Set()],
   ['@proofissue/redactor', new Set()],
-  ['@proofissue/matcher', new Set(['@proofissue/contracts'])],
+  ['@proofissue/matcher', new Set(['@proofissue/contracts', '@proofissue/output-rules'])],
   [
     '@proofissue/recorder',
     new Set([
       '@proofissue/artifact-schema',
       '@proofissue/contracts',
       '@proofissue/dependencies',
+      '@proofissue/output-rules',
       '@proofissue/process-output',
       '@proofissue/redactor',
     ]),
@@ -43,6 +45,7 @@ const allowedDependencies = new Map([
       '@proofissue/contracts',
       '@proofissue/dependencies',
       '@proofissue/matcher',
+      '@proofissue/output-rules',
       '@proofissue/process-output',
       '@proofissue/recorder',
       '@proofissue/redactor',

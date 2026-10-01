@@ -9,10 +9,13 @@ import {
   evaluateReplayPolicy,
   type ApplicationServices,
   type OperationResult,
+  type OutputNormalizationRule,
   type PrepareOperationResult,
   type RecordApplicationRequest,
   type RecordConfirmation,
+  type RecordOutputExpectation,
   type RecordPreview,
+  type RecordPreviewExpectation,
 } from '@proofissue/application';
 
 export interface CliAdapter {
@@ -27,13 +30,29 @@ export const RECORD_HELP = `Usage:
     --image <repository@sha256:digest>
     --reproduction <path> --subject <path>
     [--expect-stdout <literal>] [--expect-stderr <literal>]
+    [--expect-stdout-normalized <text>] [--expect-stderr-normalized <text>]
+    [--expect-stdout-exact] [--expect-stderr-exact]
+    [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
     [--dependencies] [--yes] -- node <arguments...>
 
 File roles:
   --reproduction  A test, fixture, or input kept exactly as recorded during fix checks.
   --subject       Implementation code that may be replaced from the current checkout.
 
-At least one path in each role and one expected output literal are required.
+Expected output (give at least one; the value options may be repeated):
+  --expect-stdout, --expect-stderr
+      Text that must appear, byte for byte, in the stream.
+  --expect-stdout-normalized, --expect-stderr-normalized
+      Text as it was printed here. Replay compares after ignoring line endings, terminal
+      escape sequences, trailing whitespace, the project and temporary directories,
+      durations, process IDs, the Node.js version, and Node.js internal line numbers.
+  --expect-stdout-exact, --expect-stderr-exact
+      The whole stream must match exactly. Take no value, at most once per stream.
+  --expect-stdout-exact-normalized, --expect-stderr-exact-normalized
+      The whole stream must match exactly after the same normalization. Take no value;
+      an exact option of either kind is allowed at most once per stream.
+
+At least one path in each role and one expected output are required.
 --dependencies also records package.json and package-lock.json from the project root so the
 locked npm packages can be installed later. The lockfile must use lockfile version 3 and the
 public npm registry. Before replaying such an artifact, run proofissue prepare to download and
@@ -105,6 +124,62 @@ const renderDependencySection = (preview: RecordPreview): readonly string[] => {
   ];
 };
 
+// Wording for the preview: what each rule treats as noise, in canonical order.
+const RULE_PREVIEW_LABELS: Readonly<Record<OutputNormalizationRule, string>> = {
+  line_endings: 'line endings',
+  ansi_escapes: 'terminal escape sequences',
+  trailing_whitespace: 'trailing whitespace',
+  paths: 'paths (<project>, <tmp>)',
+  node_version: 'Node.js version',
+  node_internal_locations: 'Node.js internal locations',
+  process_ids: 'process IDs',
+  durations: 'durations',
+};
+
+// The expected text is shown for review, so characters a terminal could use to hide or
+// reorder text are escaped as well as control characters.
+const isUnsafePresentationCode = (code: number): boolean =>
+  code < 32 ||
+  code === 127 ||
+  (code >= 0x80 && code <= 0x9f) ||
+  (code >= 0x202a && code <= 0x202e) ||
+  (code >= 0x2066 && code <= 0x2069);
+
+const quoteExpectation = (value: string): string =>
+  Array.from(JSON.stringify(value))
+    .map((character) => {
+      const code = character.codePointAt(0) ?? 0;
+      return isUnsafePresentationCode(code)
+        ? `\\u{${code.toString(16).padStart(4, '0')}}`
+        : character;
+    })
+    .join('');
+
+const describeExpectation = (
+  stream: 'stderr' | 'stdout',
+  item: RecordPreviewExpectation,
+): string => {
+  const normalized = item.normalize.length > 0;
+  const value = quoteExpectation(item.value);
+  if (item.mode === 'exact') {
+    return `  ${stream} ${normalized ? 'after normalization is' : 'is'} exactly: ${value}`;
+  }
+  return `  ${stream} contains${normalized ? ' after normalization' : ''}: ${value}`;
+};
+
+const describeNormalizations = (preview: RecordPreview): readonly string[] => {
+  const seen = new Set<string>();
+  const lines: string[] = [];
+  for (const item of [...preview.expectations.stdout, ...preview.expectations.stderr]) {
+    if (item.normalize.length === 0) continue;
+    const description = item.normalize.map((rule) => RULE_PREVIEW_LABELS[rule]).join(', ');
+    if (seen.has(description)) continue;
+    seen.add(description);
+    lines.push(`  normalization: ${description}`);
+  }
+  return lines;
+};
+
 export const renderRecordPreview = (preview: RecordPreview): string => {
   const lines = [
     'ProofIssue recording preview',
@@ -123,8 +198,9 @@ export const renderRecordPreview = (preview: RecordPreview): string => {
     ...renderDependencySection(preview),
     'Expected failure:',
     `  exit code: ${String(preview.expectations.exit_code)}`,
-    ...preview.expectations.stdout.map((value) => `  stdout contains: ${quoteArgument(value)}`),
-    ...preview.expectations.stderr.map((value) => `  stderr contains: ${quoteArgument(value)}`),
+    ...preview.expectations.stdout.map((item) => describeExpectation('stdout', item)),
+    ...preview.expectations.stderr.map((item) => describeExpectation('stderr', item)),
+    ...describeNormalizations(preview),
     '',
     'Limits:',
     `  timeout: ${String(preview.limits.timeout_seconds)} seconds`,
@@ -154,6 +230,20 @@ const takeValue = (arguments_: readonly string[], index: number, option: string)
   return value;
 };
 
+// Flags that take no value: the whole stream is the expectation.
+const EXACT_OPTIONS: ReadonlyMap<
+  string,
+  { readonly normalized: boolean; readonly stream: 'stderr' | 'stdout' }
+> = new Map([
+  ['--expect-stdout-exact', { normalized: false, stream: 'stdout' }],
+  ['--expect-stderr-exact', { normalized: false, stream: 'stderr' }],
+  ['--expect-stdout-exact-normalized', { normalized: true, stream: 'stdout' }],
+  ['--expect-stderr-exact-normalized', { normalized: true, stream: 'stderr' }],
+]);
+
+const isExactExpectation = (item: RecordOutputExpectation): boolean =>
+  typeof item !== 'string' && item.mode === 'exact';
+
 export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecordCommand => {
   let projectRoot: string | undefined;
   let outputPath: string | undefined;
@@ -162,8 +252,8 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
   let includeDependencies = false;
   const reproductionPaths: string[] = [];
   const subjectPaths: string[] = [];
-  const expectStdout: string[] = [];
-  const expectStderr: string[] = [];
+  const expectStdout: RecordOutputExpectation[] = [];
+  const expectStderr: RecordOutputExpectation[] = [];
   let command: readonly string[] | undefined;
 
   for (let index = 0; index < arguments_.length; index += 1) {
@@ -178,6 +268,17 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
     }
     if (argument === '--dependencies') {
       includeDependencies = true;
+      continue;
+    }
+    const exact = EXACT_OPTIONS.get(argument ?? '');
+    if (exact !== undefined) {
+      const target = exact.stream === 'stdout' ? expectStdout : expectStderr;
+      if (target.some(isExactExpectation)) {
+        throw new Error(
+          `At most one exact expectation is allowed for ${exact.stream}; ${argument ?? ''} was repeated or combined with another exact option.`,
+        );
+      }
+      target.push({ mode: 'exact', normalized: exact.normalized });
       continue;
     }
     if (argument === undefined) continue;
@@ -204,6 +305,12 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
         break;
       case '--expect-stderr':
         expectStderr.push(value);
+        break;
+      case '--expect-stdout-normalized':
+        expectStdout.push({ mode: 'contains', normalized: true, value });
+        break;
+      case '--expect-stderr-normalized':
+        expectStderr.push({ mode: 'contains', normalized: true, value });
         break;
       default:
         throw new Error(`Unknown record option: ${argument}`);

@@ -128,6 +128,15 @@ replay without a prepared store reports `dependencies_not_prepared`.
 The structured result contains bounded execution facts and counts. It does not
 contain raw standard output or standard error.
 
+Evidence and differences use the kinds `exit_code`, `stdout_contains`,
+`stderr_contains`, `stdout_exact`, `stderr_exact`, `stdout_missing`,
+`stderr_missing`, `stdout_differs`, `stderr_differs`, and `insufficient_output`.
+An item for a normalized comparison also carries a `normalization` object with the
+requested rules and the number of replacements each made. This is additive: the
+Action has no new inputs or outputs, and the existing `evidence`, `differences`, and
+`result` outputs only gain the new kinds and the optional object. See
+`result-contract.md`.
+
 ## Step Results and Failures
 
 Without `required-status`, both `reproduced` and `not_reproduced` are successful
@@ -147,7 +156,7 @@ The summary shows only:
 
 - classification and mode;
 - counts of evidence, differences, warnings, errors, and substitutions;
-- fixed labels for matched and differing checks;
+- fixed labels for matched and differing checks, for example "stderr matched the expected output exactly" or "expected stdout text was absent after normalization" (the words "after normalization" are added when the comparison used normalized output);
 - required-result and cleanup state.
 
 It never publishes command output, file contents, expected text, environment

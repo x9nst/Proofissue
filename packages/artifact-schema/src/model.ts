@@ -1,3 +1,5 @@
+import type { OutputNormalizationRule } from '@proofissue/output-rules';
+
 export const ARTIFACT_VERSION = 1 as const;
 export const ARTIFACT_SCHEMA_STABILITY = 'provisional' as const;
 
@@ -32,8 +34,19 @@ export interface ArtifactFileV1 {
   readonly sha256: string;
 }
 
+/** How an output expectation compares its value with a stream. */
+export type ArtifactOutputMatchModeV1 = 'contains' | 'exact';
+
+/** A normalization rule name. Each name has one frozen definition; see docs/output-matching.md. */
+export type ArtifactNormalizationRuleV1 = OutputNormalizationRule;
+
 export interface ArtifactOutputExpectationV1 {
-  readonly mode: 'contains';
+  readonly mode: ArtifactOutputMatchModeV1;
+  /**
+   * Present means the replay stream is normalized with these rules before the comparison, and
+   * `value` is already normalized. Non-empty, unique, and in the documented order.
+   */
+  readonly normalize?: readonly ArtifactNormalizationRuleV1[];
   readonly value: string;
 }
 

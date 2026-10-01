@@ -79,7 +79,7 @@ All mappings reject unknown fields. All required fields must be present, includi
 | `capture` | Records minimal source-environment facts | Required mapping; no user, hostname, path, or environment variables |
 | `command` | Declares the single replay command | Required mapping; one command only |
 | `files` | Carries the explicit replay workspace | Required list; 1-100 unique paths |
-| `expect` | Describes the captured failure | Required mapping; exact exit and bounded literal checks |
+| `expect` | Describes the captured failure | Required mapping; exact exit and bounded output checks |
 | `limits` | Bounds replay resources | Required mapping; values cannot exceed version 1 ranges |
 | `redaction` | States whether and where redaction occurred | Required mapping; never stores removed values |
 
@@ -139,17 +139,40 @@ Version 1 paths use only ASCII letters, digits, `_`, `-`, `.`, and `/`. Invalid 
 | Field | Purpose | Validation and limit |
 | --- | --- | --- |
 | `exit_code` | Identifies the expected command termination | Required integer from 0 through 255; nonzero in the first failing example |
-| `stdout` | Matches literal standard-output evidence | Required list; 0-16 entries shared with stderr |
-| `stderr` | Matches literal standard-error evidence | Required list; 0-16 entries shared with stdout |
+| `stdout` | Matches standard-output evidence | Required list; 0-16 entries shared with stderr |
+| `stderr` | Matches standard-error evidence | Required list; 0-16 entries shared with stdout |
 
 Each output entry contains:
 
 | Field | Purpose | Validation and limit |
 | --- | --- | --- |
-| `mode` | Makes matching behavior explicit | Required; exactly `contains` in the technical prototype |
-| `value` | Holds the expected literal | Required nonempty string; maximum 8 KiB |
+| `mode` | Makes matching behavior explicit | Required; `contains` or `exact` |
+| `normalize` | Asks for the replay stream to be normalized before the comparison | Optional list of 1-8 unique rule names in the documented order; see `output-matching.md` |
+| `value` | Holds the expected text | Required nonempty string; maximum 8 KiB |
 
-A failing expectation must contain at least one stdout or stderr entry. Values containing a redaction replacement are invalid because they cannot establish original failure identity.
+`contains` without `normalize` is the original behavior: the value must appear in the redacted stream. `exact` means the whole retained redacted stream equals the value. When `normalize` is present, the stream is normalized with those rules before the comparison, and the stored value is already normalized. The artifact never stores a host path: the `paths` rule replaces exact known directories with `<project>` and `<tmp>` on both sides.
+
+```yaml
+expect:
+  exit_code: 1
+  stdout:
+    - mode: exact
+      value: "checking calculate(2)\n"
+  stderr:
+    - mode: contains
+      normalize:
+        - line_endings
+        - ansi_escapes
+        - trailing_whitespace
+        - paths
+        - node_version
+        - node_internal_locations
+        - process_ids
+        - durations
+      value: "Expected 4 from calculate(2) (<duration>)"
+```
+
+A failing expectation must contain at least one stdout or stderr entry. Values containing a redaction replacement are invalid because they cannot establish original failure identity. A normalized value must be unchanged by its own rules (with no path context), because replay compares normalized output with it. The rules and the stored values are the same for every replay, so the explanation can say which rules changed the replay output, never what it contained.
 
 ### `limits`
 
@@ -194,7 +217,7 @@ Validation proceeds without side effects:
 4. normalize and validate paths;
 5. reject path collisions and aggregate-limit violations;
 6. recompute every file digest;
-7. validate cross-field rules, including expectations and redaction targets;
+7. validate cross-field rules, including expectations (rule order, the normalized-value fixed point, redaction markers) and redaction targets;
 8. apply local image and limit policy when preparing replay.
 
 Steps 1-7 are static validation. Step 8 is local replay authorization and must still occur before workspace creation.
@@ -204,6 +227,7 @@ Steps 1-7 are static validation. Step 8 is local replay authorization and must s
 - A version 1 consumer rejects unknown fields rather than guessing their meaning.
 - A producer must not emit fields outside the published version 1 schema.
 - Additive fields require a new compatibility decision even if made optional. The `dependency` file role is such an addition: artifacts without it are unchanged and remain valid, and a consumer that predates it rejects an artifact that uses it instead of guessing. It is accepted within version 1 only while the schema is marked provisional, as recorded in decision 0002, and must be revisited before the schema is declared stable. `tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue` is its permanent compatibility fixture.
+- Output matching modes are another such addition. A `contains` entry without `normalize` is exactly the original form and serializes to the same bytes. The `exact` mode and the `normalize` list are accepted within version 1 under the same provisional status, as recorded in decision 0003, and must be revisited before the schema is declared stable. A consumer that predates them rejects them with a schema violation, which `tests/fixtures/artifacts/v1/legacy-schema/artifact-v1-contains-only.schema.json` (a frozen copy of the earlier published schema) proves against `valid/exact-output.proofissue` and `valid/normalized-output.proofissue`, the permanent compatibility fixtures. `invalid/normalize-out-of-order.proofissue` is the invalid fixture. A rule name's definition is frozen; a changed definition gets a new name.
 - Every supported artifact version retains a parser fixture and compatibility test.
 - Unsupported future versions produce `invalid_artifact` with an explicit version error.
 - Artifact hashes prove content integrity only; they do not prove authorship or trust.
