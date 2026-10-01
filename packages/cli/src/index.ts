@@ -2,12 +2,14 @@ import { createInterface } from 'node:readline/promises';
 import process, { stdin, stdout } from 'node:process';
 
 import {
+  createPrepareApplicationService,
   createRecordApplicationService,
   createReplayApplicationService,
   createStaticArtifactApplicationServices,
   evaluateReplayPolicy,
   type ApplicationServices,
   type OperationResult,
+  type PrepareOperationResult,
   type RecordApplicationRequest,
   type RecordConfirmation,
   type RecordPreview,
@@ -34,7 +36,8 @@ File roles:
 At least one path in each role and one expected output literal are required.
 --dependencies also records package.json and package-lock.json from the project root so the
 locked npm packages can be installed later. The lockfile must use lockfile version 3 and the
-public npm registry. Replay of artifacts with dependency files is not supported yet.
+public npm registry. Before replaying such an artifact, run proofissue prepare to download and
+verify the locked packages.
 The command runs directly as Node.js arguments; shell syntax is not interpreted.
 Use --yes only for explicit noninteractive approval after reviewing these selections.
 `;
@@ -43,7 +46,9 @@ export const CLI_HELP = `Usage:
   proofissue record [options] -- node <arguments...>
   proofissue validate <artifact.proofissue> [--json]
   proofissue inspect <artifact.proofissue> [--json]
+  proofissue prepare <artifact.proofissue> --dependency-store <directory> [--json]
   proofissue replay <artifact.proofissue> [--against <directory>]
+    [--dependency-store <directory>]
     [--require-status reproduced|not_reproduced] [--json]
 
 Replay validates before execution, accepts only the approved digest-pinned image,
@@ -51,6 +56,12 @@ uses a locked-down local Docker Engine on x86-64 Linux, and never pulls an image
 Without --against, replay uses every file embedded in the artifact. With --against,
 only declared subject paths are replaced; undeclared additions, removals, and renames
 are not evaluated.
+
+prepare is the only ProofIssue step that makes network requests: it downloads exactly the
+packages the artifact's lockfile names from the public npm registry, checks each against its
+SHA-512 hash, and stores them in the given directory. It never runs the artifact or package
+code. Replay never uses the network; pass the same --dependency-store to replay an artifact
+with dependency files.
 
 ${RECORD_HELP}`;
 
@@ -89,7 +100,7 @@ const renderDependencySection = (preview: RecordPreview): readonly string[] => {
           `  ${plural(dependencies.install_script_packages, 'package')} ${dependencies.install_script_packages === 1 ? 'declares' : 'declare'} install scripts, which are never run.`,
         ]
       : []),
-    '  Replaying an artifact with dependency files is not supported yet.',
+    '  Run proofissue prepare before replay to download and verify these packages.',
     '',
   ];
 };
@@ -245,6 +256,9 @@ const escapePresentationText = (value: string): string =>
     .join('')
     .replaceAll('::', '\\:\\:');
 
+const REPLAY_PREPARE_HINT =
+  'Hint: run proofissue prepare <artifact> --dependency-store <directory>, then pass the same --dependency-store to replay.';
+
 export const renderReplayResult = (
   result: Awaited<ReturnType<ApplicationServices['replay']>>,
 ): string => {
@@ -274,9 +288,72 @@ export const renderReplayResult = (
   return `${lines.join('\n')}\n`;
 };
 
+export interface ParsedPrepareCommand {
+  readonly artifact_path: string;
+  readonly dependency_store: string;
+  readonly json: boolean;
+}
+
+const takeStoreValue = (arguments_: readonly string[], index: number): string => {
+  const value = arguments_[index + 1];
+  if (value === undefined || value.startsWith('--'))
+    throw new Error('--dependency-store requires a directory.');
+  return value;
+};
+
+export const parsePrepareArguments = (arguments_: readonly string[]): ParsedPrepareCommand => {
+  const artifactPath = arguments_[0];
+  if (artifactPath === undefined || artifactPath.startsWith('--'))
+    throw new Error('An artifact path is required.');
+  let json = false;
+  let store: string | undefined;
+  for (let index = 1; index < arguments_.length; index += 1) {
+    const argument = arguments_[index];
+    if (argument === '--json') {
+      json = true;
+    } else if (argument === '--dependency-store') {
+      store = takeStoreValue(arguments_, index);
+      index += 1;
+    } else {
+      throw new Error(`Unknown option: ${argument ?? ''}`);
+    }
+  }
+  if (store === undefined) throw new Error('--dependency-store is required.');
+  return { artifact_path: artifactPath, dependency_store: store, json };
+};
+
+export const renderPrepareResult = (result: PrepareOperationResult): string => {
+  const lines = [`Preparation result: ${result.status}`];
+  if (result.status === 'not_required') {
+    lines.push('The artifact has no dependency files; replay needs no prepared store.');
+  }
+  const preparation = result.preparation;
+  if (preparation !== undefined) {
+    lines.push(
+      `Packages for the replay platform: ${String(preparation.packages)}`,
+      `Tarballs downloaded: ${String(preparation.downloaded_tarballs)} (${String(preparation.downloaded_bytes)} bytes)`,
+      `Tarballs already in the store: ${String(preparation.reused_tarballs)}`,
+      `Skipped for another platform: ${String(preparation.skipped_for_platform)}`,
+    );
+  }
+  for (const item of result.warnings)
+    lines.push(`Warning: ${escapePresentationText(item.message)}`);
+  for (const item of result.errors) {
+    const location = item.details?.['package_path'];
+    lines.push(
+      `Error: ${escapePresentationText(item.message)}${
+        typeof location === 'string' ? ` (${escapePresentationText(location)})` : ''
+      }`,
+    );
+  }
+  if (result.status === 'prepared') lines.push('Replay offline with the same --dependency-store.');
+  return `${lines.join('\n')}\n`;
+};
+
 interface ParsedArtifactCommand {
   readonly against_path?: string;
   readonly artifact_path: string;
+  readonly dependency_store?: string;
   readonly json: boolean;
   readonly required_status?: 'not_reproduced' | 'reproduced';
 }
@@ -290,6 +367,7 @@ const parseArtifactCommand = (
     throw new Error('An artifact path is required.');
   let json = false;
   let againstPath: string | undefined;
+  let dependencyStore: string | undefined;
   let requiredStatus: ParsedArtifactCommand['required_status'];
   for (let index = 1; index < arguments_.length; index += 1) {
     const argument = arguments_[index];
@@ -313,11 +391,17 @@ const parseArtifactCommand = (
       index += 1;
       continue;
     }
+    if (argument === '--dependency-store' && allowRequiredStatus) {
+      dependencyStore = takeStoreValue(arguments_, index);
+      index += 1;
+      continue;
+    }
     throw new Error(`Unknown option: ${argument ?? ''}`);
   }
   return {
     artifact_path: artifactPath,
     json,
+    ...(dependencyStore === undefined ? {} : { dependency_store: dependencyStore }),
     ...(againstPath === undefined ? {} : { against_path: againstPath }),
     ...(requiredStatus === undefined ? {} : { required_status: requiredStatus }),
   };
@@ -361,6 +445,41 @@ export const runCli = async (
     };
   }
 
+  if (arguments_[0] === 'prepare') {
+    let parsed: ParsedPrepareCommand;
+    try {
+      parsed = parsePrepareArguments(arguments_.slice(1));
+    } catch (error: unknown) {
+      io.write(
+        `${error instanceof Error ? error.message : 'Invalid prepare command.'}\n\n${CLI_HELP}`,
+      );
+      return { exit_code: 2 };
+    }
+    const prepare = application?.prepare ?? createPrepareApplicationService().prepare;
+    const controller = new AbortController();
+    const interrupt = (): void => {
+      controller.abort();
+    };
+    process.once('SIGINT', interrupt);
+    process.once('SIGTERM', interrupt);
+    let result: PrepareOperationResult;
+    try {
+      result = await prepare({
+        artifact_path: parsed.artifact_path,
+        dependency_store: parsed.dependency_store,
+        signal: controller.signal,
+      });
+    } finally {
+      process.removeListener('SIGINT', interrupt);
+      process.removeListener('SIGTERM', interrupt);
+    }
+    io.write(parsed.json ? `${JSON.stringify(result)}\n` : renderPrepareResult(result));
+    return {
+      exit_code: result.status === 'prepared' || result.status === 'not_required' ? 0 : 1,
+      result,
+    };
+  }
+
   if (arguments_[0] === 'replay') {
     let parsed: ParsedArtifactCommand;
     try {
@@ -383,6 +502,9 @@ export const runCli = async (
       result = await replay({
         ...(parsed.against_path === undefined ? {} : { against_path: parsed.against_path }),
         artifact_path: parsed.artifact_path,
+        ...(parsed.dependency_store === undefined
+          ? {}
+          : { dependency_store: parsed.dependency_store }),
         mode: parsed.against_path === undefined ? 'snapshot' : 'current_checkout',
         signal: controller.signal,
       });
@@ -390,7 +512,15 @@ export const runCli = async (
       process.removeListener('SIGINT', interrupt);
       process.removeListener('SIGTERM', interrupt);
     }
-    io.write(parsed.json ? `${JSON.stringify(result)}\n` : renderReplayResult(result));
+    io.write(
+      parsed.json
+        ? `${JSON.stringify(result)}\n`
+        : `${renderReplayResult(result)}${
+            result.errors.some((error) => error.code === 'dependencies_not_prepared')
+              ? `${REPLAY_PREPARE_HINT}\n`
+              : ''
+          }`,
+    );
     return {
       exit_code: evaluateReplayPolicy(result, parsed.required_status).success ? 0 : 1,
       result,

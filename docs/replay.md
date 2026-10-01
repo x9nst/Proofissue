@@ -12,7 +12,14 @@ Replay validates an artifact, reconstructs only its declared workspace, runs one
 
 ## Snapshot Replay
 
-An artifact that carries `dependency` files (a `package.json` and `package-lock.json`) needs its packages prepared first, because replay never has a network. The runner takes the prepared store as an input, checks the whole store read-only before it creates anything, mounts it into the container read-only, and installs the locked packages inside the sandbox with `npm ci --offline --ignore-scripts` before it starts the command. Without a complete store the result is `execution_failed` with `dependencies_not_prepared`, and no container is created. The command line and the GitHub Action cannot supply a prepared store yet, so for now this works through the library only. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
+An artifact that carries `dependency` files (a `package.json` and `package-lock.json`) needs its packages prepared first, because replay never has a network. The runner takes the prepared store as an input, checks the whole store read-only before it creates anything, mounts it into the container read-only, and installs the locked packages inside the sandbox with `npm ci --offline --ignore-scripts` before it starts the command. Without a complete store the result is `execution_failed` with `dependencies_not_prepared`, and no container is created. Prepare the store with `proofissue prepare`, then pass the same directory to replay with `--dependency-store` (the GitHub Action: `action/prepare`, then the `dependency-store` input). See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
+
+```text
+proofissue prepare failure.proofissue --dependency-store .proofissue-store
+proofissue replay failure.proofissue --dependency-store .proofissue-store
+```
+
+For an artifact without dependency files, no preparation is needed and `--dependency-store` is ignored:
 
 ```text
 proofissue replay failure.proofissue
@@ -135,9 +142,9 @@ The runner exposes only a freshly created input directory as a read-only mount. 
 
 ## Dependency Boundary
 
-The technical prototype runs dependency-free Node.js files and performs no setup step. Replay does not run `npm install`, `npm ci`, lifecycle scripts, image builds, or network fallbacks.
+An artifact without dependency files is replayed with no setup step. An artifact with dependency files is replayed in two separate steps. `proofissue prepare` downloads the locked packages from the public npm registry on the host, verifies each against its integrity hash, and keeps them in a store directory you choose; it is the only step that uses the network. Replay then mounts that store read-only and installs from it inside the sandbox with `npm ci --offline --ignore-scripts`, with no network. Replay never downloads anything, runs lifecycle scripts, builds images, or falls back to the network, and a missing or incomplete store is `execution_failed` with `dependencies_not_prepared`, never a reproduction result.
 
-Support for normal package installations remains blocked until an offline or explicitly constrained dependency design is accepted.
+The supported boundary (public registry, lockfile version 3, no install scripts or native addons) and its measured limits are described in `dependencies.md`.
 
 ## Failure Behavior
 

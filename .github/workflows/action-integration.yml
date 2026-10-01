@@ -24,12 +24,31 @@ jobs:
       - name: Prepare the approved image explicitly
         run: docker pull "$PROOFISSUE_IMAGE"
 
+      - name: Prepare dependencies (the only step with package network access)
+        id: prepare
+        uses: ./action/prepare
+        with:
+          artifact-path: tests/fixtures/action/reproduced.proofissue
+          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
+
+      - name: Verify preparation outputs
+        env:
+          PROOFISSUE_PREPARE_RESULT: ${{ steps.prepare.outputs.result }}
+          PROOFISSUE_PREPARE_STATUS: ${{ steps.prepare.outputs.status }}
+        run: >
+          node --input-type=module -e
+          "const result=JSON.parse(process.env.PROOFISSUE_PREPARE_RESULT);
+          if(process.env.PROOFISSUE_PREPARE_STATUS!=='not_required' ||
+          result.operation!=='prepare' ||
+          result.status!=='not_required') process.exit(1);"
+
       - name: Require the recorded failure
         id: snapshot
         uses: ./action
         with:
           artifact-path: tests/fixtures/action/reproduced.proofissue
           replay-mode: snapshot
+          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
           required-status: reproduced
 
       - name: Verify snapshot outputs are reusable

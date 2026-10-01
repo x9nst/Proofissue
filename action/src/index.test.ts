@@ -80,6 +80,7 @@ describe('Action metadata', () => {
 
     expect(metadata).toContain('using: node24');
     expect(metadata).toContain('main: dist/index.js');
+    expect(metadata).toContain('dependency-store:');
     for (const output of [
       'status:',
       'mode:',
@@ -100,6 +101,16 @@ describe('Action inputs', () => {
     expect(parseActionInputs((name) => values[name] ?? '')).toEqual({
       artifact_path: 'failure.proofissue',
       mode: 'snapshot',
+    });
+  });
+
+  it('parses dependency-store only when given', () => {
+    const base: Record<string, string> = { 'artifact-path': 'failure.proofissue' };
+    const withStore: Record<string, string> = { ...base, 'dependency-store': 'prepared-store' };
+
+    expect(parseActionInputs((name) => base[name] ?? '')).not.toHaveProperty('dependency_store');
+    expect(parseActionInputs((name) => withStore[name] ?? '')).toMatchObject({
+      dependency_store: 'prepared-store',
     });
   });
 
@@ -144,6 +155,26 @@ describe('Action inputs', () => {
 });
 
 describe('Action execution', () => {
+  it('passes the prepared dependency store to replay, and none when the input is empty', async () => {
+    const requests: object[] = [];
+    const application: ActionApplicationServices = {
+      replay: (request) => {
+        requests.push(request);
+        return Promise.resolve(replayResult('reproduced'));
+      },
+    };
+
+    await runAction(
+      application,
+      runtimeFixture({ 'artifact-path': 'a.proofissue', 'dependency-store': 'prepared-store' })
+        .runtime,
+    );
+    await runAction(application, runtimeFixture({ 'artifact-path': 'a.proofissue' }).runtime);
+
+    expect(requests[0]).toMatchObject({ dependency_store: 'prepared-store' });
+    expect(requests[1]).not.toHaveProperty('dependency_store');
+  });
+
   it('publishes structured outputs and a content-safe summary for reproduced failures', async () => {
     const application: ActionApplicationServices = {
       replay: vi.fn(() => Promise.resolve(replayResult('reproduced'))),

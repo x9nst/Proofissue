@@ -1,0 +1,15 @@
+{
+  "result_schema_version": 1,
+  "operation": "prepare",
+  "status": "invalid_artifact",
+  "artifact_version": 1,
+  "artifact_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "warnings": [],
+  "errors": [
+    {
+      "code": "lockfile_rejected",
+      "message": "The lockfile version is not supported.",
+      "details": { "reason": "unsupported_lockfile_version" }
+    }
+  ]
+}

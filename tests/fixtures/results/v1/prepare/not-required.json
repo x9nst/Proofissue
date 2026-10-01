@@ -1,0 +1,9 @@
+{
+  "result_schema_version": 1,
+  "operation": "prepare",
+  "status": "not_required",
+  "artifact_version": 1,
+  "artifact_digest": "0000000000000000000000000000000000000000000000000000000000000000",
+  "warnings": [],
+  "errors": []
+}

@@ -61,11 +61,58 @@ uses `./action` so it exercises the exact checked-out bundle.
 | `artifact-path` | yes | none | Path to the artifact that replay validates before execution |
 | `replay-mode` | no | `snapshot` | `snapshot` or `current-checkout` |
 | `checkout-path` | no | `GITHUB_WORKSPACE` | Root used only by `current-checkout` replay |
+| `dependency-store` | no | none | Directory filled by the prepare Action. Needed only for an artifact with dependency files; replay never uses the network |
 | `required-status` | no | none | `reproduced` or `not_reproduced`; a mismatch fails the step without changing the classification |
 
 Supplying `checkout-path` in snapshot mode is rejected. Current-checkout replay
 reads only declared, existing subject paths. It does not discover additions or
 infer removals and renames.
+
+## Preparing dependencies
+
+An artifact recorded with `--dependencies` carries a lockfile. Its packages are
+downloaded by a separate Action, `action/prepare`, so that the one step that uses
+the network is a distinct `uses:` line in the workflow, and the replay Action
+never contains download code. Run it before replay and give both the same
+directory:
+
+```yaml
+      - name: Prepare dependencies
+        id: prepare
+        uses: x9nst/Proofissue/action/prepare@FULL_COMMIT_SHA
+        with:
+          artifact-path: failures/example.proofissue
+          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
+
+      - name: Confirm the failure still reproduces
+        uses: x9nst/Proofissue/action@FULL_COMMIT_SHA
+        with:
+          artifact-path: failures/example.proofissue
+          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
+          required-status: reproduced
+```
+
+The prepare Action is safe to run unconditionally: an artifact without dependency
+files reports `not_required`, fetches nothing, and creates no directory.
+
+| Input | Required | Meaning |
+| --- | --- | --- |
+| `artifact-path` | yes | Path to the artifact whose locked packages are prepared |
+| `dependency-store` | yes | Directory for the verified package store; use a directory under the runner's temporary directory, never an npm cache |
+
+| Output | Format | Meaning |
+| --- | --- | --- |
+| `status` | string | `prepared`, `not_required`, `invalid_input`, `invalid_artifact`, or `execution_failed` |
+| `result` | JSON object | Complete version 1 prepare result, without package names, tarball paths, or the store path |
+
+The step succeeds for `prepared` and `not_required` and fails for every other
+status. Outputs are written before the step fails, so a later step using
+`if: always()` can still read them. The workflow summary shows the status and
+counts only: packages, tarballs downloaded, tarballs already in the store, packages
+skipped for another platform, and the numbers of warnings and errors. It never
+shows error messages, package locations, or directories; the structured `result`
+output carries the bounded details. A failed preparation is not a replay result: a
+replay without a prepared store reports `dependencies_not_prepared`.
 
 ## Outputs
 
@@ -114,6 +161,11 @@ typical workflow grants only `contents: read` so `actions/checkout` can read the
 repository. `persist-credentials: false` prevents checkout credentials from
 remaining in the worktree.
 
+The prepare Action needs no token either. Like every step on a runner, it runs on
+the host with the runner's network, and it contacts only the public npm registry,
+for exactly the tarballs the artifact's lockfile names, checked against their
+hashes. The replay container never has a network. See `security-model.md`.
+
 Use a supported x86-64 Linux runner with Docker Engine. The host Action process
 uses the local Docker command line, but the replayed container never receives the
 Docker socket, repository credentials, job secrets, host network, or undeclared
@@ -126,9 +178,11 @@ boundary for highly adversarial artifacts.
 
 ## Maintainer Validation
 
-The committed `action/dist/index.js` is generated from the TypeScript sources so
-consumers do not install dependencies before the Action starts. Bundled
-third-party notices are retained beside it.
+The committed `action/dist/index.js` (replay) and `action/prepare/dist/index.js`
+(prepare) are generated from the TypeScript sources so consumers do not install
+dependencies before the Action starts. Bundled third-party notices are retained
+beside each. The replay bundle is tested to carry no package download code, and the
+prepare bundle is tested to carry it, so that guard cannot pass vacuously.
 
 ```bash
 npm ci

@@ -10,6 +10,8 @@ import type { Runner } from '@proofissue/runner';
 export type {
   InspectOperationResult,
   OperationResult,
+  PrepareOperationResult,
+  PrepareStatus,
   ProofIssueError,
   ProofIssueErrorCode,
   RecordOperationResult,
@@ -23,6 +25,7 @@ import type {
   BoundedExecutionResult,
   BoundedExecutionSummary,
   InspectOperationResult,
+  PrepareOperationResult,
   RecordOperationResult,
   ReplayOperationResult,
   ReplayStatus,
@@ -35,7 +38,18 @@ import {
 } from '@proofissue/artifact-schema';
 import { ArtifactFileError } from '@proofissue/artifact-schema';
 import type { ArtifactLimitsV1 } from '@proofissue/artifact-schema';
-import type { ArtifactValidationError, ValidatedArtifactV1 } from '@proofissue/artifact-schema';
+import type { ValidatedArtifactV1 } from '@proofissue/artifact-schema';
+import { toProofIssueError } from './artifact-errors.js';
+import { createPrepareApplicationService } from './prepare.js';
+import type { PrepareApplicationRequest } from './prepare.js';
+
+export { createPrepareApplicationService } from './prepare.js';
+export type {
+  PrepareApplicationDependencies,
+  PrepareApplicationRequest,
+  PrepareApplicationService,
+} from './prepare.js';
+import type { PackageFetcher } from '@proofissue/dependencies';
 
 export interface RecordApplicationRequest {
   readonly arguments: readonly string[];
@@ -112,6 +126,7 @@ export interface ApplicationServices {
   record(request: RecordApplicationRequest): Promise<RecordOperationResult>;
   validate(request: ValidateApplicationRequest): Promise<ValidateOperationResult>;
   inspect(request: InspectApplicationRequest): Promise<InspectOperationResult>;
+  prepare(request: PrepareApplicationRequest): Promise<PrepareOperationResult>;
   replay(request: ReplayApplicationRequest): Promise<ReplayOperationResult>;
 }
 
@@ -277,19 +292,6 @@ export const createRecordApplicationService = (
       return recordFailure(error);
     }
   },
-});
-
-const toProofIssueError = (error: ArtifactValidationError) => ({
-  code:
-    error.code === 'unsupported_artifact_version'
-      ? ('unsupported_artifact_version' as const)
-      : error.code === 'schema_violation'
-        ? ('schema_violation' as const)
-        : error.code === 'semantic_violation'
-          ? ('semantic_violation' as const)
-          : ('malformed_input' as const),
-  message: error.message,
-  ...(error.path === undefined ? {} : { details: { path: error.path } }),
 });
 
 export const validateArtifact = async (
@@ -567,6 +569,7 @@ export const createReplayApplicationService = (
 };
 
 export interface ApplicationPorts {
+  readonly fetcher: PackageFetcher;
   readonly matcher: Matcher;
   readonly recorder: Recorder;
   readonly redactor: Redactor;
@@ -584,6 +587,9 @@ export const createApplicationServices = (
   return {
     ...createRecordApplicationService(confirm, recorder),
     ...createStaticArtifactApplicationServices(),
+    ...createPrepareApplicationService(
+      ports.fetcher === undefined ? {} : { fetcher: ports.fetcher },
+    ),
     ...createReplayApplicationService({ matcher, redactor, runner }),
   };
 };

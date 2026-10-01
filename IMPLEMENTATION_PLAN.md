@@ -34,7 +34,7 @@ Completing the technical prototype does not complete the initial supported workf
 | 4. Locked-down replay and matching | Complete | Milestones 2-3 | Local quality gates and hosted Linux container validation pass; see `docs/milestone-4-evidence.md` |
 | 5. Fix verification | Complete | Milestone 4 | Original and corrected-source end-to-end fixture; see `docs/milestone-5-evidence.md` |
 | 6. GitHub Actions integration | Complete | Milestone 5 | Action, stable outputs, and the Linux fixture workflow pass on a hosted runner; dependency advisory resolved; see `docs/milestone-6-evidence.md` |
-| 7. Initial supported Node.js workflow | Planned | Milestone 6 | Progressive real-project trials, compatibility suite, and security suite |
+| 7. Initial supported Node.js workflow | In Progress | Milestone 6 | Progressive real-project trials, compatibility suite, and security suite |
 | Early maintainer validation track | In Progress | Runs alongside Milestones 1-7 | Task-based artifact, role, replay, and demand research in `docs/product-validation.md` |
 
 ## Early Maintainer Validation Track
@@ -337,7 +337,9 @@ Linux run are recorded in `docs/milestone-6-evidence.md`.
 
 ## Milestone 7 — Initial Supported Node.js Workflow
 
-**Status:** Planned
+**Status:** In Progress
+
+**Current evidence:** decision 0002 steps 1-6 implemented: dependency capture, lockfile validation, prepare (CLI and prepare Action), offline replay; real-project trials (step 7) pending. No acceptance criterion below is met yet.
 
 **Target outcome:**
 

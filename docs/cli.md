@@ -1,6 +1,6 @@
 # Command Line Reference
 
-ProofIssue installs one executable, `proofissue`, with four commands: `record`, `validate`, `inspect`, and `replay`. Until the package is published, run it from a built checkout:
+ProofIssue installs one executable, `proofissue`, with five commands: `record`, `validate`, `inspect`, `prepare`, and `replay`. Until the package is published, run it from a built checkout:
 
 ```text
 npm ci
@@ -14,8 +14,8 @@ The examples below write `proofissue` for that invocation. They use the project 
 
 | Code | Meaning |
 | --- | --- |
-| `0` | The command completed. For `replay`, a classification was reached and any `--require-status` was satisfied. For `record`, an artifact was created or you declined at the confirmation prompt. |
-| `1` | The command ran but did not succeed: an invalid or missing artifact, a replay that could not complete, a required status that was not met, or a recording that failed. |
+| `0` | The command completed. For `replay`, a classification was reached and any `--require-status` was satisfied. For `record`, an artifact was created or you declined at the confirmation prompt. For `prepare`, the packages were prepared or the artifact needs none. |
+| `1` | The command ran but did not succeed: an invalid or missing artifact, a replay that could not complete, a required status that was not met, a preparation that failed, or a recording that failed. |
 | `2` | The arguments were malformed. The message and usage text are printed, and nothing is executed. |
 
 A replay that ends in `reproduced` or `not_reproduced` is a successful classification. Which of the two you want is a policy decision, expressed with `--require-status`.
@@ -46,7 +46,7 @@ proofissue record --project <directory> --output <file.proofissue>
 | `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. |
 | `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. |
 | `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain. Repeatable. |
-| `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Artifacts with dependency files cannot be replayed yet. See `dependencies.md`. |
+| `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Replay such an artifact only after `prepare`. See `dependencies.md`. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. |
 
@@ -192,6 +192,74 @@ The same as `validate`: an invalid or missing artifact exits `1`.
 
 `inspect` is a static command. It reads the artifact only.
 
+## `prepare`
+
+### Purpose
+
+Download and verify the npm packages an artifact's lockfile names, so that a later `replay` can install them offline. `prepare` is the only ProofIssue step that makes network requests. It does nothing for an artifact that has no dependency files.
+
+### Syntax
+
+```text
+proofissue prepare <artifact.proofissue> --dependency-store <directory> [--json]
+```
+
+The artifact path must come first; an option before it is rejected.
+
+### Options
+
+| Option | Required | Meaning |
+| --- | --- | --- |
+| `--dependency-store <directory>` | yes | Where the verified packages are kept. It is never defaulted and never taken from the artifact. Pass the same directory to `replay`. |
+| `--json` | no | Print the versioned result as one line of JSON. |
+
+### Example
+
+```text
+$ proofissue prepare failure.proofissue --dependency-store .proofissue-store
+Preparation result: prepared
+Packages for the replay platform: 3
+Tarballs downloaded: 2 (2048 bytes)
+Tarballs already in the store: 1
+Skipped for another platform: 1
+Warning: 1 package declares install scripts, which are never run.
+Replay offline with the same --dependency-store.
+
+$ proofissue replay failure.proofissue --dependency-store .proofissue-store --require-status reproduced
+```
+
+For an artifact without dependency files:
+
+```text
+$ proofissue prepare failure.proofissue --dependency-store .proofissue-store
+Preparation result: not_required
+The artifact has no dependency files; replay needs no prepared store.
+```
+
+Nothing is fetched and the directory is not created in that case, so a workflow can run `prepare` unconditionally.
+
+### Result states
+
+| Status | Meaning |
+| --- | --- |
+| `prepared` | Every package for the replay platform is in the store and matches its integrity hash. |
+| `not_required` | The artifact has no dependency files. Nothing was fetched and no store was created. |
+| `invalid_input` | The store directory was empty. |
+| `invalid_artifact` | The artifact failed validation, or its lockfile was rejected (`lockfile_rejected`). Nothing was fetched and the store was not touched. |
+| `execution_failed` | A download or its verification failed (`dependency_download_failed`), the store location was unsafe or not writable (`dependency_store_unusable`), or the run was cancelled. |
+
+### Failure behavior
+
+- Exit `0` for `prepared` and `not_required`. Exit `1` for `invalid_input`, `invalid_artifact`, and `execution_failed`. Exit `2` for malformed arguments, with nothing executed: no artifact path, a missing `--dependency-store` or value, or an unknown option such as `--against`.
+- Each error prints one `Error:` line; when it concerns one package, the `node_modules/...` location follows in parentheses. Package names beyond that location, response bodies, tarball paths, and the store path are never printed.
+- A hash mismatch, an oversized or redirected response, a non-success HTTP status, and a timeout each fail the whole preparation and keep nothing from the failing package.
+- `Ctrl+C` stops the downloads and reports `execution_failed` with the reason `cancelled`.
+- A failed preparation is never a replay result. Replaying without a prepared store reports `dependencies_not_prepared`, and the CLI suggests running `prepare`.
+
+### Security notes
+
+`prepare` contacts only `https://registry.npmjs.org`, and only for the exact tarballs the lockfile names. It sends no credentials, follows no redirects, and applies size and time limits. Nothing is extracted or executed, and install scripts are never run. The artifact and its lockfile are validated before any request is made or any directory is created. The store is written only at the path you give. Use a dedicated directory, never your npm cache: replay mounts the store read-only into the sandbox. A store can be reused; every entry is checked against its hash again before replay. See `dependencies.md` and `security-model.md`.
+
 ## `replay`
 
 ### Purpose
@@ -202,6 +270,7 @@ Run the artifact's command in a locked-down container and report whether the cap
 
 ```text
 proofissue replay <artifact.proofissue> [--against <directory>]
+  [--dependency-store <directory>]
   [--require-status reproduced|not_reproduced] [--json]
 ```
 
@@ -210,6 +279,7 @@ proofissue replay <artifact.proofissue> [--against <directory>]
 | Option | Meaning |
 | --- | --- |
 | `--against <directory>` | Current-checkout mode: replace the artifact's declared subject files from the same relative paths under this directory. Undeclared additions, removals, and renames are not evaluated. |
+| `--dependency-store <directory>` | The store filled by `prepare`. Needed only for an artifact with dependency files; ignored otherwise. Replay never uses the network. |
 | `--require-status <status>` | Exit `0` only if the replay ends in this classification. The classification itself is unchanged. |
 | `--json` | Print the versioned result as one line of JSON. |
 
@@ -225,6 +295,13 @@ After fixing `src/calculate.mjs` in your checkout, confirm the failure is gone:
 
 ```text
 proofissue replay failure.proofissue --against . --require-status not_reproduced
+```
+
+For an artifact with dependency files, prepare the packages first and pass the same directory to replay:
+
+```text
+proofissue prepare failure.proofissue --dependency-store .proofissue-store
+proofissue replay failure.proofissue --dependency-store .proofissue-store --require-status reproduced
 ```
 
 Replay needs Docker Engine 27 or newer on x86-64 Linux with the approved image already present; it never pulls an image. The human-readable results look like this:

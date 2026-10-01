@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -17,6 +18,7 @@
   "dependencies": {
     "@proofissue/artifact-schema": "0.0.0",
     "@proofissue/contracts": "0.0.0",
+    "@proofissue/dependencies": "0.0.0",
     "@proofissue/matcher": "0.0.0",
     "@proofissue/process-output": "0.0.0",
     "@proofissue/recorder": "0.0.0",

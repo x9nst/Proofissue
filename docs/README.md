@@ -11,7 +11,7 @@
 - `milestone-5-evidence.md` records declared-path fix verification, security cases, result presentation, and validation evidence.
 - `milestone-6-evidence.md` records the GitHub Action implementation, security analysis, dependency advisory triage, local evidence, and the hosted Linux run that completed the milestone.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
-- `decisions/0002-dependency-strategy.md` compares the options for dependency handling in the initial supported Node.js workflow and recommends one; a maintainer decision is pending.
+- `decisions/0002-dependency-strategy.md` compares the options for dependency handling in the initial supported Node.js workflow and records the accepted choice: a separate explicit prepare step, then offline replay.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.
 - `maintainer-participant-packet.md` is the answer-free participant research packet.
@@ -24,7 +24,7 @@
 - `artifact-io-contract.md` defines exact parser limits, deterministic serialization, and no-overwrite atomic publication.
 - `output-handling.md` defines raw-byte capture, UTF-8 decoding, truncation, whole-buffer redaction, and matching input.
 - `result-contract.md` defines neutral versioned operation results and the error taxonomy.
-- `cli.md` is the command reference: syntax, options, examples, exit codes, failure behavior, and security notes for `record`, `validate`, `inspect`, and `replay`.
+- `cli.md` is the command reference: syntax, options, examples, exit codes, failure behavior, and security notes for `record`, `validate`, `inspect`, `prepare`, and `replay`.
 - `dependencies.md` describes npm dependency handling for the initial supported workflow and the lockfile validation rules; it grows as each step lands.
 - `recording.md` defines command authorization, file selection, capture, redaction, confirmation, and recording failures.
 - `replay.md` defines static inspection, snapshot replay, current-checkout replay, result states, and failure behavior.
