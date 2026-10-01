@@ -102,6 +102,19 @@ const prepareProjectRoot = async (requestedRoot: string): Promise<string> => {
   }
 };
 
+// Intermediate directories are not protected by O_NOFOLLOW, so the final location is
+// resolved after the file is open and must still be inside the project root. This mirrors
+// the check the runner applies to current-checkout files.
+const isWithinRoot = (root: string, candidate: string): boolean => {
+  const relative = path.relative(root, candidate);
+  return (
+    relative !== '' &&
+    relative !== '..' &&
+    !relative.startsWith(`..${path.sep}`) &&
+    !path.isAbsolute(relative)
+  );
+};
+
 const assertSafePathComponents = async (root: string, artifactPath: string): Promise<string> => {
   let current = root;
   const segments = artifactPath.split('/');
@@ -159,7 +172,9 @@ const readSelectedFile = async (
     const noFollow = 'O_NOFOLLOW' in constants ? constants.O_NOFOLLOW : 0;
     handle = await open(absolute, constants.O_RDONLY | noFollow);
     const openedStat = await handle.stat();
+    const resolved = await realpath(absolute);
     if (
+      !isWithinRoot(root, resolved) ||
       !openedStat.isFile() ||
       openedStat.size !== initialStat.size ||
       openedStat.dev !== initialStat.dev ||
@@ -168,7 +183,7 @@ const readSelectedFile = async (
     ) {
       throw new RecorderError(
         'unsafe_file',
-        `Selected file changed while opening: ${artifactPath}`,
+        `Selected file changed or escaped the project while opening: ${artifactPath}`,
       );
     }
     const buffer = Buffer.alloc(openedStat.size + 1);

@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, type TestContext } from 'vitest';
 
 import { ARTIFACT_LIMITS, parseAndValidateArtifact } from '@proofissue/artifact-schema';
 
@@ -17,6 +17,19 @@ import {
   type ReplayWorkspace,
   type RunnerPolicy,
 } from './index.js';
+
+const symlinkOrSkip = async (context: TestContext, target: string, link: string): Promise<void> => {
+  try {
+    await symlink(target, link, 'file');
+  } catch (error: unknown) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    // Report "skipped" rather than silently passing a test that checked nothing.
+    if (code === 'EPERM')
+      context.skip('Creating symbolic links needs a privilege this host lacks.');
+    throw error;
+  }
+};
 
 const artifact = async () => {
   const source = await readFile('tests/fixtures/artifacts/v1/valid/canonical.proofissue');
@@ -552,20 +565,13 @@ describe('runner lifecycle', () => {
     },
   );
 
-  it('rejects a symbolic-link subject that escapes the selected checkout', async () => {
+  it('rejects a symbolic-link subject that escapes the selected checkout', async (context) => {
     const checkout = await mkdtemp(path.join(tmpdir(), 'proofissue-symlink-checkout-'));
     const outside = await mkdtemp(path.join(tmpdir(), 'proofissue-symlink-outside-'));
     const outsideFile = path.join(outside, 'calculate.mjs');
     await writeFile(outsideFile, 'export const escaped = true;\n');
     try {
-      try {
-        await symlink(outsideFile, path.join(checkout, 'calculate.mjs'), 'file');
-      } catch (error: unknown) {
-        const code =
-          typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-        if (code === 'EPERM') return;
-        throw error;
-      }
+      await symlinkOrSkip(context, outsideFile, path.join(checkout, 'calculate.mjs'));
       const engine = new FakeEngine();
       const files = workspace();
       await expect(

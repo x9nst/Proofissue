@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import fc from 'fast-check';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, type TestContext } from 'vitest';
 
 import type { ArtifactV1 } from './index.js';
 import type { ArtifactFileError } from './index.js';
@@ -385,6 +385,19 @@ describe('path safety properties', () => {
   });
 });
 
+const symlinkOrSkip = async (context: TestContext, target: string, link: string): Promise<void> => {
+  try {
+    await symlink(target, link, 'file');
+  } catch (error: unknown) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    // Report "skipped" rather than silently passing a test that checked nothing.
+    if (code === 'EPERM')
+      context.skip('Creating symbolic links needs a privilege this host lacks.');
+    throw error;
+  }
+};
+
 describe('artifact file input and publication', () => {
   it('writes a validated artifact atomically and never overwrites', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'proofissue-artifact-'));
@@ -423,20 +436,13 @@ describe('artifact file input and publication', () => {
     expect((await readArtifactFile(oversized)).ok).toBe(false);
   });
 
-  it('rejects symbolic-link artifact input where the platform permits the fixture', async () => {
+  it('rejects symbolic-link artifact input', async (context) => {
     const root = await mkdtemp(path.join(tmpdir(), 'proofissue-link-'));
     roots.push(root);
     const target = path.join(root, 'target.proofissue');
     const link = path.join(root, 'link.proofissue');
     await writeFile(target, serializeArtifact(artifact()));
-    try {
-      await symlink(target, link, 'file');
-    } catch (error: unknown) {
-      const code =
-        typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-      if (code === 'EPERM') return;
-      throw error;
-    }
+    await symlinkOrSkip(context, target, link);
     expect((await readArtifactFile(link)).ok).toBe(false);
   });
 });

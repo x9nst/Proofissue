@@ -19,6 +19,148 @@ describe('CLI application boundary', () => {
   });
 });
 
+const validFixture = 'tests/fixtures/artifacts/v1/valid/minimal.proofissue';
+const invalidFixture = 'tests/fixtures/artifacts/v1/invalid/unknown-field.proofissue';
+
+const capture = (): { io: CliIo; output: () => string } => {
+  let written = '';
+  return {
+    io: {
+      confirm: () => Promise.resolve(false),
+      write: (text) => {
+        written += text;
+      },
+    },
+    output: () => written,
+  };
+};
+
+describe('validate and inspect CLI', () => {
+  it.each([
+    ['validate', 'valid'],
+    ['inspect', 'inspected'],
+  ] as const)('%s prints the status and exits 0 for a valid artifact', async (command, status) => {
+    const { io, output } = capture();
+
+    const result = await runCli([command, validFixture], io);
+
+    expect(output()).toBe(`${status}\n`);
+    expect(result.exit_code).toBe(0);
+  });
+
+  it.each([
+    ['validate', 'valid'],
+    ['inspect', 'inspected'],
+  ] as const)('%s --json emits one parseable versioned result', async (command, status) => {
+    const { io, output } = capture();
+
+    const result = await runCli([command, validFixture, '--json'], io);
+
+    expect(output().endsWith('\n')).toBe(true);
+    expect(output().trimEnd().split('\n')).toHaveLength(1);
+    expect(JSON.parse(output())).toMatchObject({
+      result_schema_version: 1,
+      operation: command,
+      status,
+      artifact_version: 1,
+      artifact_digest: expect.stringMatching(/^[a-f0-9]{64}$/u) as string,
+      errors: [],
+    });
+    expect(result.exit_code).toBe(0);
+  });
+
+  it('reports the same digest from validate and inspect', async () => {
+    const digests: string[] = [];
+    for (const command of ['validate', 'inspect']) {
+      const { io, output } = capture();
+      await runCli([command, validFixture, '--json'], io);
+      digests.push((JSON.parse(output()) as { artifact_digest: string }).artifact_digest);
+    }
+
+    expect(digests[0]).toBe(digests[1]);
+  });
+
+  it.each([
+    ['validate', invalidFixture],
+    ['inspect', invalidFixture],
+    ['validate', 'tests/fixtures/artifacts/v1/valid/does-not-exist.proofissue'],
+  ])('%s exits 1 and names the problem for %s', async (command, artifactPath) => {
+    const { io, output } = capture();
+
+    const result = await runCli([command, artifactPath], io);
+
+    expect(result.exit_code).toBe(1);
+    expect(output()).toMatch(/^invalid_artifact\nError: /u);
+  });
+
+  it('exits 1 with a machine-readable error list under --json', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['validate', invalidFixture, '--json'], io);
+
+    expect(result.exit_code).toBe(1);
+    const parsed = JSON.parse(output()) as { errors: unknown[]; status: string };
+    expect(parsed.status).toBe('invalid_artifact');
+    expect(parsed.errors.length).toBeGreaterThan(0);
+  });
+});
+
+describe('CLI argument errors', () => {
+  it.each([
+    [['validate'], 'An artifact path is required.'],
+    [['inspect'], 'An artifact path is required.'],
+    [['replay'], 'An artifact path is required.'],
+    [['validate', '--json', 'a.proofissue'], 'An artifact path is required.'],
+    [['validate', 'a.proofissue', '--bogus'], 'Unknown option: --bogus'],
+    [
+      ['inspect', 'a.proofissue', '--require-status', 'reproduced'],
+      'Unknown option: --require-status',
+    ],
+    [
+      ['replay', 'a.proofissue', '--require-status', 'bogus'],
+      '--require-status must be reproduced or not_reproduced.',
+    ],
+    [['replay', 'a.proofissue', '--against'], '--against requires a checkout directory.'],
+    [['replay', 'a.proofissue', '--against', '--json'], '--against requires a checkout directory.'],
+    [['frobnicate'], 'Unknown command: frobnicate'],
+  ])('%j exits 2 with a message and the usage text', async (arguments_, message) => {
+    const { io, output } = capture();
+
+    const result = await runCli(arguments_, io);
+
+    expect(result.exit_code).toBe(2);
+    expect(result.result).toBeUndefined();
+    expect(output()).toContain(message);
+    expect(output()).toContain('Usage:');
+  });
+
+  it.each([[[]], [['--help']], [['-h']]])('%j prints usage and exits 0', async (arguments_) => {
+    const { io, output } = capture();
+
+    const result = await runCli(arguments_, io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toContain('Usage:');
+  });
+
+  it('never calls an application service when arguments are rejected', async () => {
+    const { io } = capture();
+    const application = {
+      inspect: () => Promise.reject(new Error('must not be called')),
+      replay: () => Promise.reject(new Error('must not be called')),
+      validate: () => Promise.reject(new Error('must not be called')),
+    };
+
+    const results = await Promise.all([
+      runCli(['validate', '--json'], io, application),
+      runCli(['inspect', 'a.proofissue', '--bogus'], io, application),
+      runCli(['replay', 'a.proofissue', '--require-status', 'bogus'], io, application),
+    ]);
+
+    expect(results.map((result) => result.exit_code)).toEqual([2, 2, 2]);
+  });
+});
+
 describe('replay CLI', () => {
   const replayResult = {
     result_schema_version: 1 as const,
