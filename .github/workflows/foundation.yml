@@ -90,7 +90,7 @@ jobs:
           uname -m
 
       - name: Run locked-down replay and fix-verification tests
-        run: npm test -- packages/runner/src/container.integration.test.ts packages/application/src/fix-verification.integration.test.ts
+        run: npm test -- packages/runner/src/container.integration.test.ts packages/runner/src/dependencies.integration.test.ts packages/application/src/fix-verification.integration.test.ts
 
       - name: Confirm replay left no containers
         if: always()
