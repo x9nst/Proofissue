@@ -108,7 +108,7 @@ cli ───────────────┐
 action ────────────┴→ application
 application ────────→ artifact-schema, contracts, matcher, process-output, recorder, redactor, runner
 recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
-runner ─────────────→ artifact-schema, contracts, process-output
+runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts
 dependencies ───────→ (none)
 matcher ────────────→ contracts

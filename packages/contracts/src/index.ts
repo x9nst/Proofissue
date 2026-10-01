@@ -18,6 +18,8 @@ export type ProofIssueErrorCode =
   | 'timeout'
   | 'resource_termination'
   | 'cleanup_failed'
+  | 'dependencies_not_prepared'
+  | 'dependency_install_failed'
   | 'record_command_failed'
   | 'atomic_write_failed'
   | 'internal_error';

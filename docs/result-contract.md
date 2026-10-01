@@ -53,6 +53,8 @@ Version 1 draft top-level codes are:
 - `timeout`
 - `resource_termination`
 - `cleanup_failed`
+- `dependencies_not_prepared`: the artifact carries dependency files and the prepared store is missing, unusable, or incomplete.
+- `dependency_install_failed`: the offline install inside the sandbox did not complete. The message may carry one npm error code such as `ENOSPC` and never any package text.
 - `record_command_failed`
 - `atomic_write_failed`
 - `internal_error`

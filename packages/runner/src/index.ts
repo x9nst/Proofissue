@@ -18,11 +18,21 @@ import type {
   EffectiveLimits,
   ProofIssueErrorCode,
 } from '@proofissue/contracts';
+import { offlineInstallArguments, verifyPrepared } from '@proofissue/dependencies';
 import { BoundedOutputCollector } from '@proofissue/process-output';
 
 export const APPROVED_NODE_IMAGE =
   'node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6';
 export const WRITABLE_WORKSPACE_MB = 64;
+/** Room for an installed dependency tree. In memory, so it counts against the memory limit. */
+export const DEPENDENCY_WORKSPACE_MB = 256;
+/**
+ * The exit status the dependency bootstrap uses when setup or the offline install fails,
+ * before the artifact's command has started. A replayed program that happens to exit with
+ * this status is also reported as a failed install, which is the safe direction: it can only
+ * turn a result into an execution failure, never into a match.
+ */
+export const DEPENDENCY_INSTALL_FAILED_EXIT_CODE = 199;
 
 export type ReplayEventType =
   | 'policy_checked'
@@ -41,6 +51,12 @@ export interface ReplayExecutionEvent {
 export interface ReplayRequest {
   readonly artifact: ValidatedArtifactV1;
   readonly against_path?: string;
+  /**
+   * The prepared store for an artifact that carries dependency files. Required for such
+   * artifacts and ignored for others. It is checked in full, read-only, before any container
+   * is created, and is mounted into the container read-only.
+   */
+  readonly dependency_store?: string;
   readonly mode: 'snapshot' | 'current_checkout';
   readonly signal?: AbortSignal;
 }
@@ -61,6 +77,8 @@ export type RunnerErrorCode = Extract<
   ProofIssueErrorCode,
   | 'cleanup_failed'
   | 'container_creation_failed'
+  | 'dependencies_not_prepared'
+  | 'dependency_install_failed'
   | 'engine_capability_unavailable'
   | 'engine_unavailable'
   | 'image_unavailable'
@@ -98,12 +116,14 @@ export class RunnerError extends Error {
 
 export interface RunnerPolicy {
   readonly approved_images: readonly string[];
+  readonly dependency_workspace_mb: number;
   readonly maximum_limits: ArtifactLimitsV1;
   readonly writable_workspace_mb: number;
 }
 
 export const DEFAULT_RUNNER_POLICY: RunnerPolicy = Object.freeze({
   approved_images: Object.freeze([APPROVED_NODE_IMAGE]),
+  dependency_workspace_mb: DEPENDENCY_WORKSPACE_MB,
   maximum_limits: Object.freeze({
     timeout_seconds: 300,
     memory_mb: 2048,
@@ -117,6 +137,7 @@ export const DEFAULT_RUNNER_POLICY: RunnerPolicy = Object.freeze({
 export const calculateEffectiveLimits = (
   requested: ArtifactLimitsV1,
   policy: RunnerPolicy = DEFAULT_RUNNER_POLICY,
+  withDependencies = false,
 ): EffectiveLimits => ({
   cpus: Math.min(requested.cpus, policy.maximum_limits.cpus),
   memory_mb: Math.min(requested.memory_mb, policy.maximum_limits.memory_mb),
@@ -126,7 +147,9 @@ export const calculateEffectiveLimits = (
   ),
   processes: Math.min(requested.processes, policy.maximum_limits.processes),
   timeout_seconds: Math.min(requested.timeout_seconds, policy.maximum_limits.timeout_seconds),
-  writable_workspace_mb: policy.writable_workspace_mb,
+  writable_workspace_mb: withDependencies
+    ? policy.dependency_workspace_mb
+    : policy.writable_workspace_mb,
 });
 
 export interface ReplayWorkspace {
@@ -328,6 +351,8 @@ export const createCurrentCheckoutReader = (): CurrentCheckoutReader => ({
 
 export interface ContainerCreateSpec {
   readonly arguments: readonly string[];
+  /** Host path of a verified prepared store, mounted read-only for the offline install. */
+  readonly dependency_cache?: string;
   readonly image: string;
   readonly input_path: string;
   readonly limits: EffectiveLimits;
@@ -364,6 +389,57 @@ const SIGKILL_EXIT_CODE = 137;
 const CONTAINER_BOOTSTRAP =
   'cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"';
 
+const SANDBOX_PATH = '/usr/local/bin:/usr/bin:/bin';
+const DEPENDENCY_CACHE_MOUNT = '/proofissue-cache';
+
+// Reads the one error code npm printed, and nothing else. The output is npm's own but it
+// names packages, so none of it is repeated in a message.
+const NPM_ERROR_CODE = /^npm error code (E[A-Z0-9_]{2,30})$/mu;
+
+const installFailureMessage = (setupOutput: string): string => {
+  const code = NPM_ERROR_CODE.exec(setupOutput)?.[1];
+  return code === undefined
+    ? 'The locked packages could not be installed offline.'
+    : `The locked packages could not be installed offline (npm error ${code}).`;
+};
+
+// Everything below is constant text, never artifact data, and is checked once so a later edit
+// cannot slip a shell metacharacter into the script.
+const INSTALL_ARGUMENTS = offlineInstallArguments({
+  cache_directory: DEPENDENCY_CACHE_MOUNT,
+  global_config: '/tmp/npmrc-global',
+  logs_directory: '/tmp/npm-logs',
+  user_config: '/tmp/npmrc-user',
+});
+if (!INSTALL_ARGUMENTS.every((item) => /^[A-Za-z0-9/_.=-]+$/u.test(item))) {
+  throw new Error('The install arguments must be plain words.');
+}
+
+/**
+ * Used instead of CONTAINER_BOOTSTRAP when an artifact has dependency files. It copies the
+ * artifact's files, installs the locked packages from the read-only prepared store with no
+ * network and no install scripts, and only then replaces itself with the artifact's command.
+ *
+ * Any failure before the command starts exits with DEPENDENCY_INSTALL_FAILED_EXIT_CODE, after
+ * writing the tail of the setup log to stderr, so a failed install can never be mistaken for
+ * the command failing. The log is npm's own output, so it is bounded to 4 KiB, and the runner
+ * reads a single error code out of it and nothing else.
+ */
+const DEPENDENCY_BOOTSTRAP = [
+  `fail() { tail -c 4096 /tmp/proofissue-setup.log >&2; exit ${String(DEPENDENCY_INSTALL_FAILED_EXIT_CODE)}; }`,
+  'cp -R /proofissue-input/. /workspace/ >/tmp/proofissue-setup.log 2>&1 || fail',
+  'cd /workspace || fail',
+  ': > /tmp/npmrc-user || fail',
+  ': > /tmp/npmrc-global || fail',
+  'mkdir /tmp/npm-logs || fail',
+  `env -i PATH=${SANDBOX_PATH} HOME=/tmp npm ${INSTALL_ARGUMENTS.join(' ')} >>/tmp/proofissue-setup.log 2>&1 || fail`,
+  // npm can report success when extraction ran out of space, leaving a truncated package. A
+  // workspace with under 1 MiB free after the install is treated as that, so the command
+  // never runs against an incomplete tree.
+  `df -P /workspace | awk 'NR==2 { exit ($4 < 1024) }' || { echo 'npm error code ENOSPC' >>/tmp/proofissue-setup.log; fail; }`,
+  `exec env -i PATH=${SANDBOX_PATH} "$@"`,
+].join('\n');
+
 const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => [
   'create',
   '--name',
@@ -398,6 +474,9 @@ const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => 
   '--init',
   '--mount',
   `type=bind,src=${spec.input_path},dst=/proofissue-input,readonly`,
+  ...(spec.dependency_cache === undefined
+    ? []
+    : ['--mount', `type=bind,src=${spec.dependency_cache},dst=${DEPENDENCY_CACHE_MOUNT},readonly`]),
   '--tmpfs',
   `/workspace:rw,nosuid,nodev,noexec,size=${String(spec.limits.writable_workspace_mb * 1_048_576)},mode=1777`,
   '--tmpfs',
@@ -408,7 +487,7 @@ const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => 
   '/bin/sh',
   spec.image,
   '-c',
-  CONTAINER_BOOTSTRAP,
+  spec.dependency_cache === undefined ? CONTAINER_BOOTSTRAP : DEPENDENCY_BOOTSTRAP,
   '--',
   'node',
   ...spec.arguments,
@@ -438,6 +517,7 @@ const assertSafeMountSource = (inputPath: string): void => {
 
 export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => {
   assertSafeMountSource(spec.input_path);
+  if (spec.dependency_cache !== undefined) assertSafeMountSource(spec.dependency_cache);
   return dockerCreateArguments(spec);
 };
 
@@ -683,7 +763,12 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
       const event = (type: ReplayEventType): void => {
         events.push({ type, elapsed_ms: Math.max(0, Math.round(performance.now() - startedAt)) });
       };
-      const effectiveLimits = calculateEffectiveLimits(request.artifact.limits, policy);
+      const hasDependencies = request.artifact.files.some((file) => file.role === 'dependency');
+      const effectiveLimits = calculateEffectiveLimits(
+        request.artifact.limits,
+        policy,
+        hasDependencies,
+      );
       const image = request.artifact.environment.image;
       if (request.mode === 'current_checkout' && request.against_path === undefined) {
         throw new RunnerError(
@@ -705,15 +790,44 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
           events,
         });
       }
-      // Preparing and installing dependencies offline is not implemented yet. Replaying
-      // without them would run the command in the wrong environment and could be reported
-      // as a genuine non-reproduction, so refuse instead.
-      if (request.artifact.files.some((file) => file.role === 'dependency')) {
-        throw new RunnerError(
-          'policy_rejection',
-          'This runner cannot replay artifacts that carry dependency files yet.',
-          { effective_limits: effectiveLimits, events },
+      // An artifact with dependency files cannot be replayed without them: the command would
+      // run in the wrong environment and could be reported as a genuine non-reproduction. The
+      // prepared store is therefore checked in full, read-only, before anything is created.
+      let dependencyCache: string | undefined;
+      if (hasDependencies) {
+        const lockfile = request.artifact.files.find(
+          (file) => file.role === 'dependency' && file.path === 'package-lock.json',
         );
+        const refuse = (
+          code: 'dependencies_not_prepared' | 'policy_rejection',
+          message: string,
+        ): RunnerError =>
+          new RunnerError(code, message, { effective_limits: effectiveLimits, events });
+        if (lockfile === undefined) {
+          throw refuse('policy_rejection', 'The artifact has dependency files but no lockfile.');
+        }
+        if (request.dependency_store === undefined) {
+          throw refuse(
+            'dependencies_not_prepared',
+            'This artifact needs its dependencies prepared first, and no prepared store was given.',
+          );
+        }
+        const verification = await verifyPrepared(lockfile.content, request.dependency_store);
+        if (verification.status === 'invalid_lockfile') {
+          throw refuse('policy_rejection', 'The artifact lockfile cannot be used for replay.');
+        }
+        if (verification.status === 'store_unusable') {
+          throw refuse('dependencies_not_prepared', verification.message);
+        }
+        if (verification.status === 'not_prepared') {
+          throw refuse(
+            'dependencies_not_prepared',
+            verification.missing_count === 1
+              ? '1 locked package is missing from the prepared store or does not match its hash.'
+              : `${String(verification.missing_count)} locked packages are missing from the prepared store or do not match their hashes.`,
+          );
+        }
+        dependencyCache = verification.cache_directory;
       }
       await engine.assertCapabilities();
       if (!(await engine.imageExists(image))) {
@@ -767,6 +881,7 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
         await engine.create({
           arguments: request.artifact.command.arguments,
           image,
+          ...(dependencyCache === undefined ? {} : { dependency_cache: dependencyCache }),
           input_path: root,
           limits: effectiveLimits,
           name,
@@ -834,6 +949,14 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
             primaryError = new RunnerError(
               'resource_termination',
               'Replay was terminated by an enforced resource limit.',
+            );
+          } else if (
+            dependencyCache !== undefined &&
+            outcome.state.exit_code === DEPENDENCY_INSTALL_FAILED_EXIT_CODE
+          ) {
+            primaryError = new RunnerError(
+              'dependency_install_failed',
+              installFailureMessage(execution.stderr.decoded_text),
             );
           }
         }

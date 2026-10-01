@@ -74,6 +74,11 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | npm reaches for a registry during install | Dependency install | `--offline`, a store that is complete before install starts, and a test with an unreachable registry | Containment |
 | npm writes into the store while installing | Dependency install | Log directory and update check redirected, so the store can be mounted read-only; a test shows nothing in the store changes | Containment |
 | A machine's npm configuration changes install behavior | Dependency install | Empty user and global configuration files are passed explicitly | Containment |
+| A package archive expands to far more data than it holds (decompression bomb) | Dependency install | The install runs in the in-memory workspace, which has a fixed size; exceeding it fails the install and affects nothing outside the container | Containment |
+| A failed install is mistaken for the artifact's command failing | Replay | A reserved exit status for any failure before the command starts, translated by the runner into `dependency_install_failed`; the command never runs after a failed install | Rejection |
+| An artifact's command exits with the reserved status to disguise itself | Replay | Reported as a failed install, which is an execution failure and never a match | Containment |
+| The command or a package writes to the prepared store | Replay | The store is mounted read-only; a container test shows a write fails | Containment |
+| Install output carries package-controlled text into a result | Replay | Only one npm error code matching a strict pattern is read from the output and repeated | Rejection |
 | A store is incomplete or damaged when replay starts | Replay | Check the whole store read-only first and report what is missing before any container starts | Rejection |
 | Two preparations write the same entry at once | Package store | Write under a temporary name and move into place; keep a valid entry rather than replacing it | Containment |
 | Platform fields in a lockfile try to steer what is downloaded | Dependency lockfile | Accept only short lists of plain platform words | Rejection |

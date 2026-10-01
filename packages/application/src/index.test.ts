@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import { parseAndValidateArtifact, serializeArtifact, sha256 } from '@proofissue/artifact-schema';
-import type { Runner } from '@proofissue/runner';
+import { RunnerError, type Runner } from '@proofissue/runner';
 
 import type { ReplayOperationResult } from './index.js';
 import {
@@ -465,6 +465,65 @@ describe('replay application service', () => {
       { kind: 'stderr_missing', message: 'Expected stderr text was not present.' },
     ]);
     expect(JSON.stringify(result)).not.toContain('different failure');
+  });
+
+  describe('prepared dependencies', () => {
+    const received = (): { requests: unknown[]; runner: Runner } => {
+      const requests: unknown[] = [];
+      const inner = runner();
+      return {
+        requests,
+        runner: {
+          run: async (request) => {
+            requests.push(request);
+            return await inner.run(request);
+          },
+        },
+      };
+    };
+
+    it('passes the prepared store to the runner when one is given', async () => {
+      const { requests, runner: spy } = received();
+
+      await createReplayApplicationService({ runner: spy }).replay({
+        artifact_path: 'tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue',
+        dependency_store: '/prepared/store',
+        mode: 'snapshot',
+      });
+
+      expect(requests).toHaveLength(1);
+      expect(requests[0]).toMatchObject({ dependency_store: '/prepared/store' });
+    });
+
+    it('sends no store when none is given', async () => {
+      const { requests, runner: spy } = received();
+
+      await createReplayApplicationService({ runner: spy }).replay({
+        artifact_path: 'tests/fixtures/artifacts/v1/valid/minimal.proofissue',
+        mode: 'snapshot',
+      });
+
+      expect(requests[0]).not.toHaveProperty('dependency_store');
+    });
+
+    it.each(['dependencies_not_prepared', 'dependency_install_failed'] as const)(
+      'reports %s as an execution failure, not as a reproduction result',
+      async (code) => {
+        const failing: Runner = {
+          run: () => Promise.reject(new RunnerError(code, 'A safe, fixed message.')),
+        };
+
+        const result = await createReplayApplicationService({ runner: failing }).replay({
+          artifact_path: 'tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue',
+          mode: 'snapshot',
+        });
+
+        expect(result.status).toBe('execution_failed');
+        expect(result.errors).toEqual([{ code, message: 'A safe, fixed message.' }]);
+        expect(result.evidence).toEqual([]);
+        expect(result.differences).toEqual([]);
+      },
+    );
   });
 
   it('validates before invoking the runner', async () => {

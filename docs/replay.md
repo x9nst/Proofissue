@@ -12,7 +12,7 @@ Replay validates an artifact, reconstructs only its declared workspace, runs one
 
 ## Snapshot Replay
 
-An artifact that carries `dependency` files (a `package.json` and `package-lock.json`) validates and inspects, but replay refuses it with `policy_rejection` for now: dependency preparation and offline installation are not implemented, and running it without its dependencies would give a misleading result. See `decisions/0002-dependency-strategy.md`.
+An artifact that carries `dependency` files (a `package.json` and `package-lock.json`) needs its packages prepared first, because replay never has a network. The runner takes the prepared store as an input, checks the whole store read-only before it creates anything, mounts it into the container read-only, and installs the locked packages inside the sandbox with `npm ci --offline --ignore-scripts` before it starts the command. Without a complete store the result is `execution_failed` with `dependencies_not_prepared`, and no container is created. The command line and the GitHub Action cannot supply a prepared store yet, so for now this works through the library only. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
 
 ```text
 proofissue replay failure.proofissue

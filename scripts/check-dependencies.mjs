@@ -29,7 +29,12 @@ const allowedDependencies = new Map([
   ],
   [
     '@proofissue/runner',
-    new Set(['@proofissue/artifact-schema', '@proofissue/contracts', '@proofissue/process-output']),
+    new Set([
+      '@proofissue/artifact-schema',
+      '@proofissue/contracts',
+      '@proofissue/dependencies',
+      '@proofissue/process-output',
+    ]),
   ],
   [
     '@proofissue/application',
@@ -90,9 +95,18 @@ for (const record of packageRecords) {
     const source = await readFile(sourcePath, 'utf8');
     const imports = source.matchAll(/(?:from\s+|import\s*)['"](@proofissue\/[^'"]+)['"]/g);
     for (const match of imports) {
-      const imported = match[1];
-      if (imported !== undefined && !record.internalDependencies.has(imported)) {
+      const specifier = match[1];
+      if (specifier === undefined) continue;
+      // A subpath import belongs to the package it is under.
+      const imported = specifier.split('/').slice(0, 2).join('/');
+      if (!record.internalDependencies.has(imported)) {
         errors.push(`${record.name} imports ${imported} without declaring it as a dependency.`);
+      }
+      const subpath = specifier.slice(imported.length);
+      if (subpath !== '' && (subpath !== '/testing' || !sourcePath.endsWith('.test.ts'))) {
+        errors.push(
+          `${record.name} imports ${specifier}; the only allowed subpath is /testing, and only from test files.`,
+        );
       }
     }
   }

@@ -13,6 +13,9 @@ export default defineConfig({
       '@proofissue/artifact-schema': workspacePath('./packages/artifact-schema/src/index.ts'),
       '@proofissue/cli': workspacePath('./packages/cli/src/index.ts'),
       '@proofissue/contracts': workspacePath('./packages/contracts/src/index.ts'),
+      '@proofissue/dependencies/testing': workspacePath(
+        './packages/dependencies/src/test-support.ts',
+      ),
       '@proofissue/dependencies': workspacePath('./packages/dependencies/src/index.ts'),
       '@proofissue/matcher': workspacePath('./packages/matcher/src/index.ts'),
       '@proofissue/process-output': workspacePath('./packages/process-output/src/index.ts'),
