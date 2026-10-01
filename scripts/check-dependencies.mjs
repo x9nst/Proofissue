@@ -24,6 +24,7 @@ const allowedDependencies = new Map([
       '@proofissue/artifact-schema',
       '@proofissue/contracts',
       '@proofissue/dependencies',
+      '@proofissue/output-rules',
       '@proofissue/process-output',
       '@proofissue/redactor',
     ]),

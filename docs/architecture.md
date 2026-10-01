@@ -70,6 +70,8 @@ Compares expected evidence with a bounded execution result and returns explicit 
 
 Runs one user-authorized host command, captures bounded output, reads explicitly selected regular files, gathers allowlisted environment metadata, invokes redaction, constructs the canonical artifact, and requests confirmation before serialization.
 
+For exact and normalized output expectations it derives the stored value from the recording itself, with the host's real project and temporary directories replaced by tokens, and refuses a value that is unsafe to store: a truncated, empty, oversized, or redacted exact stream, a likely secret that normalization reveals, or a path from this computer.
+
 It does not own YAML details or CLI presentation.
 
 ### `packages/runner`
@@ -116,7 +118,7 @@ Allowed dependencies point inward toward pure contracts and rules, then outward 
 cli ───────────────┐
 action ────────────┴→ application
 application ────────→ artifact-schema, contracts, dependencies, matcher, output-rules, process-output, recorder, redactor, runner
-recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
+recorder ───────────→ artifact-schema, contracts, dependencies, output-rules, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts
 output-rules ───────→ contracts

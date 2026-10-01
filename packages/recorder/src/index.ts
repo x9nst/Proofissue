@@ -20,9 +20,23 @@ import type {
 } from '@proofissue/artifact-schema';
 import type { BoundedStreamCapture } from '@proofissue/contracts';
 import { validateNpmLockfile } from '@proofissue/dependencies';
+import type { OutputPathContext } from '@proofissue/output-rules';
 import { BoundedOutputCollector } from '@proofissue/process-output';
 import { createRedactor, RedactionLimitError } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
+
+import { RecorderError } from './errors.js';
+import {
+  createRecordPathContexts,
+  deriveOutputExpectations,
+  requestedLiterals,
+  validateExpectationRequest,
+} from './expectations.js';
+import type { RecordOutputExpectation } from './expectations.js';
+
+export { RecorderError } from './errors.js';
+export type { RecorderErrorCode } from './errors.js';
+export type { RecordOutputExpectation } from './expectations.js';
 
 export const DEFAULT_RECORD_LIMITS: ArtifactLimitsV1 = Object.freeze({
   timeout_seconds: 60,
@@ -35,8 +49,9 @@ export const DEFAULT_RECORD_LIMITS: ArtifactLimitsV1 = Object.freeze({
 export interface RecordRequest {
   readonly arguments: readonly string[];
   readonly environment_image: string;
-  readonly expect_stderr: readonly string[];
-  readonly expect_stdout: readonly string[];
+  /** Output expectations; a plain string is a raw literal, as before. */
+  readonly expect_stderr: readonly RecordOutputExpectation[];
+  readonly expect_stdout: readonly RecordOutputExpectation[];
   /**
    * Also record `package.json` and `package-lock.json` from the project root, so replay can
    * later install exactly the locked packages. Off unless asked for: nothing beyond the
@@ -60,31 +75,18 @@ export interface RecordCapture {
   /** Present only when dependency files were recorded. */
   readonly dependencies?: DependencySummary;
   readonly duration_ms: number;
+  /**
+   * The directories the recording's output was normalized with. This holds host paths: it must
+   * never be serialized, logged, previewed, or placed in a result. The application uses it to
+   * check that the recording satisfies its own expectations.
+   */
+  readonly path_context: OutputPathContext;
   readonly stderr: BoundedStreamCapture;
   readonly stdout: BoundedStreamCapture;
 }
 
 export interface Recorder {
   capture(request: RecordRequest): Promise<RecordCapture>;
-}
-
-export type RecorderErrorCode =
-  | 'command_failed'
-  | 'invalid_request'
-  | 'invalid_utf8'
-  | 'redaction_failed'
-  | 'timeout'
-  | 'unsafe_file'
-  | 'unsafe_project';
-
-export class RecorderError extends Error {
-  readonly code: RecorderErrorCode;
-
-  constructor(code: RecorderErrorCode, message: string) {
-    super(message);
-    this.name = 'RecorderError';
-    this.code = code;
-  }
 }
 
 const isMissing = (error: unknown): boolean =>
@@ -426,23 +428,11 @@ const validateSelections = (request: RecordRequest): void => {
       'Select at least one reproduction file and at least one subject file.',
     );
   }
-  if (request.expect_stdout.length + request.expect_stderr.length === 0) {
-    throw new RecorderError(
-      'invalid_request',
-      'A failing recording needs an expected stdout or stderr literal.',
-    );
-  }
-  if (
-    request.expect_stdout.length > ARTIFACT_LIMITS.output_expectations ||
-    request.expect_stderr.length > ARTIFACT_LIMITS.output_expectations ||
-    request.expect_stdout.length + request.expect_stderr.length >
-      ARTIFACT_LIMITS.output_expectations ||
-    [...request.expect_stdout, ...request.expect_stderr].some(
-      (value) => value.length === 0 || value.length > 8192,
-    )
-  ) {
-    throw new RecorderError('invalid_request', 'Expected output literals exceed artifact limits.');
-  }
+  validateExpectationRequest(
+    request.expect_stdout,
+    request.expect_stderr,
+    ARTIFACT_LIMITS.output_expectations,
+  );
   if (!/^[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/u.test(request.environment_image)) {
     throw new RecorderError(
       'invalid_request',
@@ -568,26 +558,34 @@ export const captureRecording = async (
     );
   }
 
-  for (const expectation of [...request.expect_stdout, ...request.expect_stderr]) {
-    if (redactor.redact(expectation).findings.length > 0) {
+  for (const literal of [
+    ...requestedLiterals(request.expect_stdout),
+    ...requestedLiterals(request.expect_stderr),
+  ]) {
+    if (redactor.redact(literal).findings.length > 0) {
       throw new RecorderError(
         'redaction_failed',
         'An expected output literal contains a likely secret.',
       );
     }
   }
-  if (request.expect_stdout.some((value) => !stdout.text.includes(value))) {
-    throw new RecorderError(
-      'invalid_request',
-      'An expected stdout literal was not observed in retained output.',
-    );
-  }
-  if (request.expect_stderr.some((value) => !stderr.text.includes(value))) {
-    throw new RecorderError(
-      'invalid_request',
-      'An expected stderr literal was not observed in retained output.',
-    );
-  }
+  const contexts = await createRecordPathContexts({
+    declared_paths: redactedFiles.map((item) => item.file.path),
+    project_root: root,
+    requested_root: request.project_root,
+  });
+  const stdoutExpectations = deriveOutputExpectations(
+    { name: 'stdout', text: stdout.text, truncated: command.stdout.truncated },
+    request.expect_stdout,
+    contexts,
+    redactor,
+  );
+  const stderrExpectations = deriveOutputExpectations(
+    { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
+    request.expect_stderr,
+    contexts,
+    redactor,
+  );
 
   const version = process.versions.node.split('.')[0];
   if (version === undefined)
@@ -619,8 +617,8 @@ export const captureRecording = async (
     files: redactedFiles.map((item) => item.file),
     expect: {
       exit_code: command.exit_code,
-      stdout: request.expect_stdout.map((value) => ({ mode: 'contains', value })),
-      stderr: request.expect_stderr.map((value) => ({ mode: 'contains', value })),
+      stdout: stdoutExpectations,
+      stderr: stderrExpectations,
     },
     limits,
     redaction: { enabled: true, findings },
@@ -637,6 +635,7 @@ export const captureRecording = async (
     artifact,
     ...(dependencies === undefined ? {} : { dependencies }),
     duration_ms: command.duration_ms,
+    path_context: contexts.output,
     stdout: { ...command.stdout, decoded_text: stdout.text },
     stderr: { ...command.stderr, decoded_text: stderr.text },
   };

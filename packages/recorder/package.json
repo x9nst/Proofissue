@@ -18,6 +18,7 @@
     "@proofissue/artifact-schema": "0.0.0",
     "@proofissue/contracts": "0.0.0",
     "@proofissue/dependencies": "0.0.0",
+    "@proofissue/output-rules": "0.0.0",
     "@proofissue/process-output": "0.0.0",
     "@proofissue/redactor": "0.0.0"
   }
