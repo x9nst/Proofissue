@@ -36,7 +36,7 @@ It depends on no other ProofIssue package.
 
 Owns everything about a project's npm dependencies that happens before replay: validating the lockfile, choosing the packages for the replay platform, downloading them, and keeping verified tarballs in a local store. It is kept apart from the sandboxed runner on purpose, because it is the only part of ProofIssue that uses the network.
 
-Its parts are separated by what they may do. Lockfile validation and platform matching are pure: strings in, typed results out. The fetcher is the only code that makes a network request and is injectable, so everything above it is tested without a network. The store is the only code that writes files. Nothing in this package extracts or executes a package. The package is marked free of side effects so a consumer that needs only validation, such as the recorder and the GitHub Action, does not bundle the download code. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
+Its parts are separated by what they may do. Lockfile validation and platform matching are pure: strings in, typed results out. The fetcher is the only code that makes a network request and is injectable, so everything above it is tested without a network. The store is the only code that writes files. Nothing in this package extracts or executes a package. The package is marked free of side effects so a consumer that needs only validation, such as the recorder and the replay GitHub Action, does not bundle the download code. Only the application layer's prepare use case, and through it the command line and the separate prepare Action, reach the fetcher. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
 
 ### `packages/contracts`
 
@@ -77,6 +77,7 @@ Owns the product use cases shared by every delivery adapter:
 - record and write an artifact;
 - validate an artifact;
 - inspect an artifact;
+- prepare an artifact's locked npm packages into a verified local store, validating the artifact and lockfile before any request;
 - replay an artifact in snapshot or current-checkout mode;
 - apply local replay policy;
 - invoke matching after bounded execution;
@@ -93,7 +94,7 @@ Owns command-line parsing, prompts, human-readable formatting, structured JSON f
 
 ### `action`
 
-Adapts `packages/application` to GitHub Actions inputs, outputs, required-status failure reporting, and workflow summaries. It must not contain a second validator, replay coordinator, policy evaluator, runner, or matcher.
+Adapts `packages/application` to GitHub Actions inputs, outputs, required-status failure reporting, and workflow summaries. It has two entry points with separate bundles: the replay Action (`action/`) and the prepare Action (`action/prepare/`), so the step that uses the network is a distinct workflow step and the replay bundle carries no download code. It must not contain a second validator, replay coordinator, policy evaluator, runner, or matcher.
 
 ### `packages/report-ui`
 
@@ -106,7 +107,7 @@ Allowed dependencies point inward toward pure contracts and rules, then outward 
 ```text
 cli ───────────────┐
 action ────────────┴→ application
-application ────────→ artifact-schema, contracts, matcher, process-output, recorder, redactor, runner
+application ────────→ artifact-schema, contracts, dependencies, matcher, process-output, recorder, redactor, runner
 recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts

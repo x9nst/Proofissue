@@ -1,6 +1,6 @@
 # Dependencies
 
-**Status:** In progress. Lockfile validation, recording the manifest and lockfile, preparing packages into a local store, checking that a store is complete, the exact offline install command, and replay of an artifact with dependency files in the locked-down container are implemented. Preparation and replay are not reachable from a command or the GitHub Action yet, so for now this is a library capability.
+**Status:** In progress. Lockfile validation, recording the manifest and lockfile, preparing packages into a local store (`proofissue prepare` and the prepare Action), checking that a store is complete, the exact offline install command, and replay of an artifact with dependency files in the locked-down container (`--dependency-store`, `dependency-store`) are implemented. Trials on real projects are not done, so this is not yet described as supported.
 
 This document describes how ProofIssue will handle a project's npm dependencies, following [decision 0002](decisions/0002-dependency-strategy.md): a separate, explicit `prepare` step downloads and verifies the packages a lockfile names, and replay then runs offline. It is extended as each step lands.
 
@@ -126,7 +126,16 @@ Container tests cover: an install from the read-only store that the command can 
 - It does not decide a package is safe. A package with a correct hash can still be malicious or compromised.
 - It does not extract tarballs. Unpacking untrusted archives belongs inside the replay sandbox.
 - It does not run install scripts or build native addons.
-- It is not yet reachable from a command, the GitHub Action, or the application layer, and the sandbox does not install from the store yet.
+- It never chooses the store location. That comes only from the command line or the workflow, never from the artifact.
+
+## Commands
+
+The application layer's `prepare` use case is the one implementation behind both entry points. In order, it checks that a store directory was given, reads and validates the artifact, finds the lockfile, validates the lockfile, opens the store, and only then downloads. Nothing is fetched and no directory is created before the artifact and its lockfile are both valid.
+
+- Command line: `proofissue prepare <artifact> --dependency-store <directory>`, then `proofissue replay <artifact> --dependency-store <directory>`. See `cli.md`.
+- GitHub Action: `action/prepare`, then the replay Action with the same `dependency-store`. See `github-action.md`.
+
+The result has one of five statuses: `prepared`, `not_required` (the artifact has no dependency files; nothing was fetched and no store was created), `invalid_input` (no store directory), `invalid_artifact` (the artifact or its lockfile was rejected; the error code is `lockfile_rejected` for the lockfile), and `execution_failed` (`dependency_download_failed` with the download error as `details.reason`, `dependency_store_unusable`, or `internal_error`). A prepared result carries counts only. See `result-contract.md`.
 
 ## Early observations
 

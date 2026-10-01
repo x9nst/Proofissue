@@ -103,6 +103,19 @@ Default engine security profiles remain enabled. Weakening a profile to make an 
 
 The runner never silently enables networking, privileged mode, root execution, added capabilities, writable host mounts, or larger resource limits.
 
+## Dependency Preparation
+
+Replay never has a network. An artifact with dependency files needs its npm packages first, and one explicit step provides them: `proofissue prepare` on the command line, or the separate `action/prepare` step in a workflow.
+
+- **Where it runs.** On the host, outside the sandbox, as the same user who runs the command. It is a visible, deliberate step with its own `uses:` line or command; replay never starts it, and the network is never silently enabled.
+- **What may use the network.** Only preparation, and only to fetch the exact `https://registry.npmjs.org` tarballs the artifact's lockfile names. No credentials are sent, redirects are refused, encoded responses are refused, and size and time limits apply. Nothing is extracted or executed, and install scripts never run. The replay Action's bundle is tested to carry no download code.
+- **Order.** Artifact validation, then lockfile validation, then opening or creating the store, then downloads. A hostile artifact or lockfile causes no request and no directory.
+- **Where it writes.** The store path comes only from the user or the workflow, never from the artifact, and has no default. The store is a directory of hash-named entries; a link or directory planted in an entry's place is never followed.
+- **What replay does with it.** Checks the whole store, mounts it read-only, and installs from it offline with `--ignore-scripts`. A dedicated directory should be used: a store pointed at a real npm cache would be mounted into the sandbox.
+- **Results.** A failed or missing preparation is `execution_failed` (`dependency_download_failed`, `dependency_store_unusable`, `dependencies_not_prepared`) and is never evidence about the original failure. Results and summaries carry counts and bounded codes, never package names beyond a validated location, tarball paths, response bodies, or the store path.
+
+A package with a correct hash can still be malicious. Its code runs only inside the replay sandbox. See `dependencies.md` and `threat-model.md`.
+
 ## Image Policy
 
 Version 1 accepts only a known Node.js image digest approved by runner policy. An artifact-provided digest is a request, not authorization.

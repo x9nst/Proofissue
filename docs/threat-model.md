@@ -84,6 +84,11 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Platform fields in a lockfile try to steer what is downloaded | Dependency lockfile | Accept only short lists of plain platform words | Rejection |
 | Lockfile repeats a key so two readers see different entries | Dependency lockfile | Reject duplicate keys after decoding escapes | Rejection |
 | Lockfile of enormous size, entry count, or nesting | Dependency lockfile | Bound bytes and entries, scan iteratively, and test the time budget | Rejection |
+| A hostile artifact is given to `prepare` | Dependency preparation | Validate the artifact and then its lockfile before any request or any directory is created; rejected input leaves the store untouched | Rejection |
+| An artifact tries to choose where the store is written | Dependency preparation | No artifact field influences the path; it comes only from the command line or workflow input and is never defaulted | Containment |
+| The replay Action accidentally gains download code | Action bundle | Prepare is a separate Action and bundle; a test fails if the replay bundle contains download code, and a second test shows the prepare bundle does, so the first cannot pass vacuously | Containment |
+| A failed preparation is mistaken for a replay result | Dependency preparation | Preparation is its own operation; replay without a prepared store reports `dependencies_not_prepared`, an execution failure | Rejection |
+| An untrusted pull request triggers downloads in CI | Dependency preparation | Public registry only, hash-pinned tarballs, nothing executed or extracted, store kept under the runner's temporary directory, no token needed | Containment |
 | Artifact requests arbitrary or mutable image | Image policy | Reject before image acquisition or container creation | Rejection |
 | Approved image is absent | Image policy | Return `execution_failed`; never auto-pull during replay | Rejection |
 | Approved image disappears between the presence check and container creation | Image policy | Create the container with image pulling disabled so creation fails instead of fetching | Rejection |
