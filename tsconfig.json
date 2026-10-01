@@ -13,6 +13,7 @@
     { "path": "packages/application" },
     { "path": "packages/cli" },
     { "path": "packages/report-ui" },
-    { "path": "action" }
+    { "path": "action" },
+    { "path": "benchmarks/real-projects" }
   ]
 }

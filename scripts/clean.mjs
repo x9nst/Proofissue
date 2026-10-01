@@ -13,4 +13,8 @@ for (const directory of packageDirectories) {
 }
 
 await rm(path.join(workspaceRoot, 'action', 'lib'), { force: true, recursive: true });
+await rm(path.join(workspaceRoot, 'benchmarks', 'real-projects', 'dist'), {
+  force: true,
+  recursive: true,
+});
 await rm(path.join(workspaceRoot, 'coverage'), { force: true, recursive: true });

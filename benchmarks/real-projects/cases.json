@@ -1,0 +1,112 @@
+{
+  "manifest_version": 1,
+  "image": "node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+  "cases": [
+    {
+      "id": "N1",
+      "sets": ["pilot"],
+      "title": "addressparser joins a quoted local part to the domain",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "links": [
+        "https://github.com/nodemailer/nodemailer/commit/f2096c51b92a69ecfbcc15884c28cb2c2f00b826"
+      ],
+      "pre_fix_commit": "81de9ebaeb84d5dd87a16707fd236d2671cb6cc6",
+      "fix_commit": "f2096c51b92a69ecfbcc15884c28cb2c2f00b826",
+      "dependencies": true,
+      "reproduction_files": ["test/addressparser/addressparser-test.js"],
+      "subject_files": ["lib/addressparser/index.js"],
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=should handle quoted usernames",
+        "test/addressparser/addressparser-test.js"
+      ],
+      "expected_exit_code": 1,
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "Expected values to be strictly deep-equal"
+        }
+      ],
+      "notes": "node:test's spec reporter writes failures to stdout. The name pattern also skips the timing-sensitive deep-nesting tests in the same file."
+    },
+    {
+      "id": "T1",
+      "sets": ["pilot"],
+      "title": "first filter returns nothing for numbers",
+      "repository": "https://github.com/twigjs/twig.js.git",
+      "links": ["https://github.com/twigjs/twig.js/pull/966"],
+      "pre_fix_commit": "392dc952fb5c85dec7c5063b054ced62d5a75102",
+      "fix_commit": "eb253e105926e6e934f6b58b654d0fef9875f18d",
+      "dependencies": true,
+      "reproduction_files": ["test/test.filters.js"],
+      "subject_files": [
+        "src/twig.js",
+        "src/twig.factory.js",
+        "src/twig.core.js",
+        "src/twig.compiler.js",
+        "src/twig.expression.js",
+        "src/twig.filters.js",
+        "src/twig.functions.js",
+        "src/twig.lib.js",
+        "src/twig.loader.ajax.js",
+        "src/twig.loader.fs.js",
+        "src/twig.logic.js",
+        "src/twig.parser.source.js",
+        "src/twig.parser.twig.js",
+        "src/twig.path.js",
+        "src/twig.tests.js",
+        "src/twig.async.js",
+        "src/twig.exports.js",
+        "src/twig.expression.operator.js"
+      ],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--require",
+        "should",
+        "--grep",
+        "should return the first digit of numbers",
+        "test/test.filters.js"
+      ],
+      "expected_exit_code": 1,
+      "expectations": [
+        { "stream": "stdout", "mode": "contains", "value": "expected '' to be '1'" },
+        { "stream": "stdout", "mode": "contains", "value": "1 failing" }
+      ],
+      "notes": "FIX is the merge commit of PR #966. require('..') resolves src/twig.js through package.json, which --dependencies records. All 18 src files are subjects because twig.js loads them together. 355 locked packages: the heaviest pilot install."
+    },
+    {
+      "id": "M3",
+      "sets": ["pilot"],
+      "title": "SPF %{d} macro expands to the sender domain instead of the evaluated domain",
+      "repository": "https://github.com/postalsys/mailauth.git",
+      "links": [
+        "https://github.com/postalsys/mailauth/issues/125",
+        "https://github.com/postalsys/mailauth/pull/126"
+      ],
+      "pre_fix_commit": "dd6bdc22e5ce9e940132d385198f67bf25a5cb66",
+      "fix_commit": "53c45220a1af41febb5b901c251ed4cc66de511e",
+      "dependencies": true,
+      "reproduction_files": ["test/spf/macro-test.js"],
+      "subject_files": ["lib/spf/macro.js"],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--grep",
+        "using the currently evaluated domain",
+        "test/spf/macro-test.js"
+      ],
+      "expected_exit_code": 1,
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "expected 'email.example.com' to equal 'included.example.net'"
+        }
+      ],
+      "notes": "The fix also changed lib/spf/spf-verify.js, which this test does not load."
+    }
+  ]
+}

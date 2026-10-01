@@ -13,6 +13,7 @@
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
 - `decisions/0002-dependency-strategy.md` compares the options for dependency handling in the initial supported Node.js workflow and records the accepted choice: a separate explicit prepare step, then offline replay.
 - `decisions/0003-output-matching-modes.md` proposes exact, normalized, and bounded regular-expression output matching; the exact and normalized parts are implemented with assumed defaults awaiting maintainer sign-off, and regular expressions are the next step.
+- `real-project-evaluation.md` defines the real-project trial method, the fixed replay budget, the outcome classes, the pilot cases, and where results go. The harness is in `../benchmarks/real-projects`; the three-case pilot has run once and all three cases were confirmed.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.
 - `maintainer-participant-packet.md` is the answer-free participant research packet.
