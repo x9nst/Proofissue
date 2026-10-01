@@ -14,7 +14,7 @@
  */
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -104,7 +104,8 @@ interface FixtureOptions {
 }
 
 const fixture = async (options: FixtureOptions = {}): Promise<Fixture> => {
-  const root = await mkdtemp(path.join(tmpdir(), 'proofissue-npm-'));
+  // Resolved, because the store reports its real path and a CI temp directory may be a short name.
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), 'proofissue-npm-')));
   roots.push(root);
   const project = path.join(root, 'outer', 'project');
   const outside = path.join(root, 'outside');
