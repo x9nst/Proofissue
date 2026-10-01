@@ -1,11 +1,16 @@
 /**
- * A local, content-addressed store of verified package tarballs.
+ * A local, content-addressed store of verified package tarballs, laid out as an npm cache.
  *
- * File names are derived only from the SHA-512 digest, so nothing a lockfile says can
- * influence a path. A download is written under a temporary name, hashed as it arrives,
- * and renamed into place only if the digest matches, so a partial or mismatched download
- * never becomes a valid entry. Existing entries are hashed again before they are trusted.
- * Tarballs are stored as received and are never extracted here.
+ * Tarballs live at `_cacache/content-v2/sha512/<aa>/<bb>/<rest>`, where the name is the
+ * SHA-512 digest in hex. That is exactly where npm looks for a package it already has, so
+ * the store directory can be handed to `npm ci --offline --cache <store>` unchanged and no
+ * copy is needed. File names are derived only from the digest, so nothing a lockfile says can
+ * influence a path.
+ *
+ * A download is written under a temporary name, hashed as it arrives, and moved into place
+ * only if the digest matches, so a partial or mismatched download never becomes a valid
+ * entry. Existing entries are hashed again before they are trusted. Tarballs are stored as
+ * received and are never extracted here.
  */
 import { createHash, randomBytes } from 'node:crypto';
 import { constants, createReadStream } from 'node:fs';
@@ -27,10 +32,10 @@ export class StoreError extends Error {
 class SourceFailure extends Error {
   readonly reason: unknown;
 
-  constructor(cause: unknown) {
+  constructor(reason: unknown) {
     super('A package download failed.');
     this.name = 'SourceFailure';
-    this.reason = cause;
+    this.reason = reason;
   }
 }
 
@@ -42,21 +47,26 @@ export interface StoredPackage {
   readonly integrity: string;
 }
 
-export interface PackageStore {
-  /** The resolved directory holding the entries. */
+/** What a consumer that only reads the store needs. */
+export interface ReadablePackageStore {
+  /** The resolved directory to hand to npm as its cache. */
   readonly directory: string;
+  /** The entry for `integrity` if one exists and still hashes correctly, else undefined. */
+  lookup(integrity: string): Promise<StoredPackage | undefined>;
+}
+
+export interface PackageStore extends ReadablePackageStore {
   /**
    * Stream a download into the store. Resolves only if the bytes hash to `integrity`;
    * otherwise nothing is left behind.
    */
   add(integrity: string, chunks: AsyncIterable<Uint8Array>): Promise<StoredPackage>;
-  /** The entry for `integrity` if one exists and still hashes correctly, else undefined. */
-  lookup(integrity: string): Promise<StoredPackage | undefined>;
 }
 
 const INTEGRITY = /^sha512-([A-Za-z0-9+/]{86}==)$/u;
-const ENTRY_DIRECTORY = 'v1';
 const SWAP_ATTEMPTS = 8;
+const CONTENT_SEGMENTS = ['_cacache', 'content-v2', 'sha512'] as const;
+const TEMPORARY_SEGMENTS = ['_cacache', 'tmp'] as const;
 
 const digestOf = (integrity: string): string => {
   const match = INTEGRITY.exec(integrity);
@@ -84,53 +94,89 @@ const hashFile = async (file: string): Promise<{ bytes: number; digest: string }
   return { bytes, digest: hash.digest('hex') };
 };
 
-export const openPackageStore = async (requestedDirectory: string): Promise<PackageStore> => {
-  const requested = path.resolve(requestedDirectory);
-  try {
-    const existing = await lstat(requested).catch((error: unknown) => {
-      if (missing(error)) return undefined;
-      throw error;
-    });
-    if (existing !== undefined && (!existing.isDirectory() || existing.isSymbolicLink())) {
-      throw new StoreError('store_unsafe', 'The store location must be a directory, not a link.');
-    }
-    await mkdir(requested, { recursive: true, mode: 0o755 });
-  } catch (error: unknown) {
-    if (error instanceof StoreError) throw error;
-    throw new StoreError('store_write_failed', 'The store directory could not be prepared.');
-  }
-
-  let root: string;
-  try {
-    root = await realpath(requested);
-    const entries = path.join(root, ENTRY_DIRECTORY);
-    const inner = await lstat(entries).catch((error: unknown) => {
-      if (missing(error)) return undefined;
-      throw error;
-    });
-    if (inner !== undefined && (!inner.isDirectory() || inner.isSymbolicLink())) {
+/**
+ * Makes sure `directory` is a real directory and not a link, creating it when allowed.
+ * Returns false only when it is missing and creation was not allowed.
+ */
+const ensureDirectory = async (directory: string, create: boolean): Promise<boolean> => {
+  const existing = await lstat(directory).catch((error: unknown) => {
+    if (missing(error)) return undefined;
+    throw new StoreError('store_write_failed', 'The store directory could not be inspected.');
+  });
+  if (existing !== undefined) {
+    if (!existing.isDirectory() || existing.isSymbolicLink()) {
       throw new StoreError('store_unsafe', 'The store contains an unexpected entry.');
     }
-    await mkdir(entries, { mode: 0o755, recursive: true });
-  } catch (error: unknown) {
-    if (error instanceof StoreError) throw error;
-    throw new StoreError('store_write_failed', 'The store directory could not be prepared.');
+    return true;
   }
+  if (!create) return false;
+  try {
+    await mkdir(directory, { mode: 0o755 });
+  } catch {
+    // Another preparation may have created it a moment ago; that is fine if it is a directory.
+    if (!(await ensureDirectory(directory, false))) {
+      throw new StoreError('store_write_failed', 'The store directory could not be prepared.');
+    }
+  }
+  return true;
+};
 
-  const entriesDirectory = path.join(root, ENTRY_DIRECTORY);
-  const finalPath = (hex: string): string => path.join(entriesDirectory, `sha512-${hex}.tgz`);
+const resolveRoot = async (requestedDirectory: string, create: boolean): Promise<string> => {
+  const requested = path.resolve(requestedDirectory);
+  const existing = await lstat(requested).catch((error: unknown) => {
+    if (missing(error)) return undefined;
+    throw new StoreError('store_write_failed', 'The store directory could not be inspected.');
+  });
+  if (existing !== undefined && (!existing.isDirectory() || existing.isSymbolicLink())) {
+    throw new StoreError('store_unsafe', 'The store location must be a directory, not a link.');
+  }
+  if (existing === undefined) {
+    if (!create) throw new StoreError('store_unsafe', 'The store directory does not exist.');
+    try {
+      await mkdir(requested, { recursive: true, mode: 0o755 });
+    } catch {
+      throw new StoreError('store_write_failed', 'The store directory could not be prepared.');
+    }
+  }
+  try {
+    return await realpath(requested);
+  } catch {
+    throw new StoreError('store_write_failed', 'The store directory could not be resolved.');
+  }
+};
+
+const openStore = async (
+  requestedDirectory: string,
+  create: boolean,
+): Promise<{ directory: string; lookup: ReadablePackageStore['lookup']; write: boolean }> => {
+  const root = await resolveRoot(requestedDirectory, create);
+  const contentDirectory = path.join(root, ...CONTENT_SEGMENTS);
+  const temporaryDirectory = path.join(root, ...TEMPORARY_SEGMENTS);
+
+  // Create or check each level from the top, never following a link.
+  let walked = root;
+  for (const segment of [...CONTENT_SEGMENTS]) {
+    walked = path.join(walked, segment);
+    if (!(await ensureDirectory(walked, create))) {
+      throw new StoreError('store_unsafe', 'The directory is not a package store.');
+    }
+  }
+  if (create) await ensureDirectory(temporaryDirectory, true);
+
+  const finalPath = (hex: string): string =>
+    path.join(contentDirectory, hex.slice(0, 2), hex.slice(2, 4), hex.slice(4));
 
   const lookup = async (integrity: string): Promise<StoredPackage | undefined> => {
     const hex = digestOf(integrity);
     const file = finalPath(hex);
-    const stat = await lstat(file).catch((error: unknown) => {
-      if (missing(error)) return undefined;
-      throw new StoreError('store_write_failed', 'A store entry could not be inspected.');
-    });
-    if (stat === undefined) return undefined;
-    // A link or anything but a plain file is never trusted; the caller replaces it.
-    if (!stat.isFile() || stat.isSymbolicLink()) return undefined;
     try {
+      // A link anywhere on the way, or anything but a plain file, is never trusted.
+      const real = await realpath(file);
+      const sameLocation =
+        process.platform === 'win32' ? real.toLowerCase() === file.toLowerCase() : real === file;
+      if (!sameLocation) return undefined;
+      const stat = await lstat(file);
+      if (!stat.isFile() || stat.isSymbolicLink()) return undefined;
       const actual = await hashFile(file);
       return actual.digest === hex ? { bytes: actual.bytes, file, integrity } : undefined;
     } catch {
@@ -138,13 +184,35 @@ export const openPackageStore = async (requestedDirectory: string): Promise<Pack
     }
   };
 
+  return { directory: root, lookup, write: create };
+};
+
+/** Opens a store for reading only. Nothing is created, so a missing store is an error. */
+export const openExistingPackageStore = async (
+  requestedDirectory: string,
+): Promise<ReadablePackageStore> => {
+  const { directory, lookup } = await openStore(requestedDirectory, false);
+  return { directory, lookup };
+};
+
+/** Opens a store for reading and writing, creating it if it does not exist. */
+export const openPackageStore = async (requestedDirectory: string): Promise<PackageStore> => {
+  const { directory, lookup } = await openStore(requestedDirectory, true);
+  const contentDirectory = path.join(directory, ...CONTENT_SEGMENTS);
+  const temporaryDirectory = path.join(directory, ...TEMPORARY_SEGMENTS);
+
   const add = async (
     integrity: string,
     chunks: AsyncIterable<Uint8Array>,
   ): Promise<StoredPackage> => {
     const hex = digestOf(integrity);
-    const file = finalPath(hex);
-    const temporary = path.join(entriesDirectory, `.tmp-${randomBytes(12).toString('hex')}`);
+    const first = path.join(contentDirectory, hex.slice(0, 2));
+    const second = path.join(first, hex.slice(2, 4));
+    const file = path.join(second, hex.slice(4));
+    const temporary = path.join(
+      temporaryDirectory,
+      `proofissue-${randomBytes(12).toString('hex')}`,
+    );
     const hash = createHash('sha512');
     const iterator = chunks[Symbol.asyncIterator]();
     let bytes = 0;
@@ -184,6 +252,8 @@ export const openPackageStore = async (requestedDirectory: string): Promise<Pack
       // Readable by the unprivileged user the replay container runs as; the contents are
       // public tarballs.
       await chmod(temporary, 0o444);
+      await ensureDirectory(first, true);
+      await ensureDirectory(second, true);
 
       // Another writer may have finished the same entry, and may be reading it right now.
       // A valid entry is kept as it is. Only an invalid one (corrupt, or a link someone
@@ -218,5 +288,5 @@ export const openPackageStore = async (requestedDirectory: string): Promise<Pack
     }
   };
 
-  return { add, directory: root, lookup };
+  return { add, directory, lookup };
 };

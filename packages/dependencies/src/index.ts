@@ -25,5 +25,9 @@ export type {
   PrepareResult,
   PreparedPackage,
 } from './prepare.js';
-export { openPackageStore, StoreError } from './store.js';
-export type { PackageStore, StoreErrorCode, StoredPackage } from './store.js';
+export { openExistingPackageStore, openPackageStore, StoreError } from './store.js';
+export type { PackageStore, ReadablePackageStore, StoreErrorCode, StoredPackage } from './store.js';
+export { verifyPrepared } from './verify.js';
+export type { MissingPackage, VerifyPreparedResult } from './verify.js';
+export { offlineInstallArguments } from './install.js';
+export type { OfflineInstallPaths } from './install.js';

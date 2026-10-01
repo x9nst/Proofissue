@@ -1,6 +1,6 @@
 # Dependencies
 
-**Status:** In progress. Lockfile validation, recording the manifest and lockfile, and preparing packages into a local store are implemented as a library. No command runs preparation yet, and installing from the store inside the replay container is not implemented, so an artifact with dependency files cannot be replayed yet.
+**Status:** In progress. Lockfile validation, recording the manifest and lockfile, preparing packages into a local store, checking that a store is complete, and the exact offline install command are implemented as a library and verified against real npm on the host. No command runs preparation yet, and installing inside the replay container is not implemented, so an artifact with dependency files cannot be replayed yet.
 
 This document describes how ProofIssue will handle a project's npm dependencies, following [decision 0002](decisions/0002-dependency-strategy.md): a separate, explicit `prepare` step downloads and verifies the packages a lockfile names, and replay then runs offline. It is extended as each step lands.
 
@@ -75,18 +75,44 @@ Nothing is extracted or executed, and install scripts are never run.
 
 ### The store
 
-The store is a directory of tarballs named only by their digest, so nothing a lockfile says can influence a path. A download is written under a temporary name and moved into place only after its hash matches, so a partial or wrong download never becomes an entry. An entry already present is hashed again before it is trusted, a corrupt one is replaced, and a link or directory planted in its place is never followed or deleted. Entries are readable by the unprivileged user the replay container runs as. Several preparations can share a store at once.
+The store is laid out as an npm cache: each tarball is at `_cacache/content-v2/sha512/<aa>/<bb>/<rest>`, named by the hex of its SHA-512 digest. That is where npm looks for a package it already has, so the store directory can be given to `npm ci --offline --cache <store>` as it is, with no copy and no conversion. Nothing a lockfile says can influence a path. A download is written under a temporary name and moved into place only after its hash matches, so a partial or wrong download never becomes an entry. An entry already present is hashed again before it is trusted, a corrupt one is replaced, and a link or directory planted in its place is never followed or deleted. Entries are readable by the unprivileged user the replay container runs as. Several preparations can share a store at once.
 
 ### Results
 
 The result is one of `prepared`, `invalid_lockfile`, or `failed`. A prepared result lists each package with its store file, size, and whether it was downloaded or reused, and counts the packages skipped for the platform. A failed result lists typed errors (`integrity_mismatch`, `http_status` with the status code, `redirect_refused`, `content_encoding_refused`, `size_limit_exceeded`, `total_size_limit_exceeded`, `timeout`, `cancelled`, `network_error`, `url_refused`, `store_unsafe`, `store_write_failed`). Errors never include response bodies.
+
+### Checking a store before replay
+
+`verifyPrepared(lockfile, storeDirectory)` answers one question without changing anything: does this store hold every package the lockfile needs for the replay platform, with contents that still match their hashes? It returns `ready` with the directory to use as the cache, `not_prepared` with the missing packages by location (at most fifty listed, all counted), `invalid_lockfile`, or `store_unusable`. It never creates, repairs, or downloads anything, and a store directory that does not exist is reported and not made.
+
+### Installing from the store
+
+`offlineInstallArguments` is the single definition of the install command. Replay will run it inside the sandbox, and the tests run the same arguments on the host:
+
+```text
+npm ci --offline --ignore-scripts --no-audit --no-fund --no-progress --no-update-notifier
+       --cache <store> --logs-dir <writable> --userconfig <empty file> --globalconfig <another empty file>
+```
+
+Each flag has a reason, written beside it in the code. The two that carry the security weight are `--offline`, which makes npm read only its cache, and `--ignore-scripts`, which stops any package, and the project itself, running code during install. The two configuration files must be different files: npm refuses to start if one file is loaded as both.
+
+The design depends on facts about npm that the type system cannot check, so real npm tests (`npm-offline.test.ts`) run on every change against a registry address that nothing listens on:
+
+- npm installs from a cache that has only content files, with no index, and the installed package loads.
+- A run writes nothing into the store, so the store can be mounted read-only.
+- A package missing from the store fails at once with `ENOTCACHED` and installs nothing.
+- A store entry whose bytes were changed is refused and nothing is installed.
+- A lockfile that disagrees with `package.json` is refused, which also covers the cross-check that lockfile validation does not do.
+- A package's `postinstall` script does not run with the flag. A control run without the flag shows the same script running, so the test would notice if the flag stopped working.
+- The project's own `preinstall`, `postinstall`, and `prepare` scripts do not run.
+- Archive entries that try to leave the package directory with `../` write nothing outside it. A symbolic-link entry and a hard-link entry write nothing outside it either; the symbolic-link case needs a host that can create links and is also covered by the Linux container tests.
 
 ### What preparation does not do
 
 - It does not decide a package is safe. A package with a correct hash can still be malicious or compromised.
 - It does not extract tarballs. Unpacking untrusted archives belongs inside the replay sandbox.
 - It does not run install scripts or build native addons.
-- It is not yet reachable from a command, the GitHub Action, or the application layer.
+- It is not yet reachable from a command, the GitHub Action, or the application layer, and the sandbox does not install from the store yet.
 
 ## Early observations
 
