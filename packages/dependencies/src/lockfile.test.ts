@@ -537,3 +537,51 @@ describe('performance on adversarial input', () => {
     expect(performance.now() - started).toBeLessThan(2000);
   });
 });
+
+describe('platform restrictions', () => {
+  const withEntry = (extra: Entry): ReturnType<typeof validateNpmLockfile> =>
+    validateNpmLockfile(lockfile({ 'node_modules/a': entry('a', '1.0.0', extra) }));
+
+  it('passes os, cpu, and libc through unchanged', () => {
+    const result = withEntry({ os: ['linux'], cpu: ['x64', '!ia32'], libc: ['glibc'] });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.packages[0]).toMatchObject({
+        cpu: ['x64', '!ia32'],
+        libc: ['glibc'],
+        os: ['linux'],
+      });
+    }
+  });
+
+  it('leaves the fields out entirely when the entry has none', () => {
+    const result = withEntry({});
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.packages[0]).not.toHaveProperty('os');
+      expect(result.packages[0]).not.toHaveProperty('cpu');
+      expect(result.packages[0]).not.toHaveProperty('libc');
+    }
+  });
+
+  it.each([
+    ['a string instead of a list', { os: 'linux' }],
+    ['an object', { os: { linux: true } }],
+    ['a number', { cpu: 5 }],
+    ['null', { libc: null }],
+    ['a non-string item', { os: ['linux', 5] }],
+    ['an item with a slash', { os: ['linux/../x'] }],
+    ['an item with whitespace', { os: ['lin ux'] }],
+    ['an upper-case item', { cpu: ['X64'] }],
+    ['an empty item', { cpu: [''] }],
+    ['an over-long item', { os: ['a'.repeat(33)] }],
+    ['too many items', { os: Array.from({ length: 33 }, () => 'linux') }],
+    ['a nested list', { os: [['linux']] }],
+  ])('rejects %s', (_name, extra) => {
+    expect(errorCodes(lockfile({ 'node_modules/a': entry('a', '1.0.0', extra) }))).toEqual([
+      'invalid_structure',
+    ]);
+  });
+});

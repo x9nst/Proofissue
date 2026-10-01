@@ -34,7 +34,9 @@ It depends on no other ProofIssue package.
 
 ### `packages/dependencies`
 
-Owns validation of a project's npm lockfile before any package is fetched from it. It is pure: strings in, typed results out, with no filesystem, network, or process access, so it can be tested and reasoned about as a trust boundary. Later preparation work that downloads packages belongs here too, kept apart from the sandboxed runner. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
+Owns everything about a project's npm dependencies that happens before replay: validating the lockfile, choosing the packages for the replay platform, downloading them, and keeping verified tarballs in a local store. It is kept apart from the sandboxed runner on purpose, because it is the only part of ProofIssue that uses the network.
+
+Its parts are separated by what they may do. Lockfile validation and platform matching are pure: strings in, typed results out. The fetcher is the only code that makes a network request and is injectable, so everything above it is tested without a network. The store is the only code that writes files. Nothing in this package extracts or executes a package. The package is marked free of side effects so a consumer that needs only validation, such as the recorder and the GitHub Action, does not bundle the download code. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
 
 ### `packages/contracts`
 

@@ -61,6 +61,15 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Lockfile location escapes `node_modules` (`../`, backslashes, absolute paths, `__proto__`) | Dependency lockfile | Accept only chains of `node_modules/<valid name>` | Rejection |
 | Recording captures a lockfile that names a private registry or carries credentials | Recorder | Validate the lockfile before the command runs; any non-public-registry source is rejected | Rejection |
 | A secret in package.json or the lockfile is redacted, silently breaking the lockfile's hashes | Recorder | Refuse to record instead of editing a dependency file | Rejection |
+| Registry, or anything in its path, serves bytes that differ from the lockfile's hash | Package download | Hash every download and keep it only if it matches; a mismatch leaves nothing in the store | Rejection |
+| Registry redirects a download to another host | Package download | Never follow redirects | Rejection |
+| Server sends a compressed or transformed body | Package download | Request identity encoding and refuse anything else, because hashes cover exact bytes | Rejection |
+| Endless, enormous, or stalled download | Package download | Per-package and total byte limits, a declared-length check, and per-download and overall time limits | Containment |
+| Lockfile names thousands of downloads or many at once | Package download | Entry-count limit at validation and a hard concurrency cap | Containment |
+| One failure leaves other downloads running or partial files behind | Package download | The first failure stops all work and removes temporary files | Containment |
+| Store entry is corrupted, replaced by a link, or replaced by a directory | Package store | Hash again before trusting; never follow a link; never delete a directory | Rejection |
+| Two preparations write the same entry at once | Package store | Write under a temporary name and move into place; keep a valid entry rather than replacing it | Containment |
+| Platform fields in a lockfile try to steer what is downloaded | Dependency lockfile | Accept only short lists of plain platform words | Rejection |
 | Lockfile repeats a key so two readers see different entries | Dependency lockfile | Reject duplicate keys after decoding escapes | Rejection |
 | Lockfile of enormous size, entry count, or nesting | Dependency lockfile | Bound bytes and entries, scan iteratively, and test the time budget | Rejection |
 | Artifact requests arbitrary or mutable image | Image policy | Reject before image acquisition or container creation | Rejection |

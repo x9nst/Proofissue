@@ -35,6 +35,17 @@ const runBundledAction = async (
   });
 
 describe('bundled GitHub Action', () => {
+  it('carries no package download or store code', async () => {
+    // The Action only replays. Downloading packages is a separate, explicit step, and until
+    // the Action intentionally offers it, an accidental import must not add network access.
+    // Remove or update this test in the change that adds that step to the Action.
+    const bundle = await readFile('action/dist/index.js', 'utf8');
+
+    for (const marker of ['proofissue-prepare', 'redirect_refused', 'integrity_mismatch']) {
+      expect(bundle, marker).not.toContain(marker);
+    }
+  });
+
   it('runs without installed workspace modules and safely reports an invalid artifact', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'proofissue-action-bundle-'));
     const bundlePath = path.join(root, 'proofissue-action.mjs');
