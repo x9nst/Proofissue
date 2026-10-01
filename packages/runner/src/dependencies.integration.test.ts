@@ -193,6 +193,27 @@ integration('replay with prepared dependencies in the real container', () => {
     expect(result.effective_limits.writable_workspace_mb).toBe(256);
   }, 120_000);
 
+  it('gives the command the same writable home directory after the install', async () => {
+    const { artifact, store } = await project(
+      `import { writeFileSync } from 'node:fs';
+       import { homedir } from 'node:os';
+       import { join } from 'node:path';
+       writeFileSync(join(homedir(), '.proofissue-probe'), 'x');
+       process.stderr.write('proofissue-marker:' + homedir());
+       process.exitCode = 1;`,
+      [{ name: 'dep' }],
+    );
+
+    const result = await createDockerRunner().run({
+      artifact,
+      dependency_store: store,
+      mode: 'snapshot',
+    });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker:/tmp');
+    expect(result.cleanup.completed).toBe(true);
+  }, 120_000);
+
   it('installs scoped and nested packages from the store', async () => {
     const { artifact, store } = await project(
       `import a from 'a';

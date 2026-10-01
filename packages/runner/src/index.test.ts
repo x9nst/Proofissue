@@ -212,6 +212,16 @@ describe('Docker isolation arguments', () => {
     expect(valuesOf(arguments_, '--log-driver')).toEqual(['none']);
   });
 
+  it('starts the command with only a fixed PATH and HOME, with or without a prepared store', () => {
+    const plain = createSpec('/tmp/proofissue-input');
+    const command = 'exec env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp "$@"';
+
+    for (const spec of [plain, { ...plain, dependency_cache: '/store' }]) {
+      const script = valuesOf(buildDockerCreateArguments(spec), '-c')[0] ?? '';
+      expect(script.endsWith(command)).toBe(true);
+    }
+  });
+
   it('removes core dumps and bounds open file descriptors', () => {
     const arguments_ = buildDockerCreateArguments(createSpec('/tmp/proofissue-input'));
 
@@ -1004,7 +1014,7 @@ describe('Docker arguments for dependencies', () => {
     const lines = script.split('\n');
 
     expect(lines[0]).toContain('exit 199');
-    expect(lines.at(-1)).toBe('exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"');
+    expect(lines.at(-1)).toBe('exec env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp "$@"');
     const install = lines.findIndex((line) => line.includes('npm ci'));
     expect(install).toBeGreaterThan(0);
     expect(install).toBeLessThan(lines.length - 1);

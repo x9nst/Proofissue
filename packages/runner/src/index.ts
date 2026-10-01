@@ -386,10 +386,16 @@ export interface ContainerEngine {
 // replay as a clean failure to reproduce.
 const SIGKILL_EXIT_CODE = 137;
 
-const CONTAINER_BOOTSTRAP =
-  'cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"';
-
 const SANDBOX_PATH = '/usr/local/bin:/usr/bin:/bin';
+
+// The replay user has no account entry in the image, so os.homedir() has only HOME to go on
+// and throws without it, where recording, run as a real account, does not. /tmp is the
+// container's own bounded scratch space, already writable, so pointing HOME there grants no
+// new access. npm and the command get the same fixed values.
+const SANDBOX_ENVIRONMENT = `PATH=${SANDBOX_PATH} HOME=/tmp`;
+
+const CONTAINER_BOOTSTRAP = `cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i ${SANDBOX_ENVIRONMENT} "$@"`;
+
 const DEPENDENCY_CACHE_MOUNT = '/proofissue-cache';
 
 // Reads the one error code npm printed, and nothing else. The output is npm's own but it
@@ -432,12 +438,12 @@ const DEPENDENCY_BOOTSTRAP = [
   ': > /tmp/npmrc-user || fail',
   ': > /tmp/npmrc-global || fail',
   'mkdir /tmp/npm-logs || fail',
-  `env -i PATH=${SANDBOX_PATH} HOME=/tmp npm ${INSTALL_ARGUMENTS.join(' ')} >>/tmp/proofissue-setup.log 2>&1 || fail`,
+  `env -i ${SANDBOX_ENVIRONMENT} npm ${INSTALL_ARGUMENTS.join(' ')} >>/tmp/proofissue-setup.log 2>&1 || fail`,
   // npm can report success when extraction ran out of space, leaving a truncated package. A
   // workspace with under 1 MiB free after the install is treated as that, so the command
   // never runs against an incomplete tree.
   `df -P /workspace | awk 'NR==2 { exit ($4 < 1024) }' || { echo 'npm error code ENOSPC' >>/tmp/proofissue-setup.log; fail; }`,
-  `exec env -i PATH=${SANDBOX_PATH} "$@"`,
+  `exec env -i ${SANDBOX_ENVIRONMENT} "$@"`,
 ].join('\n');
 
 const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => [
