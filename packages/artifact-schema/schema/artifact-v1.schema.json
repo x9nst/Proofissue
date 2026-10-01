@@ -100,7 +100,7 @@
             "type": "string"
           },
           "role": {
-            "enum": ["reproduction", "subject"]
+            "enum": ["dependency", "reproduction", "subject"]
           },
           "encoding": {
             "const": "utf8"

@@ -119,12 +119,14 @@ Arguments are passed directly to the container process. They are never concatena
 | Field | Purpose | Validation and limit |
 | --- | --- | --- |
 | `path` | Names the workspace-relative destination | Required normalized forward-slash path; maximum 512 characters; unique after normalization |
-| `role` | Controls snapshot and current-checkout replay | Required enum: `reproduction` or `subject` |
+| `role` | Controls snapshot and current-checkout replay | Required enum: `reproduction`, `subject`, or `dependency` |
 | `encoding` | Defines content decoding | Required; exactly `utf8` in version 1 |
 | `content` | Carries the selected file | Required Unicode string whose UTF-8 encoding is at most 1 MiB |
 | `sha256` | Detects changed or incorrectly reconstructed content | Required 64-character lowercase hexadecimal digest of the exact UTF-8 bytes represented by `content` |
 
 At least one reproduction file and one subject file are required for the first end-to-end fixture. Total decoded file content may not exceed 4 MiB.
+
+The `dependency` role describes the project's npm dependencies without carrying them. It is deliberately narrow: only `package.json` and `package-lock.json`, only at the project root, and only together. Any other path with this role, or one of the two without the other, is a `semantic_violation`. Like `reproduction` files, dependency files are kept exactly as recorded and are never replaced during current-checkout replay. Their content must still fit the per-file and total limits, so a lockfile larger than 1 MiB cannot be represented yet. The role exists so a later preparation step can fetch exactly the packages the lockfile names; see `decisions/0002-dependency-strategy.md`. Until that step exists, an artifact with dependency files validates and inspects but replay refuses it with `policy_rejection`.
 
 Current-checkout replay substitutes only declared, existing `subject` paths. It does not discover newly added files. A removed or renamed declared subject path is missing and causes replay preparation to fail. The artifact roles therefore support targeted file replacement, not a complete overlay of an arbitrary current checkout.
 
@@ -201,7 +203,7 @@ Steps 1-7 are static validation. Step 8 is local replay authorization and must s
 
 - A version 1 consumer rejects unknown fields rather than guessing their meaning.
 - A producer must not emit fields outside the published version 1 schema.
-- Additive fields require a new compatibility decision even if made optional.
+- Additive fields require a new compatibility decision even if made optional. The `dependency` file role is such an addition: artifacts without it are unchanged and remain valid, and a consumer that predates it rejects an artifact that uses it instead of guessing. It is accepted within version 1 only while the schema is marked provisional, as recorded in decision 0002, and must be revisited before the schema is declared stable. `tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue` is its permanent compatibility fixture.
 - Every supported artifact version retains a parser fixture and compatibility test.
 - Unsupported future versions produce `invalid_artifact` with an explicit version error.
 - Artifact hashes prove content integrity only; they do not prove authorship or trust.

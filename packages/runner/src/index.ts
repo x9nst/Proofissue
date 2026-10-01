@@ -705,6 +705,16 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
           events,
         });
       }
+      // Preparing and installing dependencies offline is not implemented yet. Replaying
+      // without them would run the command in the wrong environment and could be reported
+      // as a genuine non-reproduction, so refuse instead.
+      if (request.artifact.files.some((file) => file.role === 'dependency')) {
+        throw new RunnerError(
+          'policy_rejection',
+          'This runner cannot replay artifacts that carry dependency files yet.',
+          { effective_limits: effectiveLimits, events },
+        );
+      }
       await engine.assertCapabilities();
       if (!(await engine.imageExists(image))) {
         throw new RunnerError(
