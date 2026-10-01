@@ -137,7 +137,10 @@ npm run check
 git diff --exit-code
 ```
 
-The final command verifies that the committed bundle matches its source. The
+The final command verifies that the committed bundle matches its source. Rebuild it
+in any change that touches the application layer or a package beneath it, and again
+after merging another such change, because a pull request is only checked against
+the `main` it was last tested on. The
 Linux fixture workflow additionally runs snapshot and current-checkout replay,
 requires both supported result policies, consumes the JSON outputs, and checks
 that no replay container remains.

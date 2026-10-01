@@ -2,13 +2,30 @@
 
 ## Status
 
-Milestone 6 — GitHub Actions Integration is in progress.
+Milestone 6 — GitHub Actions Integration is complete.
 
 The implementation, local checks, fixture artifact, corrected checkout, and
 Linux workflow are present. The dependency advisory reported by the clean
-install is triaged and resolved (see Dependency advisory triage). Completion
-remains gated on a successful hosted `ubuntu-24.04` run of
-`.github/workflows/action-integration.yml`.
+install is triaged and resolved (see Dependency advisory triage). The hosted
+`ubuntu-24.04` run of `.github/workflows/action-integration.yml` passed (see
+Hosted Linux Evidence).
+
+## Hosted Linux Evidence
+
+The workflow ran on `main` at `160dd6a` as run 36812413177 and every step
+succeeded:
+
+1. Prepare the approved image explicitly.
+2. Require the recorded failure: snapshot replay with `required-status: reproduced`.
+3. Verify snapshot outputs are reusable: the `status` output and the parsed
+   `result` are `reproduced` with two evidence entries.
+4. Require the corrected checkout result: current-checkout replay with
+   `required-status: not_reproduced`.
+5. Verify current-checkout outputs are reusable.
+6. Confirm replay left no containers, by label.
+
+The same job passed on the pull request that introduced the Action and on later
+commits to `main`.
 
 ## Implemented Workflow
 
@@ -32,7 +49,7 @@ execution data.
 
 | Criterion | Evidence |
 | --- | --- |
-| Fixture workflow validates and replays on Linux | `.github/workflows/action-integration.yml` runs the approved-image fixture in both modes on `ubuntu-24.04`; a successful hosted run is still required |
+| Fixture workflow validates and replays on Linux | `.github/workflows/action-integration.yml` runs the approved-image fixture in both modes on `ubuntu-24.04`; run 36812413177 passed every step (see Hosted Linux Evidence) |
 | Either classification can be required | Adapter tests cover successful `reproduced`, successful `not_reproduced`, and a mismatch that preserves the underlying classification |
 | Outputs work in later steps | Unit tests parse every JSON output; the fixture workflow consumes snapshot and current-checkout outputs in later steps |
 | Summary omits raw sensitive output | Tests inject potentially sensitive warning, error, and limitation messages and prove none enter the summary |
@@ -60,6 +77,14 @@ The generated bundle is committed because GitHub must execute an Action before
 dependency installation. The pinned build dependency and deterministic rebuild
 check reduce bundle/source drift; reviewers must continue to review both source
 and generated changes.
+
+The bundle embeds the application layer and every package beneath it, so a change
+to any of them needs a rebuilt bundle in the same change. A pull request is
+checked only against the `main` it was last tested on: one that passed before the
+bundle existed, and was merged after it did, left `main` failing the
+tracked-files check until the bundle was rebuilt. Merge pull requests that touch
+bundled packages one at a time, rebuilding the bundle when a merge conflicts or a
+newly merged change lands underneath them. A merge queue would remove the race.
 
 Residual container, kernel, Docker daemon, approved-image, and local filesystem
 race risks remain as documented in the security model. Highly adversarial input
@@ -95,9 +120,8 @@ Windows:
     hashes.
 14. `git diff --check` — passed.
 
-The supported Docker-backed Action workflow cannot be completed on the local
-Windows host. A successful hosted Linux run remains a Milestone 6 completion
-gate.
+The supported Docker-backed Action workflow cannot run on the local Windows
+host; it was verified on a hosted Linux runner (see Hosted Linux Evidence).
 
 ## Dependency advisory triage
 
