@@ -6,6 +6,8 @@
 
 @proofissue/dependencies
 
+@proofissue/output-rules
+
 ajv
 MIT
 The MIT License (MIT)
