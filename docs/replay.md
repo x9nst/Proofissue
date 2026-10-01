@@ -12,6 +12,8 @@ Replay validates an artifact, reconstructs only its declared workspace, runs one
 
 ## Snapshot Replay
 
+An artifact that carries `dependency` files (a `package.json` and `package-lock.json`) validates and inspects, but replay refuses it with `policy_rejection` for now: dependency preparation and offline installation are not implemented, and running it without its dependencies would give a misleading result. See `decisions/0002-dependency-strategy.md`.
+
 ```text
 proofissue replay failure.proofissue
 ```

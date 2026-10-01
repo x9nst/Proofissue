@@ -446,3 +446,94 @@ describe('artifact file input and publication', () => {
     expect((await readArtifactFile(link)).ok).toBe(false);
   });
 });
+
+describe('dependency files', () => {
+  const manifest = '{\n  "name": "synthetic",\n  "version": "1.0.0"\n}\n';
+  const lockfile =
+    '{\n  "name": "synthetic",\n  "version": "1.0.0",\n  "lockfileVersion": 3,\n  "packages": {}\n}\n';
+  const dependencyFile = (path: string, content: string) => ({
+    path,
+    role: 'dependency' as const,
+    encoding: 'utf8' as const,
+    content,
+    sha256: sha256(content),
+  });
+  const withFiles = (...extra: ReturnType<typeof dependencyFile>[]): ArtifactV1 => {
+    const base = artifact();
+    return { ...base, files: [...base.files, ...extra] };
+  };
+  const both = [
+    dependencyFile('package.json', manifest),
+    dependencyFile('package-lock.json', lockfile),
+  ] as const;
+
+  it('accepts a manifest and lockfile at the project root with the dependency role', () => {
+    const result = validateArtifactValue(withFiles(...both));
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.artifact.files.filter((file) => file.role === 'dependency')).toHaveLength(2);
+    }
+  });
+
+  it('still accepts artifacts that have no dependency files', () => {
+    expect(validateArtifactValue(artifact()).ok).toBe(true);
+  });
+
+  it.each([
+    ['a manifest without a lockfile', [both[0]]],
+    ['a lockfile without a manifest', [both[1]]],
+  ])('rejects %s', (_name, extra) => {
+    expectInvalid(withFiles(...extra), 'semantic_violation');
+  });
+
+  it.each([
+    'src/package.json',
+    'package-lock.json.bak',
+    'node_modules/dep/index.js',
+    'Package.json.txt',
+    'yarn.lock',
+    'pnpm-lock.yaml',
+  ])('rejects a dependency-role file at %s', (path) => {
+    expectInvalid(
+      withFiles(both[0], both[1], dependencyFile(path, 'synthetic\n')),
+      'semantic_violation',
+    );
+  });
+
+  it('does not let dependency files stand in for the reproduction and subject files', () => {
+    expectInvalid({ ...artifact(), files: [...both] } satisfies ArtifactV1, 'semantic_violation');
+  });
+
+  it('rejects a dependency file whose content does not match its digest', () => {
+    expectInvalid(
+      withFiles(both[0], { ...both[1], content: `${lockfile}tampered\n` }),
+      'semantic_violation',
+    );
+  });
+
+  it('serializes and parses canonically with the role preserved', () => {
+    const serialized = serializeArtifact(withFiles(...both));
+    const parsed = parseAndValidateArtifact(serialized);
+
+    expect(serialized).toContain('role: dependency');
+    expect(parsed.ok).toBe(true);
+    if (parsed.ok) expect(serializeArtifact(parsed.artifact)).toBe(serialized);
+  });
+
+  it('keeps a permanent compatibility fixture that carries dependencies', async () => {
+    const path = 'tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue';
+    const result = await readArtifactFile(path);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.artifact.files.map((file) => `${file.role}:${file.path}`).sort()).toEqual([
+        'dependency:package-lock.json',
+        'dependency:package.json',
+        'reproduction:reproduction.mjs',
+        'subject:calculate.mjs',
+      ]);
+      expect(serializeArtifact(result.artifact)).toBe(await readFile(path, 'utf8'));
+    }
+  });
+});

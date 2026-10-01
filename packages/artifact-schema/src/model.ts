@@ -22,7 +22,7 @@ export interface ArtifactCommandV1 {
   readonly working_directory: '.';
 }
 
-export type ArtifactFileRoleV1 = 'reproduction' | 'subject';
+export type ArtifactFileRoleV1 = 'dependency' | 'reproduction' | 'subject';
 
 export interface ArtifactFileV1 {
   readonly path: string;

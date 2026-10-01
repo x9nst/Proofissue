@@ -114,7 +114,7 @@ export const ARTIFACT_V1_SCHEMA: AnySchema = {
       items: closedObject(
         {
           path: pathSchema,
-          role: { enum: ['reproduction', 'subject'] },
+          role: { enum: ['dependency', 'reproduction', 'subject'] },
           encoding: { const: 'utf8' },
           content: { type: 'string' },
           sha256: { pattern: '^[a-f0-9]{64}$', type: 'string' },

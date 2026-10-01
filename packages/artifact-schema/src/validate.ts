@@ -224,12 +224,19 @@ export const resolveArtifactPath = (root: string, artifactPath: string): string 
   return `${root.replace(/[\\/]+$/u, '')}${separator}${artifactPath.replaceAll('/', separator)}`;
 };
 
+// The dependency role is deliberately narrow: only the npm manifest and lockfile, at the
+// project root, and only together. See docs/decisions/0002-dependency-strategy.md.
+const DEPENDENCY_MANIFEST_PATH = 'package.json';
+const DEPENDENCY_LOCKFILE_PATH = 'package-lock.json';
+
 const semanticErrors = (artifact: ArtifactV1): readonly ArtifactValidationError[] => {
   const errors: ArtifactValidationError[] = [];
   const paths = new Set<string>();
   let totalContentBytes = 0;
   let reproductionFiles = 0;
   let subjectFiles = 0;
+  let dependencyManifest = false;
+  let dependencyLockfile = false;
 
   for (const file of artifact.files) {
     const path = `/files/${file.path}`;
@@ -267,12 +274,30 @@ const semanticErrors = (artifact: ArtifactV1): readonly ArtifactValidationError[
     }
     if (file.role === 'reproduction') reproductionFiles += 1;
     if (file.role === 'subject') subjectFiles += 1;
+    if (file.role === 'dependency') {
+      if (file.path === DEPENDENCY_MANIFEST_PATH) dependencyManifest = true;
+      else if (file.path === DEPENDENCY_LOCKFILE_PATH) dependencyLockfile = true;
+      else {
+        errors.push({
+          code: 'semantic_violation',
+          message: `Dependency files must be ${DEPENDENCY_MANIFEST_PATH} or ${DEPENDENCY_LOCKFILE_PATH} at the project root.`,
+          path,
+        });
+      }
+    }
   }
 
   if (totalContentBytes > ARTIFACT_LIMITS.total_file_content_bytes) {
     errors.push({
       code: 'semantic_violation',
       message: 'Total file content exceeds the 4 MiB artifact limit.',
+      path: '/files',
+    });
+  }
+  if (dependencyManifest !== dependencyLockfile) {
+    errors.push({
+      code: 'semantic_violation',
+      message: `${DEPENDENCY_MANIFEST_PATH} and ${DEPENDENCY_LOCKFILE_PATH} must be provided together.`,
       path: '/files',
     });
   }

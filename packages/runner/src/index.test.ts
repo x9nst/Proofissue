@@ -288,6 +288,29 @@ describe('runner lifecycle', () => {
     ]);
   });
 
+  it('refuses an artifact with dependency files before any engine or workspace work', async () => {
+    // Dependency preparation and offline install are not implemented yet. Running such an
+    // artifact without its dependencies would produce a misleading result.
+    const parsed = parseAndValidateArtifact(
+      await readFile('tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue'),
+    );
+    if (!parsed.ok) throw new Error('Dependency fixture must be valid.');
+    const engine = new FakeEngine();
+    const files = workspace();
+
+    await expect(
+      createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+        artifact: {
+          ...parsed.artifact,
+          environment: { ...parsed.artifact.environment, image: APPROVED_NODE_IMAGE },
+        },
+        mode: 'snapshot',
+      }),
+    ).rejects.toMatchObject({ code: 'policy_rejection' });
+    expect(engine.calls).toEqual([]);
+    expect(files.calls).toEqual([]);
+  });
+
   it('rejects an unapproved image before checking Docker or creating a workspace', async () => {
     const engine = new FakeEngine();
     const files = workspace();

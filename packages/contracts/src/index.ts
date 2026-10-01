@@ -117,7 +117,7 @@ export interface ValidateOperationResult extends OperationResultBase {
 
 export interface ArtifactInspectionFile {
   readonly path: string;
-  readonly role: 'reproduction' | 'subject';
+  readonly role: 'dependency' | 'reproduction' | 'subject';
   readonly bytes: number;
   readonly sha256: string;
 }
