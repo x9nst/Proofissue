@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtemp, readFile, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -16,6 +16,7 @@ import {
 import { REGISTRY_ORIGIN } from './lockfile.js';
 import { prepareDependencies, type PrepareResult } from './prepare.js';
 import { openPackageStore, type PackageStore } from './store.js';
+import { everythingStored, storedEntries, temporaryFiles } from './test-support.js';
 
 const roots: string[] = [];
 const servers: Server[] = [];
@@ -309,7 +310,7 @@ describe('prepareDependencies refusals', () => {
 
       expect(result.status).toBe('invalid_lockfile');
       expect(fetcher.calls).toEqual([]);
-      expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+      expect(await everythingStored(store.directory)).toEqual([]);
     },
   );
 
@@ -339,7 +340,7 @@ describe('prepareDependencies refusals', () => {
     expect(errors).toEqual([
       expect.objectContaining({ code: 'integrity_mismatch', package_path: 'node_modules/a' }),
     ]);
-    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+    expect(await everythingStored(store.directory)).toEqual([]);
   });
 
   it('keeps good packages stored and reports only the bad one', async () => {
@@ -355,7 +356,7 @@ describe('prepareDependencies refusals', () => {
     );
 
     expect(errors.map((error) => error.package_path)).toEqual(['node_modules/z-bad']);
-    expect(await readdir(path.join(store.directory, 'v1'))).toHaveLength(1);
+    expect(await storedEntries(store.directory)).toHaveLength(1);
   });
 
   it('reports the status code for a failed request, without any response body', async () => {
@@ -426,9 +427,7 @@ describe('prepareDependencies refusals', () => {
     );
 
     expect(errors.map((error) => error.code)).toEqual(['total_size_limit_exceeded']);
-    expect(
-      (await readdir(path.join(store.directory, 'v1'))).every((name) => !name.startsWith('.tmp')),
-    ).toBe(true);
+    expect((await temporaryFiles(store.directory)).length === 0).toBe(true);
   });
 
   it('does not count stored entries against the download limit', async () => {
@@ -551,7 +550,7 @@ describe('prepareDependencies concurrency and cancellation', () => {
     );
 
     expect(errors[0]?.code).toBe('cancelled');
-    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+    expect(await everythingStored(store.directory)).toEqual([]);
   });
 
   it('refuses to start when already cancelled', async () => {
@@ -661,7 +660,7 @@ describe('prepareDependencies through the real fetcher', () => {
     );
 
     expect(errors[0]?.code).toBe('integrity_mismatch');
-    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+    expect(await everythingStored(store.directory)).toEqual([]);
   });
 
   it('refuses a registry that redirects, without following it', async () => {
