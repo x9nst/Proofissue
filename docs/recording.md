@@ -57,6 +57,8 @@ It does not collect the username, hostname, home directory, absolute project pat
 
 The recorded command receives an empty environment on Linux and macOS. On Windows it receives only `SystemRoot`, which is required for normal process startup. The recorder never enumerates or serializes the host environment, and tests verify that unrelated host variables do not reach the child process.
 
+Because the command runs as your own account, `os.homedir()` returns your home directory during recording even without `HOME`. Replay runs as a user with no account entry and sets `HOME=/tmp`, an empty directory, so a reproduction that depends on a file in your home directory will not find it during replay, and one that calls `os.userInfo()` will fail differently. See "Home and temporary directories" in `replay.md`.
+
 ## File Roles
 
 Reproduction files contain the test or inputs needed to observe the bug. Subject files contain the implementation being tested.
