@@ -19,6 +19,7 @@ import type {
   ArtifactV1,
 } from '@proofissue/artifact-schema';
 import type { BoundedStreamCapture } from '@proofissue/contracts';
+import { validateNpmLockfile } from '@proofissue/dependencies';
 import { BoundedOutputCollector } from '@proofissue/process-output';
 import { createRedactor, RedactionLimitError } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
@@ -36,6 +37,12 @@ export interface RecordRequest {
   readonly environment_image: string;
   readonly expect_stderr: readonly string[];
   readonly expect_stdout: readonly string[];
+  /**
+   * Also record `package.json` and `package-lock.json` from the project root, so replay can
+   * later install exactly the locked packages. Off unless asked for: nothing beyond the
+   * selected files is collected by default.
+   */
+  readonly include_dependencies?: boolean;
   readonly limits?: ArtifactLimitsV1;
   readonly program: 'node';
   readonly project_root: string;
@@ -43,8 +50,15 @@ export interface RecordRequest {
   readonly subject_paths: readonly string[];
 }
 
+export interface DependencySummary {
+  readonly install_script_packages: number;
+  readonly package_count: number;
+}
+
 export interface RecordCapture {
   readonly artifact: ArtifactV1;
+  /** Present only when dependency files were recorded. */
+  readonly dependencies?: DependencySummary;
   readonly duration_ms: number;
   readonly stderr: BoundedStreamCapture;
   readonly stdout: BoundedStreamCapture;
@@ -333,6 +347,59 @@ const executeCommand = async (
   });
 };
 
+const DEPENDENCY_PATHS: readonly string[] = ['package.json', 'package-lock.json'];
+
+// A reporter's own file, but its text still reaches a terminal, so escape it and bound it.
+const describeDependencyErrors = (
+  errors: readonly { readonly code: string; readonly package_path?: string }[],
+): string => {
+  const shown = errors.slice(0, 3).map((error) => {
+    const where =
+      error.package_path === undefined
+        ? ''
+        : ` at ${JSON.stringify(error.package_path.slice(0, 80))}`;
+    return `${error.code}${where}`;
+  });
+  const more =
+    errors.length > shown.length ? `; and ${String(errors.length - shown.length)} more` : '';
+  return `${shown.join('; ')}${more}`;
+};
+
+/**
+ * Checks the dependency files before the command runs, so an unsupported lockfile fails
+ * fast and nothing is executed for a recording that cannot be used.
+ */
+const summarizeDependencies = (files: readonly ArtifactFileV1[]): DependencySummary => {
+  const manifest = files.find((file) => file.path === 'package.json');
+  const lockfile = files.find((file) => file.path === 'package-lock.json');
+  if (manifest === undefined || lockfile === undefined) {
+    throw new RecorderError(
+      'invalid_request',
+      'Dependency capture needs package.json and package-lock.json.',
+    );
+  }
+  let manifestValue: unknown;
+  try {
+    manifestValue = JSON.parse(manifest.content);
+  } catch {
+    throw new RecorderError('invalid_request', 'package.json is not valid JSON.');
+  }
+  if (typeof manifestValue !== 'object' || manifestValue === null || Array.isArray(manifestValue)) {
+    throw new RecorderError('invalid_request', 'package.json must be a JSON object.');
+  }
+  const validation = validateNpmLockfile(lockfile.content);
+  if (!validation.ok) {
+    throw new RecorderError(
+      'invalid_request',
+      `The lockfile cannot be used for dependency replay: ${describeDependencyErrors(validation.errors)}.`,
+    );
+  }
+  return {
+    install_script_packages: validation.packages.filter((item) => item.has_install_script).length,
+    package_count: validation.packages.length,
+  };
+};
+
 const validateSelections = (request: RecordRequest): void => {
   if (request.arguments.length === 0 || request.arguments.length > 128) {
     throw new RecorderError('invalid_request', 'At least one Node.js argument is required.');
@@ -405,7 +472,11 @@ const validateSelections = (request: RecordRequest): void => {
       'Recording limits are outside artifact version 1 bounds.',
     );
   }
-  const paths = [...request.reproduction_paths, ...request.subject_paths];
+  const paths = [
+    ...request.reproduction_paths,
+    ...request.subject_paths,
+    ...(request.include_dependencies === true ? DEPENDENCY_PATHS : []),
+  ];
   if (
     paths.length > ARTIFACT_LIMITS.files ||
     new Set(paths.map((value) => value.toLowerCase())).size !== paths.length
@@ -451,6 +522,9 @@ export const captureRecording = async (
       readSelectedFile(root, filePath, 'reproduction'),
     ),
     ...request.subject_paths.map((filePath) => readSelectedFile(root, filePath, 'subject')),
+    ...(request.include_dependencies === true
+      ? DEPENDENCY_PATHS.map((filePath) => readSelectedFile(root, filePath, 'dependency'))
+      : []),
   ]);
   const totalBytes = selectedFiles.reduce(
     (total, file) => total + Buffer.byteLength(file.content, 'utf8'),
@@ -460,11 +534,23 @@ export const captureRecording = async (
     throw new RecorderError('unsafe_file', 'Selected files exceed the aggregate content limit.');
   }
 
+  const dependencies =
+    request.include_dependencies === true
+      ? summarizeDependencies(selectedFiles.filter((file) => file.role === 'dependency'))
+      : undefined;
+
   const command = await executeCommand(root, request.arguments, limits);
   const stdout = redactTarget(redactor, command.stdout.decoded_text, 'stdout');
   const stderr = redactTarget(redactor, command.stderr.decoded_text, 'stderr');
   const redactedFiles = selectedFiles.map((file) => {
     const result = redactTarget(redactor, file.content, file.path);
+    if (file.role === 'dependency' && result.findings.length > 0) {
+      // Editing either file would break the lockfile's integrity, so refuse instead.
+      throw new RecorderError(
+        'redaction_failed',
+        `${file.path} contains a likely secret, and dependency files cannot be altered.`,
+      );
+    }
     return {
       file: { ...file, content: result.text, sha256: sha256(result.text) },
       findings: result.findings,
@@ -549,6 +635,7 @@ export const captureRecording = async (
 
   return {
     artifact,
+    ...(dependencies === undefined ? {} : { dependencies }),
     duration_ms: command.duration_ms,
     stdout: { ...command.stdout, decoded_text: stdout.text },
     stderr: { ...command.stderr, decoded_text: stderr.text },

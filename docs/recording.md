@@ -72,6 +72,16 @@ ProofIssue may show examples and warnings but does not silently guess or change 
 
 Version 1 accepts individual file paths only. Directory recursion and glob patterns are deferred because they make minimal collection and review harder.
 
+## Dependency Files
+
+Add `--dependencies` to also record the project's `package.json` and `package-lock.json`. They are recorded with the `dependency` role: exactly as they are on disk, never replaced during current-checkout replay, and never altered by redaction. Nothing about dependencies is collected unless the flag is given, even if the files exist.
+
+Both files must be at the project root and must both exist. The lockfile is checked before the command runs, using the rules in `dependencies.md`: lockfile version 3, packages from the public npm registry only, and a SHA-512 hash on every entry. An unsupported lockfile stops the recording with the first few reasons, and the command is not run. `package.json` must be a JSON object.
+
+If redaction finds a likely secret in either file, recording stops instead of editing it, because an edited lockfile would no longer match its hashes. A file that is selected as a reproduction or subject file cannot also be a dependency file.
+
+The preview lists the two files, how many packages the lockfile names, and how many of them declare install scripts, which are never run. Package names are not printed. Recording dependencies does not make an artifact replayable yet: preparation and offline installation are not implemented, so replay refuses such an artifact. See `dependencies.md`.
+
 ## Output Capture
 
 stdout and stderr are kept as separate raw byte streams. Each stream has an independent byte limit applied before UTF-8 decoding. When a limit is reached, the recorder stops retaining additional bytes, continues draining and counting discarded bytes so the child cannot block on a full pipe, and marks the capture as truncated. After execution, the retained bytes are joined and decoded once with invalid UTF-8 replaced safely. The command remains subject to its wall-clock limit. If that limit expires, the recorder terminates the process tree and writes no artifact because the observed result is incomplete.
@@ -107,6 +117,7 @@ Recording stops without writing an artifact when:
 - file, output, argument, or aggregate limits are exceeded incompatibly;
 - the command cannot start or has no representable exit result;
 - the recording command exceeds its wall-clock limit or cannot be terminated cleanly;
+- with `--dependencies`, either dependency file is missing, `package.json` is not a JSON object, the lockfile is unsupported, or redaction would alter either file;
 - artifact validation fails;
 - atomic output creation fails;
 - the user cancels.

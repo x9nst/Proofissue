@@ -282,6 +282,88 @@ describe('record application service', () => {
     }
   });
 
+  describe('dependency files', () => {
+    const lockfile = JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        '': { name: 'synthetic' },
+        'node_modules/synthetic-left-pad': {
+          version: '1.0.0',
+          resolved: 'https://registry.npmjs.org/synthetic-left-pad/-/synthetic-left-pad-1.0.0.tgz',
+          integrity: `sha512-${'A'.repeat(86)}==`,
+          hasInstallScript: true,
+        },
+      },
+    });
+
+    const recordWith = async (includeDependencies: boolean) => {
+      const fixture = await setup();
+      await writeFile(path.join(fixture.root, 'package.json'), '{"name":"synthetic"}\n');
+      await writeFile(path.join(fixture.root, 'package-lock.json'), lockfile);
+      let preview: RecordPreview | undefined;
+      const result = await createRecordApplicationService((value) => {
+        preview = value;
+        return Promise.resolve(confirmed);
+      }).record({
+        ...fixture.request,
+        ...(includeDependencies ? { include_dependencies: true } : {}),
+      });
+      return { fixture, preview, result };
+    };
+
+    it('shows a content-safe dependency summary and writes a valid artifact', async () => {
+      const { fixture, preview, result } = await recordWith(true);
+      try {
+        expect(result).toMatchObject({ status: 'created', errors: [] });
+        expect(preview?.dependencies).toEqual({
+          files: ['package.json', 'package-lock.json'],
+          install_script_packages: 1,
+          package_count: 1,
+        });
+        // Neither the preview nor its group lists mix dependency files into the others.
+        expect(preview?.reproduction_files).toEqual(['test/reproduction.mjs']);
+        expect(preview?.subject_files).toEqual(['src/subject.mjs']);
+        expect(JSON.stringify(preview)).not.toContain('synthetic-left-pad');
+
+        const validated = await createStaticArtifactApplicationServices().validate({
+          artifact_path: fixture.output,
+        });
+        expect(validated).toMatchObject({ status: 'valid' });
+        expect(await readFile(fixture.output, 'utf8')).toContain('role: dependency');
+      } finally {
+        await rm(fixture.root, { force: true, recursive: true });
+      }
+    });
+
+    it('records and previews nothing about dependencies unless asked', async () => {
+      const { fixture, preview, result } = await recordWith(false);
+      try {
+        expect(result).toMatchObject({ status: 'created' });
+        expect(preview?.dependencies).toBeUndefined();
+        expect(await readFile(fixture.output, 'utf8')).not.toContain('role: dependency');
+      } finally {
+        await rm(fixture.root, { force: true, recursive: true });
+      }
+    });
+
+    it('reports an unusable lockfile as invalid input and writes nothing', async () => {
+      const fixture = await setup();
+      await writeFile(path.join(fixture.root, 'package.json'), '{"name":"synthetic"}\n');
+      await writeFile(path.join(fixture.root, 'package-lock.json'), '{"lockfileVersion":2}');
+      try {
+        const result = await createRecordApplicationService(() =>
+          Promise.resolve(confirmed),
+        ).record({ ...fixture.request, include_dependencies: true });
+
+        expect(result).toMatchObject({ status: 'invalid_input' });
+        expect(result.errors[0]?.message).toContain('unsupported_lockfile_version');
+        await expect(readFile(fixture.output)).rejects.toMatchObject({ code: 'ENOENT' });
+      } finally {
+        await rm(fixture.root, { force: true, recursive: true });
+      }
+    });
+  });
+
   it.each([
     [{ ...confirmed, reproduction_files_confirmed: false }],
     [{ ...confirmed, subject_files_confirmed: false }],
