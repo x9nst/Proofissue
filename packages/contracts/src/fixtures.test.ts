@@ -80,3 +80,83 @@ describe('provisional prepare result fixtures', () => {
     }
   });
 });
+
+const outputMatchingFixtureNames = [
+  'reproduced-normalized.json',
+  'not-reproduced-output-modes.json',
+] as const;
+
+// The canonical rule order is part of the public contract (see docs/output-matching.md).
+const canonicalRules = [
+  'line_endings',
+  'ansi_escapes',
+  'trailing_whitespace',
+  'paths',
+  'node_version',
+  'node_internal_locations',
+  'process_ids',
+  'durations',
+];
+
+interface Explained {
+  readonly kind: string;
+  readonly message: string;
+  readonly normalization?: {
+    readonly changes: readonly { readonly count: number; readonly rule: string }[];
+    readonly rules: readonly string[];
+  };
+}
+
+const readOutputMatchingFixtures = async (): Promise<
+  readonly { readonly differences: Explained[]; readonly evidence: Explained[] }[]
+> =>
+  await Promise.all(
+    outputMatchingFixtureNames.map(async (name) => {
+      const content = await readFile(path.join(fixtureDirectory, name), 'utf8');
+      return JSON.parse(content) as { differences: Explained[]; evidence: Explained[] };
+    }),
+  );
+
+describe('output-matching result fixtures', () => {
+  it('carry well-formed normalization summaries and no output text', async () => {
+    const fixtures = await readOutputMatchingFixtures();
+
+    expect(JSON.stringify(fixtures)).not.toContain('decoded_text');
+    const explained = fixtures.flatMap((fixture) => [...fixture.evidence, ...fixture.differences]);
+    const normalized = explained.filter((item) => item.normalization !== undefined);
+    expect(normalized.length).toBeGreaterThan(0);
+
+    for (const item of normalized) {
+      const { changes, rules } = item.normalization ?? { changes: [], rules: [] };
+      const positions = (names: readonly string[]): number[] =>
+        names.map((name) => canonicalRules.indexOf(name));
+      expect(positions(rules).every((position) => position >= 0)).toBe(true);
+      expect(positions(rules)).toEqual([...positions(rules)].sort((a, b) => a - b));
+      expect(new Set(rules).size).toBe(rules.length);
+      expect(positions(changes.map((change) => change.rule))).toEqual(
+        [...positions(changes.map((change) => change.rule))].sort((a, b) => a - b),
+      );
+      for (const change of changes) {
+        expect(rules).toContain(change.rule);
+        expect(Number.isInteger(change.count) && change.count > 0).toBe(true);
+      }
+    }
+  });
+
+  it('covers the exact and normalized kinds and keeps raw checks free of a summary', async () => {
+    const [reproduced, corrected] = await readOutputMatchingFixtures();
+
+    expect(reproduced?.evidence.map((item) => item.kind)).toEqual([
+      'exit_code',
+      'stdout_exact',
+      'stderr_contains',
+      'stderr_exact',
+    ]);
+    expect(reproduced?.evidence[1]).not.toHaveProperty('normalization');
+    expect(corrected?.differences.map((item) => item.kind)).toEqual([
+      'exit_code',
+      'stderr_missing',
+      'stderr_differs',
+    ]);
+  });
+});

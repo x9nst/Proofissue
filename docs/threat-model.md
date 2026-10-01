@@ -113,6 +113,13 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Output contains terminal escape sequences | User terminal | Escape control characters before human display | Containment |
 | Artifact uses redacted marker as expected evidence | Matcher | Reject the expectation during semantic validation | Rejection |
 | Same exit code comes from a different error | Matcher | Require literal output evidence and report every difference | Detection |
+| Crafted output slows a normalization rule | Availability | Linear scanners or anchored patterns with no nested repetition; time-budget tests on 1 MiB adversarial inputs | Containment |
+| Normalization joins escape-split text into a secret that is then stored | Recorder | Redaction check on every stored value after normalization; refuse the recording | Rejection |
+| Host paths or the user name leak through an exact or normalized value | Recorder / privacy | Exact path replacement; refuse a stored value that still contains the project or home directory | Rejection |
+| Host context influences replay classification | Replay | Replay normalizes with only the fixed `/workspace` and `/tmp`; a container test proves the replayed command sees exactly those | Containment |
+| Normalization hides a meaningful difference | Matcher | Explicit per-expectation rules shown in every result; exact exit code; limits documented | Detection (residual) |
+| New expectation content is misread by an older consumer | Compatibility | Closed schema that enumerates modes and rule names; a frozen-schema test proves an older consumer rejects it | Rejection |
+| Exact expectation satisfied by a truncated stream | Matcher | An exact comparison is `insufficient_output` for a truncated stream, never a match | Detection |
 | Output needed for matching was truncated | Matcher | Report insufficient bounded evidence; never infer a match from discarded bytes | Detection |
 | Unknown future field changes meaning | Compatibility | Reject unknown fields and unsupported versions | Rejection |
 | CI artifact tries to read job secrets | CI/container | Provide a clean environment and mount no credentials; use minimal Action permissions | Containment |
@@ -159,6 +166,7 @@ Action adapter tests must additionally prove that:
 - Local administrators can inspect host memory or temporary resources.
 - Resource enforcement differs by container engine and operating-system host.
 - Literal matching can still mistake two similar failures for one another.
+- Normalization can hide a change confined to a normalized token (a duration, a process ID, a Node.js internal line number, the Node.js version, or a path root); each result names the rules that were applied.
 - Digest pinning gives integrity, not provenance or vulnerability-free content.
 
 These risks are documented, not silently accepted. Highly adversarial replay requires an additional disposable machine boundary. Structured failure matching in Phase 2 will reduce, but not eliminate, mistaken classifications.

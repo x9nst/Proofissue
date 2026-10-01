@@ -1,3 +1,8 @@
+import {
+  EMPTY_OUTPUT_PATH_CONTEXT,
+  isCanonicalNormalizationRuleList,
+  normalizeOutput,
+} from '@proofissue/output-rules';
 import { isAlias, isMap, isNode, isScalar, isSeq, parseDocument } from 'yaml';
 import type { Node, Pair, ParsedNode } from 'yaml';
 import { Ajv2020 } from 'ajv/dist/2020.js';
@@ -5,7 +10,7 @@ import { Ajv2020 } from 'ajv/dist/2020.js';
 import { boundedErrors, type ArtifactValidationError } from './errors.js';
 import { sha256 } from './hash.js';
 import { ARTIFACT_LIMITS, ARTIFACT_PATH_PATTERN } from './limits.js';
-import type { ArtifactV1, ValidatedArtifactV1 } from './model.js';
+import type { ArtifactOutputExpectationV1, ArtifactV1, ValidatedArtifactV1 } from './model.js';
 import { ARTIFACT_V1_SCHEMA } from './schema.js';
 
 export interface ArtifactValidationSuccess {
@@ -352,6 +357,26 @@ const semanticErrors = (artifact: ArtifactV1): readonly ArtifactValidationError[
           path: `/expect/${stream}/${String(index)}`,
         });
       }
+      if (expectation.normalize !== undefined) {
+        if (!isCanonicalNormalizationRuleList(expectation.normalize)) {
+          errors.push({
+            code: 'semantic_violation',
+            message: 'Normalization rules must be listed once each, in the documented order.',
+            path: `/expect/${stream}/${String(index)}/normalize`,
+          });
+        } else if (
+          normalizeOutput(expectation.value, expectation.normalize, EMPTY_OUTPUT_PATH_CONTEXT)
+            .text !== expectation.value
+        ) {
+          // Replay compares normalized output with this value, so a value that its own rules
+          // would change can never match.
+          errors.push({
+            code: 'semantic_violation',
+            message: 'Normalized value contains text its normalization rules would change.',
+            path: `/expect/${stream}/${String(index)}`,
+          });
+        }
+      }
     }
   }
 
@@ -392,6 +417,12 @@ const semanticErrors = (artifact: ArtifactV1): readonly ArtifactValidationError[
   return boundedErrors(errors);
 };
 
+const canonicalExpectation = (item: ArtifactOutputExpectationV1): ArtifactOutputExpectationV1 => ({
+  mode: item.mode,
+  ...(item.normalize === undefined ? {} : { normalize: [...item.normalize] }),
+  value: item.value,
+});
+
 const canonicalize = (artifact: ArtifactV1, digest: string): ValidatedArtifactV1 => ({
   version: 1,
   environment: { ...artifact.environment },
@@ -402,8 +433,8 @@ const canonicalize = (artifact: ArtifactV1, digest: string): ValidatedArtifactV1
     .sort((left, right) => (left.path < right.path ? -1 : left.path > right.path ? 1 : 0)),
   expect: {
     exit_code: artifact.expect.exit_code,
-    stdout: artifact.expect.stdout.map((item) => ({ ...item })),
-    stderr: artifact.expect.stderr.map((item) => ({ ...item })),
+    stdout: artifact.expect.stdout.map(canonicalExpectation),
+    stderr: artifact.expect.stderr.map(canonicalExpectation),
   },
   limits: { ...artifact.limits },
   redaction: {

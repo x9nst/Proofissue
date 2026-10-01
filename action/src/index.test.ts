@@ -276,6 +276,36 @@ describe('Action execution', () => {
     expect(summary).toContain('Raw command output is not published.');
   });
 
+  it('labels exact and normalized checks with fixed text only', () => {
+    const sensitive = 'synthetic-expected-value-in-a-message';
+    const normalization = {
+      rules: ['line_endings', 'paths'],
+      changes: [{ rule: 'paths', count: 2 }],
+    } as const;
+    const result = replayResult('not_reproduced', {
+      evidence: [
+        { kind: 'exit_code', message: 'Exit code matched: 1.' },
+        { kind: 'stdout_exact', message: sensitive },
+        { kind: 'stderr_contains', message: sensitive, normalization },
+      ],
+      differences: [
+        { kind: 'stderr_differs', message: sensitive },
+        { kind: 'stdout_differs', message: sensitive, normalization },
+        { kind: 'stdout_missing', message: sensitive, normalization },
+      ],
+    });
+
+    const summary = renderActionSummary(result, undefined, true);
+
+    expect(summary).toContain('- exit code matched\n');
+    expect(summary).toContain('- stdout matched the expected output exactly\n');
+    expect(summary).toContain('- expected stderr text was present after normalization\n');
+    expect(summary).toContain('- stderr differed from the expected output\n');
+    expect(summary).toContain('- stdout differed from the expected output after normalization\n');
+    expect(summary).toContain('- expected stdout text was absent after normalization\n');
+    expect(summary).not.toContain(sensitive);
+  });
+
   it('rejects invalid inputs before invoking the application', async () => {
     const application: ActionApplicationServices = {
       replay: vi.fn(() => Promise.resolve(replayResult('reproduced'))),

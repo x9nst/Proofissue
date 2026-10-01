@@ -63,6 +63,12 @@ const serializeExpectation = (
   indent: number,
 ): readonly string[] => [
   line(indent, `- mode: ${expectation.mode}`),
+  ...(expectation.normalize === undefined
+    ? []
+    : [
+        line(indent + 2, 'normalize:'),
+        ...expectation.normalize.map((rule) => line(indent + 4, `- ${rule}`)),
+      ]),
   line(indent + 2, `value: ${quoted(expectation.value)}`),
 ];
 

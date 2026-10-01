@@ -3,6 +3,7 @@
   "references": [
     { "path": "packages/contracts" },
     { "path": "packages/process-output" },
+    { "path": "packages/output-rules" },
     { "path": "packages/artifact-schema" },
     { "path": "packages/dependencies" },
     { "path": "packages/redactor" },

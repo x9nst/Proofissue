@@ -13,6 +13,8 @@ import {
   buildDockerCreateArguments,
   createDockerRunner,
   DEPENDENCY_INSTALL_FAILED_EXIT_CODE,
+  REPLAY_TEMPORARY_DIRECTORY,
+  REPLAY_WORKSPACE_PATH,
   RunnerError,
   type ContainerCreateSpec,
   type ContainerEngine,
@@ -1056,5 +1058,58 @@ describe('Docker arguments for dependencies', () => {
     expect(() => buildDockerCreateArguments({ ...base, dependency_cache: cache })).toThrow(
       expect.objectContaining({ code: 'policy_rejection' }) as Error,
     );
+  });
+});
+
+describe('replay paths', () => {
+  const spec = {
+    arguments: ['reproduction.mjs'],
+    image: APPROVED_NODE_IMAGE,
+    input_path: '/srv/proofissue-input',
+    limits: {
+      cpus: 1,
+      memory_mb: 512,
+      output_bytes_per_stream: 1024,
+      processes: 64,
+      timeout_seconds: 60,
+      writable_workspace_mb: 64,
+    },
+    name: 'proofissue-test',
+  };
+
+  it('names the workspace and temporary directory the replayed command sees', () => {
+    expect(REPLAY_WORKSPACE_PATH).toBe('/workspace');
+    expect(REPLAY_TEMPORARY_DIRECTORY).toBe('/tmp');
+
+    for (const arguments_ of [
+      buildDockerCreateArguments(spec),
+      buildDockerCreateArguments({ ...spec, dependency_cache: '/store' }),
+    ]) {
+      expect(arguments_[arguments_.indexOf('--workdir') + 1]).toBe(REPLAY_WORKSPACE_PATH);
+      const tmpfs = arguments_.flatMap((item, index) =>
+        arguments_[index - 1] === '--tmpfs' ? [item] : [],
+      );
+      expect(tmpfs).toHaveLength(2);
+      expect(tmpfs[0]?.startsWith(`${REPLAY_WORKSPACE_PATH}:`)).toBe(true);
+      expect(tmpfs[1]?.startsWith(`${REPLAY_TEMPORARY_DIRECTORY}:`)).toBe(true);
+    }
+  });
+
+  it('copies the artifact into the named workspace and starts the command there', () => {
+    const arguments_ = buildDockerCreateArguments(spec);
+    const bootstrap = arguments_[arguments_.indexOf('-c') + 1] ?? '';
+
+    expect(bootstrap).toBe(
+      `cp -R /proofissue-input/. ${REPLAY_WORKSPACE_PATH}/ && cd ${REPLAY_WORKSPACE_PATH} && exec env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=${REPLAY_TEMPORARY_DIRECTORY} "$@"`,
+    );
+  });
+
+  it('does not set a temporary-directory variable, so os.tmpdir() is the named directory', () => {
+    for (const arguments_ of [
+      buildDockerCreateArguments(spec),
+      buildDockerCreateArguments({ ...spec, dependency_cache: '/store' }),
+    ]) {
+      expect(arguments_.join(' ')).not.toMatch(/TMPDIR|TEMP=|TMP=/u);
+    }
   });
 });

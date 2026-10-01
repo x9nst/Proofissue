@@ -33,6 +33,9 @@ proofissue record --project <directory> --output <file.proofissue>
   --image <repository@sha256:digest>
   --reproduction <path> --subject <path>
   [--expect-stdout <literal>] [--expect-stderr <literal>]
+  [--expect-stdout-normalized <text>] [--expect-stderr-normalized <text>]
+  [--expect-stdout-exact] [--expect-stderr-exact]
+  [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
   [--dependencies] [--yes] -- node <arguments...>
 ```
 
@@ -45,12 +48,15 @@ proofissue record --project <directory> --output <file.proofissue>
 | `--image <repo@sha256:digest>` | yes | The replay image. Only the approved Node.js 24 image is accepted by replay. |
 | `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. |
 | `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. |
-| `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain. Repeatable. |
+| `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain, byte for byte. Repeatable. |
+| `--expect-stdout-normalized <text>`, `--expect-stderr-normalized <text>` | no | Text as it was printed on your machine. Replay compares after ignoring line endings, terminal escape sequences, trailing whitespace, the project and temporary directories, durations, process IDs, the Node.js version, and Node.js internal line numbers. Repeatable. |
+| `--expect-stdout-exact`, `--expect-stderr-exact` | no | A flag, with no value. The whole stream must match exactly. At most one exact option per stream. |
+| `--expect-stdout-exact-normalized`, `--expect-stderr-exact-normalized` | no | A flag, with no value. The whole stream must match exactly after the same normalization. At most one exact option per stream, counting the raw one. |
 | `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Replay such an artifact only after `prepare`. See `dependencies.md`. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. |
 
-The expected exit code is whatever the recorded command actually returned.
+The expected exit code is whatever the recorded command actually returned. The options that take no value derive the expectation from the recording itself, and the preview shows what will be stored. `output-matching.md` defines each normalization rule and says how to choose between the options.
 
 ### Example
 
@@ -96,13 +102,44 @@ Redaction findings: 0
 Artifact created.
 ```
 
+For a failure whose output changes from run to run, ask for normalized expectations. The stored text has your project and temporary directories replaced by `<project>` and `<tmp>`, so it never holds a path from your machine, and replay in the container matches it. Suppose a project in `/srv/project` has a failing test that prints `checking calculate(2)` on stdout, and on stderr `Expected 4 from calculate(2) (12ms)` followed by the line `at /srv/project/test/reproduction.mjs`:
+
+```text
+proofissue record \
+  --project . \
+  --output failure.proofissue \
+  --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6 \
+  --reproduction test/reproduction.mjs \
+  --subject src/calculate.mjs \
+  --expect-stdout-exact \
+  --expect-stderr-normalized "Expected 4 from calculate(2) (12ms)" \
+  --expect-stderr-normalized "at /srv/project/test/reproduction.mjs" \
+  --yes \
+  -- node test/reproduction.mjs
+```
+
+The preview shows each expectation's mode and the rules it uses, and the text that will be stored. This block is rendered by the CLI's own renderer for a recording like the one above, not captured from a live run:
+
+```text
+Expected failure:
+  exit code: 1
+  stdout is exactly: "checking calculate(2)\n"
+  stderr contains after normalization: "Expected 4 from calculate(2) (<duration>)"
+  stderr contains after normalization: "at <project>/test/reproduction.mjs"
+  normalization: line endings, terminal escape sequences, trailing whitespace, paths (<project>, <tmp>), Node.js version, Node.js internal locations, process IDs, durations
+```
+
+Before it writes anything, the application replays the recording's own output against these expectations with the same matcher a replay uses. A recording that does not satisfy its own expectations is refused.
+
 Without `--yes`, the recorder asks three questions in turn: whether the reproduction files are classified correctly, whether the subject files are, and whether to create the artifact. Answering no to any of them writes nothing.
 
 ### Failure behavior
 
-- Malformed arguments exit `2`: a missing `--project`, `--output`, or `--image`, an unknown option, or a command that does not start with `node` and have an argument.
+- Malformed arguments exit `2`: a missing `--project`, `--output`, or `--image`, an unknown option, a command that does not start with `node` and have an argument, or an exact option given twice for the same stream (a raw and a normalized exact option for one stream count as twice).
 - A request with no `--reproduction` path, no `--subject` path, or no expectation exits `1` and writes no artifact.
-- An expected output literal that the command did not actually print, within the retained output, exits `1` and writes no artifact.
+- An expected output literal that the command did not actually print, within the retained output, exits `1` and writes no artifact. A normalized literal must appear in the normalized output.
+- An exact expectation for a stream that was truncated, is empty, is larger than 8192 bytes, or contains a redaction marker exits `1`, and the message suggests a normalized literal instead.
+- An expected value that holds a likely secret once escape sequences are removed, or that still holds your project or home directory, exits `1`. The message never repeats the value.
 - A command that cannot start, runs out of time, is ended by a signal, or returns no usable exit code exits `1` and writes no artifact.
 - A selected path that is missing, a directory, a symbolic link, larger than the limit, not valid UTF-8, or outside the project exits `1` and writes no artifact.
 - An `--output` path that already exists exits `1`; artifacts are never overwritten.
@@ -182,7 +219,7 @@ proofissue inspect <artifact.proofissue> [--json]
 $ proofissue inspect failure.proofissue --json
 ```
 
-The result carries an `inspection` object with the runtime and image, the command's program, argument count and working directory, each file's path, role, size and SHA-256, the expectation counts, the limits, and the redaction findings. File contents and expected text are not included.
+The result carries an `inspection` object with the runtime and image, the command's program, argument count and working directory, each file's path, role, size and SHA-256, the expectation counts and, for each expectation, its mode and normalization rules (`stdout_expectations` and `stderr_expectations`, each entry shaped like `{ "mode": "exact", "normalize": [] }`, where an empty list means the raw stream), the limits, and the redaction findings. File contents and expected text are not included.
 
 ### Failure behavior
 
@@ -331,6 +368,30 @@ Cleanup complete: true
 ```
 
 These two blocks are rendered by the CLI's own renderer from the result fixtures in `tests/fixtures/results/v1`, not captured from a live container, so the image digest in the first is a placeholder.
+
+For an artifact with normalized or exact expectations, each line explains the comparison and which rules changed the replay output, in counts only, never in text. This block is rendered from `reproduced-normalized.json`:
+
+```text
+Replay result: reproduced
+Mode: snapshot
+Approved image: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+Termination: exited
+Exit code: 1
+Output retained: stdout 22 bytes, stderr 89 bytes
+Matched: Exit code matched: 1.
+Matched: Replay stdout matched the expected output exactly.
+Matched: Expected stderr text was present after normalization; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.
+Matched: Normalized replay stderr matched the expected output exactly; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.
+Cleanup complete: true
+```
+
+After a fix, the same artifact explains what no longer holds (rendered from `not-reproduced-output-modes.json`):
+
+```text
+Different: Expected exit code 1 but received 0.
+Different: Expected stderr text was not present after normalization; normalization changed nothing in the replay output.
+Different: Normalized replay stderr differed from the expected output at line 1, column 1 (expected 76 characters, received 0); normalization changed nothing in the replay output.
+```
 
 ### Result states
 

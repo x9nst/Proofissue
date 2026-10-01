@@ -46,7 +46,14 @@ Required properties include:
 - a detected synthetic secret never survives in returned content or finding metadata;
 - matching the same bounded execution result twice yields the same classification and explanation;
 - changing an independent expectation's order does not change its evidence meaning;
-- truncated content cannot satisfy an expectation that depends on discarded bytes.
+- truncated content cannot satisfy an expectation that depends on discarded bytes;
+- the full normalization rule chain, and every subset of it, is idempotent on its own output;
+- normalization leaves redaction markers and normalization tokens unchanged;
+- record-time and replay-time spellings of the same project location normalize to the same text;
+- a normalized expectation value is serialized canonically and round-trips for every rule subset and mode;
+- exact matching agrees with string equality, and the evaluation order of independent expectations does not change their evidence meaning.
+
+Property tests read `PROOFISSUE_PROPERTY_RUNS` (default 1000) for the number of generated cases. Before a change to a normalization rule or a path context is proposed, run the suites at scale, for example `PROOFISSUE_PROPERTY_RUNS=200000 npx vitest run packages/output-rules packages/matcher packages/artifact-schema/src/output-expectations.test.ts`, more than once so the random seeds differ, and pin every distinct counterexample as a permanent regression case.
 
 Every property failure records its minimized input as a permanent regression case when it represents a distinct bug.
 
@@ -62,6 +69,7 @@ Initial targets:
 - aggregate size and count validation;
 - process-read chunk joining and whole-buffer redaction equivalence;
 - UTF-8 decoding across arbitrary retained-byte chunk boundaries;
+- output normalization rules and path contexts over hostile text (time-budget tests on 1 MiB inputs);
 - control-character escaping and human presentation;
 - structured error formatting.
 

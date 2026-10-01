@@ -11,7 +11,13 @@ import type {
   ValidatedArtifactV1,
 } from '@proofissue/artifact-schema';
 
-import { APPROVED_NODE_IMAGE, createDockerRunner, RunnerError } from './index.js';
+import {
+  APPROVED_NODE_IMAGE,
+  createDockerRunner,
+  REPLAY_TEMPORARY_DIRECTORY,
+  REPLAY_WORKSPACE_PATH,
+  RunnerError,
+} from './index.js';
 
 const enabled = process.env.PROOFISSUE_RUN_CONTAINER_TESTS === '1';
 const integration = describe.runIf(enabled);
@@ -288,6 +294,24 @@ integration('real locked-down Docker replay', () => {
       cleanup: { completed: true, residual_resources: [] },
     });
     expect(failure?.execution?.stderr.decoded_text ?? '').not.toContain('not-enforced');
+  }, 60_000);
+
+  it('the replayed command runs in the named workspace and temporary directory', async () => {
+    const source = `
+        import * as os from 'node:os';
+        process.stderr.write(JSON.stringify([process.cwd(), os.tmpdir(), import.meta.url]));
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({
+      artifact: artifact(source),
+      mode: 'snapshot',
+    });
+
+    expect(JSON.parse(result.execution.stderr.decoded_text)).toEqual([
+      REPLAY_WORKSPACE_PATH,
+      REPLAY_TEMPORARY_DIRECTORY,
+      `file://${REPLAY_WORKSPACE_PATH}/reproduction.mjs`,
+    ]);
   }, 60_000);
 
   it('terminates CPU/time and memory exhaustion and leaves no residual resources', async () => {

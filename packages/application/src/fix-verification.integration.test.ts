@@ -1,11 +1,19 @@
 import { spawn } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { parseAndValidateArtifact, serializeArtifact } from '@proofissue/artifact-schema';
+import {
+  parseAndValidateArtifact,
+  serializeArtifact,
+  sha256,
+  type ArtifactOutputExpectationV1,
+  type ArtifactV1,
+} from '@proofissue/artifact-schema';
+import { DEFAULT_OUTPUT_NORMALIZATION } from '@proofissue/output-rules';
 import {
   APPROVED_NODE_IMAGE,
   createDockerRunner,
@@ -14,7 +22,7 @@ import {
   type ContainerState,
 } from '@proofissue/runner';
 
-import { createReplayApplicationService } from './index.js';
+import { createRecordApplicationService, createReplayApplicationService } from './index.js';
 
 const integration = describe.runIf(process.env.PROOFISSUE_RUN_CONTAINER_TESTS === '1');
 
@@ -146,4 +154,241 @@ integration('Milestone 5 fix verification', () => {
   it('reproduces the snapshot and does not reproduce with only the corrected declared subject', async () => {
     await runFixVerificationFixture(true);
   }, 60_000);
+});
+
+// A reproduction whose output differs on every run and between machines: a color escape, a
+// carriage return, a duration that changes, and (optionally) the module URL and the temporary
+// directory. It is written without backslash escapes so it survives any tooling.
+const outputMatchingReproduction = (withLocations: boolean): string =>
+  [
+    "import { calculate } from './calculate.mjs';",
+    ...(withLocations ? ["import os from 'node:os';"] : []),
+    '',
+    'const started = Date.now();',
+    'if (calculate(2) !== 4) {',
+    '  const elapsed = Date.now() - started + 1;',
+    '  const esc = String.fromCharCode(27);',
+    "  process.stderr.write(esc + '[31mExpected 4 from calculate(2) (' + elapsed + 'ms)' + esc + '[0m' + String.fromCharCode(13, 10));",
+    ...(withLocations
+      ? [
+          "  process.stderr.write('    at ' + import.meta.url + String.fromCharCode(10));",
+          "  process.stderr.write('tmp=' + os.tmpdir() + String.fromCharCode(10));",
+        ]
+      : []),
+    '  process.exitCode = 1;',
+    '}',
+    '',
+  ].join(String.fromCharCode(10));
+
+const SUBJECT_SOURCE = 'export function calculate(value) { return value + 1; }\n';
+const FIXED_SUBJECT_SOURCE = 'export function calculate(value) { return value * 2; }\n';
+
+const all = [...DEFAULT_OUTPUT_NORMALIZATION];
+
+// Expectations written the way they are stored: already normalized.
+const outputMatchingExpectations = (
+  withLocations: boolean,
+): readonly ArtifactOutputExpectationV1[] => [
+  {
+    mode: 'contains',
+    normalize: all,
+    value: 'Expected 4 from calculate(2) (<duration>)',
+  },
+  ...(withLocations
+    ? ([
+        { mode: 'contains', normalize: all, value: 'at <project>/reproduction.mjs' },
+        { mode: 'contains', normalize: all, value: 'tmp=<tmp>' },
+      ] as const)
+    : []),
+  {
+    mode: 'exact',
+    normalize: all,
+    value: withLocations
+      ? 'Expected 4 from calculate(2) (<duration>)\n    at <project>/reproduction.mjs\ntmp=<tmp>\n'
+      : 'Expected 4 from calculate(2) (<duration>)\n',
+  },
+];
+
+const outputMatchingArtifact = (
+  withLocations: boolean,
+  stderr: readonly ArtifactOutputExpectationV1[],
+): ArtifactV1 => {
+  const reproduction = outputMatchingReproduction(withLocations);
+  return {
+    version: 1,
+    environment: {
+      runtime: 'node',
+      runtime_version: '24',
+      operating_system: 'linux',
+      image: APPROVED_NODE_IMAGE,
+    },
+    capture: { host_operating_system: 'linux', host_architecture: 'x64', node_version: '24.15.0' },
+    command: { program: 'node', arguments: ['reproduction.mjs'], working_directory: '.' },
+    files: [
+      {
+        path: 'calculate.mjs',
+        role: 'subject',
+        encoding: 'utf8',
+        content: SUBJECT_SOURCE,
+        sha256: sha256(SUBJECT_SOURCE),
+      },
+      {
+        path: 'reproduction.mjs',
+        role: 'reproduction',
+        encoding: 'utf8',
+        content: reproduction,
+        sha256: sha256(reproduction),
+      },
+    ],
+    expect: { exit_code: 1, stdout: [], stderr },
+    limits: {
+      timeout_seconds: 30,
+      memory_mb: 512,
+      cpus: 1,
+      processes: 64,
+      output_bytes_per_stream: 1_048_576,
+    },
+    redaction: { enabled: true, findings: [] },
+  };
+};
+
+const expectedKinds = (stderr: readonly ArtifactOutputExpectationV1[]) => ({
+  evidence: ['exit_code', ...stderr.map((item) => `stderr_${item.mode}`)],
+  differences: [
+    'exit_code',
+    ...stderr.map((item) => (item.mode === 'exact' ? 'stderr_differs' : 'stderr_missing')),
+  ],
+});
+
+const runOutputMatchingFixture = async (
+  useRealContainer: boolean,
+  withLocations: boolean,
+): Promise<void> => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proofissue-output-matching-'));
+  const checkout = path.join(root, 'checkout');
+  const artifactPath = path.join(root, 'failure.proofissue');
+  await mkdir(checkout);
+  try {
+    const stderr = outputMatchingExpectations(withLocations);
+    await writeFile(artifactPath, serializeArtifact(outputMatchingArtifact(withLocations, stderr)));
+    await writeFile(path.join(checkout, 'calculate.mjs'), FIXED_SUBJECT_SOURCE);
+    await writeFile(
+      path.join(checkout, 'reproduction.mjs'),
+      'throw new Error("checkout reproduction must be ignored");\n',
+    );
+
+    const runner = useRealContainer
+      ? undefined
+      : createDockerRunner({ engine: new LocalFixtureEngine() });
+    const replay = createReplayApplicationService({
+      ...(runner === undefined ? {} : { runner }),
+    }).replay;
+    const snapshot = await replay({ artifact_path: artifactPath, mode: 'snapshot' });
+    const corrected = await replay({
+      artifact_path: artifactPath,
+      mode: 'current_checkout',
+      against_path: checkout,
+    });
+    const kinds = expectedKinds(stderr);
+
+    expect(snapshot.status).toBe('reproduced');
+    expect(snapshot.evidence.map((item) => item.kind)).toEqual(kinds.evidence);
+    expect(snapshot.differences).toEqual([]);
+    for (const item of snapshot.evidence.slice(1)) {
+      expect(item.normalization?.rules).toEqual(all);
+      expect(item.normalization?.changes.map((change) => change.rule)).toEqual(
+        expect.arrayContaining(['line_endings', 'ansi_escapes', 'durations']),
+      );
+    }
+    expect(corrected.status).toBe('not_reproduced');
+    expect(corrected.execution?.exit_code).toBe(0);
+    expect(corrected.differences.map((item) => item.kind)).toEqual(kinds.differences);
+    expect(corrected.substituted_paths).toEqual(['calculate.mjs']);
+
+    const encoded = JSON.stringify([snapshot, corrected]);
+    expect(encoded).not.toContain('decoded_text');
+    expect(encoded).not.toContain(root);
+    expect(encoded).not.toContain('Expected 4 from calculate(2)');
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+};
+
+describe('Output matching fix verification through the shared application service', () => {
+  it('reproduces normalized expectations and does not reproduce after the declared fix', async () => {
+    await runOutputMatchingFixture(false, false);
+  });
+});
+
+integration('Output matching fix verification in the locked-down container', () => {
+  it('reproduces normalized path and temporary-directory expectations and then the fix', async () => {
+    await runOutputMatchingFixture(true, true);
+  }, 90_000);
+
+  it('records on the host and reproduces in the container, then verifies the fix', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-record-then-replay-'));
+    const checkout = path.join(root, 'checkout');
+    const project = path.join(root, 'project');
+    const artifactPath = path.join(root, 'recorded.proofissue');
+    await mkdir(checkout);
+    await mkdir(project);
+    try {
+      await writeFile(path.join(project, 'calculate.mjs'), SUBJECT_SOURCE);
+      await writeFile(path.join(project, 'reproduction.mjs'), outputMatchingReproduction(true));
+      await writeFile(path.join(checkout, 'calculate.mjs'), FIXED_SUBJECT_SOURCE);
+      const moduleUrl = pathToFileURL(path.join(await realpath(project), 'reproduction.mjs')).href;
+
+      const recorded = await createRecordApplicationService(() =>
+        Promise.resolve({
+          reproduction_files_confirmed: true,
+          subject_files_confirmed: true,
+          write_confirmed: true,
+        }),
+      ).record({
+        arguments: ['reproduction.mjs'],
+        environment_image: APPROVED_NODE_IMAGE,
+        expect_stderr: [
+          { mode: 'contains', normalized: true, value: 'Expected 4 from calculate(2) (' },
+          { mode: 'contains', normalized: true, value: `at ${moduleUrl}` },
+          { mode: 'contains', normalized: true, value: 'tmp=/tmp' },
+          { mode: 'exact', normalized: true },
+        ],
+        expect_stdout: [],
+        output_path: artifactPath,
+        program: 'node',
+        project_root: project,
+        reproduction_paths: ['reproduction.mjs'],
+        subject_paths: ['calculate.mjs'],
+      });
+      expect(recorded).toMatchObject({ status: 'created', errors: [] });
+      expect(await readFile(artifactPath, 'utf8')).not.toContain(await realpath(project));
+
+      const replay = createReplayApplicationService().replay;
+      const snapshot = await replay({ artifact_path: artifactPath, mode: 'snapshot' });
+      const corrected = await replay({
+        artifact_path: artifactPath,
+        mode: 'current_checkout',
+        against_path: checkout,
+      });
+
+      expect(snapshot.status).toBe('reproduced');
+      expect(snapshot.evidence.map((item) => item.kind)).toEqual([
+        'exit_code',
+        'stderr_contains',
+        'stderr_contains',
+        'stderr_contains',
+        'stderr_exact',
+      ]);
+      expect(corrected.status).toBe('not_reproduced');
+      expect(corrected.differences.map((item) => item.kind)).toEqual([
+        'exit_code',
+        'stderr_missing',
+        'stderr_missing',
+        'stderr_missing',
+        'stderr_differs',
+      ]);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  }, 120_000);
 });

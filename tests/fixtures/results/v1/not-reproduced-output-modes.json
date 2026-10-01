@@ -1,0 +1,96 @@
+{
+  "result_schema_version": 1,
+  "operation": "replay",
+  "status": "not_reproduced",
+  "artifact_version": 1,
+  "artifact_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "warnings": [],
+  "errors": [],
+  "mode": "current_checkout",
+  "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "effective_limits": {
+    "cpus": 1,
+    "memory_mb": 512,
+    "output_bytes_per_stream": 1048576,
+    "processes": 64,
+    "timeout_seconds": 60,
+    "writable_workspace_mb": 64
+  },
+  "execution": {
+    "duration_ms": 98,
+    "exit_code": 0,
+    "stdout": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 22,
+      "total_bytes": 22,
+      "truncated": false
+    },
+    "stderr": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 0,
+      "total_bytes": 0,
+      "truncated": false
+    },
+    "termination_reason": "exited"
+  },
+  "evidence": [
+    {
+      "kind": "stdout_exact",
+      "message": "Replay stdout matched the expected output exactly."
+    }
+  ],
+  "differences": [
+    {
+      "kind": "exit_code",
+      "message": "Expected exit code 1 but received 0."
+    },
+    {
+      "kind": "stderr_missing",
+      "message": "Expected stderr text was not present after normalization; normalization changed nothing in the replay output.",
+      "normalization": {
+        "rules": [
+          "line_endings",
+          "ansi_escapes",
+          "trailing_whitespace",
+          "paths",
+          "node_version",
+          "node_internal_locations",
+          "process_ids",
+          "durations"
+        ],
+        "changes": []
+      }
+    },
+    {
+      "kind": "stderr_differs",
+      "message": "Normalized replay stderr differed from the expected output at line 1, column 1 (expected 76 characters, received 0); normalization changed nothing in the replay output.",
+      "normalization": {
+        "rules": [
+          "line_endings",
+          "ansi_escapes",
+          "trailing_whitespace",
+          "paths",
+          "node_version",
+          "node_internal_locations",
+          "process_ids",
+          "durations"
+        ],
+        "changes": []
+      }
+    }
+  ],
+  "substituted_paths": ["calculate.mjs"],
+  "scope_limitations": [
+    {
+      "code": "declared_subject_paths_only",
+      "message": "Only listed subject paths were substituted; undeclared additions, removals, and renames were not evaluated."
+    }
+  ],
+  "cleanup": {
+    "completed": true,
+    "attempted_resources": ["container", "workspace"],
+    "residual_resources": []
+  }
+}

@@ -46,11 +46,23 @@ The redactor does not receive process-read chunks. Different read chunking for t
 
 A secret cut by the retention boundary may be incomplete and therefore undetectable. Truncation is always visible, and matching cannot treat discarded bytes as evidence. Minimal environment exposure and bounded clean execution remain primary controls; redaction is defense in depth.
 
+## Normalization
+
+An output expectation may ask for normalization rules. The pipeline order is fixed:
+
+1. retain bounded raw bytes;
+2. decode the complete retained buffer;
+3. redact the complete bounded decoded string once;
+4. normalize, only for an expectation that lists `normalize`, using the record-time or replay-time path context;
+5. compare.
+
+Normalization never runs on raw bytes, never runs before redaction, and never runs on a stream for an expectation without `normalize`. Rules are pure, linear in the length of the text, and idempotent, so a normalized value is unchanged by normalizing it again. `output-matching.md` defines each rule.
+
 ## Matching
 
-Literal matching operates on redacted decoded bounded text, separately for stdout and stderr. It does not operate on raw bytes.
+Matching operates on redacted decoded bounded text, separately for stdout and stderr, and, when an expectation lists rules, on the normalized form of that text. It does not operate on raw bytes. An expectation's mode is `contains` (the value appears in the stream) or `exact` (the whole stream equals the value).
 
-An expectation containing a redaction marker is invalid. If output was truncated and a required literal is absent, the difference records insufficient bounded evidence rather than claiming that discarded output did or did not contain the literal.
+An expectation containing a redaction marker is invalid. If output was truncated and a required literal is absent, the difference records insufficient bounded evidence rather than claiming that discarded output did or did not contain the literal. An exact expectation can never be established for a truncated stream, so it always records insufficient bounded evidence.
 
 ## Public Result Boundary
 
@@ -69,5 +81,7 @@ Adapters may offer an explicitly requested detailed view later, but it must use 
 - secrets at buffer start, end, and near truncation;
 - multiple and overlapping redaction candidates;
 - matching after replacement decoding;
+- normalization that runs only after redaction, never on a raw expectation, and is idempotent;
+- an exact expectation that is never satisfied by a truncated stream;
 - independent stdout and stderr metadata;
 - no raw synthetic secret in findings, errors, logs, snapshots, or JSON.

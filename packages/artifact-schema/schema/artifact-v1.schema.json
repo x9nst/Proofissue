@@ -133,7 +133,25 @@
             "additionalProperties": false,
             "properties": {
               "mode": {
-                "const": "contains"
+                "enum": ["contains", "exact"]
+              },
+              "normalize": {
+                "items": {
+                  "enum": [
+                    "line_endings",
+                    "ansi_escapes",
+                    "trailing_whitespace",
+                    "paths",
+                    "node_version",
+                    "node_internal_locations",
+                    "process_ids",
+                    "durations"
+                  ]
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
               },
               "value": {
                 "maxLength": 8192,
@@ -152,7 +170,25 @@
             "additionalProperties": false,
             "properties": {
               "mode": {
-                "const": "contains"
+                "enum": ["contains", "exact"]
+              },
+              "normalize": {
+                "items": {
+                  "enum": [
+                    "line_endings",
+                    "ansi_escapes",
+                    "trailing_whitespace",
+                    "paths",
+                    "node_version",
+                    "node_internal_locations",
+                    "process_ids",
+                    "durations"
+                  ]
+                },
+                "maxItems": 8,
+                "minItems": 1,
+                "type": "array",
+                "uniqueItems": true
               },
               "value": {
                 "maxLength": 8192,

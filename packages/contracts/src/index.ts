@@ -86,14 +86,53 @@ export interface CleanupSummary {
   readonly residual_resources: readonly string[];
 }
 
+/**
+ * A normalization rule an output expectation can ask for. Each name has one frozen
+ * definition; the canonical order is the order listed here. See docs/output-matching.md.
+ */
+export type OutputNormalizationRule =
+  | 'line_endings'
+  | 'ansi_escapes'
+  | 'trailing_whitespace'
+  | 'paths'
+  | 'node_version'
+  | 'node_internal_locations'
+  | 'process_ids'
+  | 'durations';
+
+/** How many replacements one rule made. Counts only: never the replaced text. */
+export interface NormalizationChange {
+  readonly rule: OutputNormalizationRule;
+  readonly count: number;
+}
+
+/** What normalization an expectation asked for and what it changed in the replay output. */
+export interface NormalizationSummary {
+  /** Rules the expectation requested, in application order. */
+  readonly rules: readonly OutputNormalizationRule[];
+  /** Replacements each rule made in the replay output, in rule order; unchanged rules are omitted. */
+  readonly changes: readonly NormalizationChange[];
+}
+
 export interface MatchEvidence {
-  readonly kind: 'exit_code' | 'stderr_contains' | 'stdout_contains';
+  readonly kind:
+    'exit_code' | 'stderr_contains' | 'stderr_exact' | 'stdout_contains' | 'stdout_exact';
   readonly message: string;
+  /** Present when the expectation compared normalized output. */
+  readonly normalization?: NormalizationSummary;
 }
 
 export interface Difference {
-  readonly kind: 'exit_code' | 'stderr_missing' | 'stdout_missing' | 'insufficient_output';
+  readonly kind:
+    | 'exit_code'
+    | 'insufficient_output'
+    | 'stderr_differs'
+    | 'stderr_missing'
+    | 'stdout_differs'
+    | 'stdout_missing';
   readonly message: string;
+  /** Present when the expectation compared normalized output. */
+  readonly normalization?: NormalizationSummary;
 }
 
 export interface ScopeLimitation {
@@ -134,6 +173,12 @@ export interface ArtifactInspectionRedactionFinding {
   readonly count: number;
 }
 
+/** How one output expectation compares, never its value. An empty `normalize` means raw. */
+export interface ArtifactInspectionOutputExpectation {
+  readonly mode: 'contains' | 'exact';
+  readonly normalize: readonly OutputNormalizationRule[];
+}
+
 export interface ArtifactInspectionSummary {
   readonly runtime: 'node';
   readonly runtime_version: string;
@@ -149,6 +194,8 @@ export interface ArtifactInspectionSummary {
     readonly exit_code: number;
     readonly stdout_count: number;
     readonly stderr_count: number;
+    readonly stdout_expectations: readonly ArtifactInspectionOutputExpectation[];
+    readonly stderr_expectations: readonly ArtifactInspectionOutputExpectation[];
   };
   readonly limits: {
     readonly cpus: number;
