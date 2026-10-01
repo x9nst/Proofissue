@@ -53,6 +53,7 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | `../../secret`, absolute, drive, UNC, or backslash path | Artifact path | Reject during static semantic validation | Rejection |
 | Unicode or case variant collides with another path | Artifact path | Apply the documented portable-path and collision rules; reject collisions | Rejection |
 | Symlink or junction selected during recording | Host filesystem | Refuse collection and write no artifact | Rejection |
+| Directory swapped for a link to elsewhere between the link check and the read | Host filesystem | Resolve the opened file's real location and require it to remain inside the project root | Rejection |
 | Current subject changes into a symlink between checks | Current checkout | Use no-follow access and final root verification; stop before container execution | Rejection |
 | Hash does not match embedded content | Artifact integrity | Reject as `invalid_artifact` | Rejection |
 | Artifact requests arbitrary or mutable image | Image policy | Reject before image acquisition or container creation | Rejection |
