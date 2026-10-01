@@ -133,37 +133,57 @@ export const parseActionInputs = (
   };
 };
 
-const evidenceLabel = (kind: ReplayOperationResult['evidence'][number]['kind']): string => {
+type ReplayEvidence = ReplayOperationResult['evidence'][number];
+type ReplayDifference = ReplayOperationResult['differences'][number];
+
+// Fixed text only: a label never repeats an expected value, an output excerpt, or a message.
+const baseEvidenceLabel = (kind: ReplayEvidence['kind']): string => {
   switch (kind) {
     case 'exit_code':
       return 'exit code matched';
     case 'stderr_contains':
       return 'expected stderr text was present';
+    case 'stderr_exact':
+      return 'stderr matched the expected output exactly';
     case 'stdout_contains':
       return 'expected stdout text was present';
+    case 'stdout_exact':
+      return 'stdout matched the expected output exactly';
   }
 };
 
-const differenceLabel = (kind: ReplayOperationResult['differences'][number]['kind']): string => {
+const baseDifferenceLabel = (kind: ReplayDifference['kind']): string => {
   switch (kind) {
     case 'exit_code':
       return 'exit code differed';
     case 'insufficient_output':
       return 'retained output was insufficient';
+    case 'stderr_differs':
+      return 'stderr differed from the expected output';
     case 'stderr_missing':
       return 'expected stderr text was absent';
+    case 'stdout_differs':
+      return 'stdout differed from the expected output';
     case 'stdout_missing':
       return 'expected stdout text was absent';
   }
 };
+
+const NORMALIZED_SUFFIX = ' after normalization';
+
+const evidenceLabel = (item: ReplayEvidence): string =>
+  `${baseEvidenceLabel(item.kind)}${item.normalization === undefined ? '' : NORMALIZED_SUFFIX}`;
+
+const differenceLabel = (item: ReplayDifference): string =>
+  `${baseDifferenceLabel(item.kind)}${item.normalization === undefined ? '' : NORMALIZED_SUFFIX}`;
 
 export const renderActionSummary = (
   result: ReplayOperationResult,
   requiredStatus: RequiredReplayStatus | undefined,
   requiredStatusSatisfied: boolean,
 ): string => {
-  const evidence = result.evidence.map((item) => evidenceLabel(item.kind));
-  const differences = result.differences.map((item) => differenceLabel(item.kind));
+  const evidence = result.evidence.map(evidenceLabel);
+  const differences = result.differences.map(differenceLabel);
   const lines = [
     '## ProofIssue replay',
     '',
