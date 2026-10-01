@@ -157,6 +157,103 @@ integration('real locked-down Docker replay', () => {
     expect(disk.execution.stderr.decoded_text).toBe('proofissue-marker');
   }, 60_000);
 
+  it('exposes only PATH to the replayed process and still streams output with daemon logs disabled', async () => {
+    const source = `
+        const keys = Object.keys(process.env).sort().join(',');
+        process.stdout.write('stdout-visible');
+        process.stderr.write(keys === 'PATH' ? 'proofissue-marker' : 'environment-leak:' + keys);
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({ artifact: artifact(source), mode: 'snapshot' });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+    expect(result.execution.stdout.decoded_text).toBe('stdout-visible');
+    expect(result.cleanup.completed).toBe(true);
+  }, 30_000);
+
+  it('blocks DNS resolution and IPv6 connections as well as IPv4', async () => {
+    const source = `
+        import * as dns from 'node:dns/promises';
+        import * as net from 'node:net';
+        const failures = [];
+        const lookup = dns.lookup('example.com').then(
+          () => { failures.push('dns-resolved'); },
+          () => undefined,
+        );
+        const ipv6 = new Promise((resolve) => {
+          const socket = net.connect({ host: '2606:4700:4700::1111', port: 80 });
+          socket.once('connect', () => { failures.push('ipv6-connected'); socket.destroy(); resolve(); });
+          socket.once('error', () => { resolve(); });
+          setTimeout(() => { socket.destroy(); resolve(); }, 3000).unref();
+        });
+        await Promise.race([
+          Promise.all([lookup, ipv6]),
+          new Promise((resolve) => setTimeout(resolve, 8000).unref()),
+        ]);
+        process.stderr.write(failures.length ? failures.join(',') : 'proofissue-marker');
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({
+      artifact: artifact(source),
+      mode: 'snapshot',
+    });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+    expect(result.cleanup.completed).toBe(true);
+  }, 30_000);
+
+  it('refuses process creation past the process limit', async () => {
+    // A bounded stand-in for a fork bomb: it makes far more fork attempts than the
+    // limit allows, but never enough to harm the host if the limit were missing.
+    const source = `
+        import { spawn } from 'node:child_process';
+        const children = [];
+        let refused = 0;
+        for (let index = 0; index < 100; index += 1) {
+          const child = spawn('sleep', ['30'], { stdio: 'ignore' });
+          child.once('error', () => { refused += 1; });
+          children.push(child);
+        }
+        setTimeout(() => {
+          for (const child of children) child.kill('SIGKILL');
+          process.stderr.write(refused > 0 ? 'proofissue-marker' : 'process-limit-not-enforced');
+          process.exitCode = 1;
+        }, 1500);
+      `;
+    const result = await createDockerRunner().run({
+      artifact: artifact(source, { ...defaultLimits, processes: 16 }),
+      mode: 'snapshot',
+    });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+    expect(result.cleanup).toMatchObject({ completed: true, residual_resources: [] });
+  }, 60_000);
+
+  it('kills a process that allocates past the memory limit and reports resource termination', async () => {
+    // Stops at 512 MiB so a missing limit cannot exhaust the host.
+    const source = `
+        const held = [];
+        for (let total = 0; total < 512; total += 8) held.push(Buffer.alloc(8 * 1024 * 1024, 1));
+        process.stderr.write('memory-limit-not-enforced');
+        process.exitCode = 1;
+      `;
+    let failure: RunnerError | undefined;
+    try {
+      await createDockerRunner().run({
+        artifact: artifact(source, { ...defaultLimits, memory_mb: 64 }),
+        mode: 'snapshot',
+      });
+    } catch (error: unknown) {
+      if (error instanceof RunnerError) failure = error;
+    }
+
+    expect(failure).toMatchObject({
+      code: 'resource_termination',
+      cleanup: { completed: true, residual_resources: [] },
+    });
+    expect(failure?.execution?.stderr.decoded_text ?? '').not.toContain('not-enforced');
+  }, 60_000);
+
   it('terminates CPU/time and memory exhaustion and leaves no residual resources', async () => {
     let timeoutError: RunnerError | undefined;
     try {

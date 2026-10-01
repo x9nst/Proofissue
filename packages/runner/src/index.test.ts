@@ -160,6 +160,87 @@ describe('Docker isolation arguments', () => {
     expect(encoded).not.toContain('privileged');
     expect(encoded).not.toContain('docker.sock');
   });
+
+  const createSpec = (inputPath: string) => ({
+    arguments: ['reproduction.mjs'],
+    image: APPROVED_NODE_IMAGE,
+    input_path: inputPath,
+    limits: {
+      cpus: 1,
+      memory_mb: 64,
+      output_bytes_per_stream: 1024,
+      processes: 8,
+      timeout_seconds: 1,
+      writable_workspace_mb: 64,
+    },
+    name: 'proofissue-test',
+  });
+
+  const valuesOf = (arguments_: readonly string[], flag: string): readonly (string | undefined)[] =>
+    arguments_.flatMap((argument, index) => (argument === flag ? [arguments_[index + 1]] : []));
+
+  it('never pulls the image and discards daemon-side logs', () => {
+    const arguments_ = buildDockerCreateArguments(createSpec('/tmp/proofissue-input'));
+
+    expect(valuesOf(arguments_, '--pull')).toEqual(['never']);
+    expect(valuesOf(arguments_, '--log-driver')).toEqual(['none']);
+  });
+
+  it('removes core dumps and bounds open file descriptors', () => {
+    const arguments_ = buildDockerCreateArguments(createSpec('/tmp/proofissue-input'));
+
+    expect(valuesOf(arguments_, '--ulimit')).toEqual(['core=0:0', 'nofile=1024:1024']);
+  });
+
+  it('keeps every create option ahead of the image so artifact data cannot become an option', () => {
+    const arguments_ = buildDockerCreateArguments(createSpec('/tmp/proofissue-input'));
+    const imageIndex = arguments_.indexOf(APPROVED_NODE_IMAGE);
+
+    expect(imageIndex).toBeGreaterThan(0);
+    for (const flag of ['--pull', '--log-driver', '--ulimit', '--network', '--read-only']) {
+      expect(arguments_.indexOf(flag)).toBeLessThan(imageIndex);
+    }
+  });
+
+  it.each([
+    ['a comma that would add mount options', '/tmp/proofissue,readonly=false'],
+    ['a comma that would redirect the mount target', '/tmp/a,dst=/etc'],
+    ['a double quote', '/tmp/proofissue"input'],
+    ['a newline', '/tmp/proofissue\ninput'],
+    ['a carriage return', '/tmp/proofissue\rinput'],
+    ['a NUL byte', '/tmp/proofissue\u0000input'],
+    ['a delete character', '/tmp/proofissue\u007finput'],
+    ['an empty path', ''],
+    ['a relative path', 'proofissue-input'],
+    ['a dot-relative path', './proofissue-input'],
+  ])('rejects a mount source with %s', (_description, inputPath) => {
+    expect(() => buildDockerCreateArguments(createSpec(inputPath))).toThrow(
+      expect.objectContaining({ code: 'policy_rejection' }) as Error,
+    );
+  });
+
+  it('does not echo a rejected mount source in the error message', () => {
+    const attempted = '/tmp/secret-looking-directory,dst=/etc';
+    let message = '';
+    try {
+      buildDockerCreateArguments(createSpec(attempted));
+    } catch (error: unknown) {
+      message = error instanceof Error ? error.message : '';
+    }
+
+    expect(message).not.toBe('');
+    expect(message).not.toContain('secret-looking-directory');
+  });
+
+  it('accepts a typical temporary workspace path', () => {
+    const arguments_ = buildDockerCreateArguments(
+      createSpec('/tmp/proofissue-replay-0123456789abcdef'),
+    );
+
+    expect(arguments_).toContain(
+      'type=bind,src=/tmp/proofissue-replay-0123456789abcdef,dst=/proofissue-input,readonly',
+    );
+  });
 });
 
 describe('runner lifecycle', () => {

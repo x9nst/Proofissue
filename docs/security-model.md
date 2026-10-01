@@ -88,7 +88,10 @@ Every replay container must have all of these controls:
 - no-new-privileges enforcement;
 - a non-root numeric user;
 - a read-only base filesystem where the runtime permits it;
-- only one explicitly created temporary workspace exposed to the container;
+- only one explicitly created temporary workspace exposed to the container, with its host path validated before it is placed in the mount specification;
+- container creation with image pulling disabled;
+- no engine-side retention of container output, which is read only through the bounded attached stream;
+- no core dumps and a bounded open-file limit;
 - bounded writable temporary storage;
 - CPU, memory, process-count, output, and wall-clock limits;
 - a clean allowlisted environment with no inherited host secrets;
@@ -104,7 +107,7 @@ The runner never silently enables networking, privileged mode, root execution, a
 
 Version 1 accepts only a known Node.js image digest approved by runner policy. An artifact-provided digest is a request, not authorization.
 
-The runner does not automatically pull a missing image during replay. Image acquisition is a separate, explicit environment-preparation action so validation and replay do not unexpectedly gain host network access. CI may prepare the approved image before replay.
+The runner does not automatically pull a missing image during replay. Image acquisition is a separate, explicit environment-preparation action so validation and replay do not unexpectedly gain host network access. CI may prepare the approved image before replay. The container is also created with image pulling disabled, so an image that disappears between the presence check and container creation makes creation fail instead of fetching it.
 
 A digest protects against tag movement but does not make image contents trustworthy. Approved images require maintainer review and periodic security updates. Updating the approved digest requires replay compatibility testing.
 
@@ -113,6 +116,8 @@ A digest protects against tag movement but does not make image contents trustwor
 Workspace paths are derived from validated portable relative paths, never string-concatenated host paths. Parent directories are created inside a newly allocated temporary root.
 
 The implementation must defend against symbolic-link and path races while reading current-checkout files and while writing reconstructed files. Final path resolution must remain beneath the intended root at the time of access.
+
+The one host path handed to the container engine is the runner-created temporary root. It is interpolated into a comma-separated mount specification, so the runner rejects a path that is relative or that contains a comma, double quote, or control character before building engine arguments. A rejected path is reported as `policy_rejection` without echoing the path.
 
 The container may modify its temporary workspace because tests can create files, but no other host path is mounted. Version 1 uses a fixed 64 MiB writable-workspace ceiling enforced by runner-controlled container storage rather than an artifact setting. Validated host input is exposed read-only when it must be mounted. The entire temporary root is removed after container removal.
 
