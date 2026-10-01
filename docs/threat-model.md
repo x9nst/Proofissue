@@ -56,6 +56,11 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Directory swapped for a link to elsewhere between the link check and the read | Host filesystem | Resolve the opened file's real location and require it to remain inside the project root | Rejection |
 | Current subject changes into a symlink between checks | Current checkout | Use no-follow access and final root verification; stop before container execution | Rejection |
 | Hash does not match embedded content | Artifact integrity | Reject as `invalid_artifact` | Rejection |
+| Lockfile points a package at another host, a git or file source, or a look-alike registry address | Dependency lockfile | Accept only the exact registry tarball address implied by name and version | Rejection |
+| Lockfile has a missing, weak, or multiple integrity hash | Dependency lockfile | Require exactly one well-formed SHA-512 hash on every entry | Rejection |
+| Lockfile location escapes `node_modules` (`../`, backslashes, absolute paths, `__proto__`) | Dependency lockfile | Accept only chains of `node_modules/<valid name>` | Rejection |
+| Lockfile repeats a key so two readers see different entries | Dependency lockfile | Reject duplicate keys after decoding escapes | Rejection |
+| Lockfile of enormous size, entry count, or nesting | Dependency lockfile | Bound bytes and entries, scan iteratively, and test the time budget | Rejection |
 | Artifact requests arbitrary or mutable image | Image policy | Reject before image acquisition or container creation | Rejection |
 | Approved image is absent | Image policy | Return `execution_failed`; never auto-pull during replay | Rejection |
 | Approved image disappears between the presence check and container creation | Image policy | Create the container with image pulling disabled so creation fails instead of fetching | Rejection |

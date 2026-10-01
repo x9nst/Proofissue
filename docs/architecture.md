@@ -32,6 +32,10 @@ Owns the versioned canonical model, JSON Schema, bounded YAML parsing, semantic 
 
 It depends on no other ProofIssue package.
 
+### `packages/dependencies`
+
+Owns validation of a project's npm lockfile before any package is fetched from it. It is pure: strings in, typed results out, with no filesystem, network, or process access, so it can be tested and reasoned about as a trust boundary. Later preparation work that downloads packages belongs here too, kept apart from the sandboxed runner. See `dependencies.md` and `decisions/0002-dependency-strategy.md`.
+
 ### `packages/contracts`
 
 Owns side-effect-free shared execution results, match evidence, public operation outcomes, typed errors, warnings, effective policy summaries, scope limitations, and cleanup summaries.
@@ -104,6 +108,7 @@ application ────────→ artifact-schema, contracts, matcher, pro
 recorder ───────────→ artifact-schema, contracts, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, process-output
 process-output ─────→ contracts
+dependencies ───────→ (none)
 matcher ────────────→ contracts
 report-ui ──────────→ contracts
 ```

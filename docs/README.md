@@ -25,6 +25,7 @@
 - `output-handling.md` defines raw-byte capture, UTF-8 decoding, truncation, whole-buffer redaction, and matching input.
 - `result-contract.md` defines neutral versioned operation results and the error taxonomy.
 - `cli.md` is the command reference: syntax, options, examples, exit codes, failure behavior, and security notes for `record`, `validate`, `inspect`, and `replay`.
+- `dependencies.md` describes npm dependency handling for the initial supported workflow and the lockfile validation rules; it grows as each step lands.
 - `recording.md` defines command authorization, file selection, capture, redaction, confirmation, and recording failures.
 - `replay.md` defines static inspection, snapshot replay, current-checkout replay, result states, and failure behavior.
 - `github-action.md` documents Action inputs, outputs, permissions, summaries, failure behavior, and complete workflow examples.

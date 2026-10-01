@@ -4,6 +4,7 @@
     { "path": "packages/contracts" },
     { "path": "packages/process-output" },
     { "path": "packages/artifact-schema" },
+    { "path": "packages/dependencies" },
     { "path": "packages/redactor" },
     { "path": "packages/matcher" },
     { "path": "packages/recorder" },
