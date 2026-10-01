@@ -197,7 +197,7 @@ const readStream = (record: JsonRecord, key: string): StreamView | undefined => 
   return { retained_bytes: retained, total_bytes: total, truncated };
 };
 
-const readExecution = (record: JsonRecord): ExecutionView | undefined => {
+export const readExecution = (record: JsonRecord): ExecutionView | undefined => {
   const execution = recordField(record, 'execution');
   if (execution === undefined) return undefined;
   const duration = numberField(execution, 'duration_ms');
@@ -225,7 +225,7 @@ const readExecution = (record: JsonRecord): ExecutionView | undefined => {
   };
 };
 
-const readLimits = (record: JsonRecord): LimitsView | undefined => {
+export const readLimits = (record: JsonRecord): LimitsView | undefined => {
   const limits = recordField(record, 'effective_limits');
   if (limits === undefined) return undefined;
   const cpus = numberField(limits, 'cpus');

@@ -4,7 +4,8 @@
  * Production code never imports this module.
  */
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 import type {
@@ -15,7 +16,11 @@ import type {
   ReplayOperationResult,
 } from '@proofissue/contracts';
 
+import type { TrialCase } from './manifest.js';
+import type { PipelineContext } from './pipeline.js';
 import type { ExecOutcome, ExecRequest, Executor } from './process.js';
+import type { TrialResult } from './result-model.js';
+import { createScrubber } from './scrub.js';
 
 const capture = (text: string): BoundedStreamCapture => ({
   decoded_text: text,
@@ -336,9 +341,13 @@ export const createFakeWorld = (inputs: FakeWorldInputs): FakeWorld => {
         const custom = options.replay?.({ kind, index });
         if (custom !== undefined) return custom;
         const mode = against === undefined ? 'snapshot' : 'current_checkout';
+        const digest = createHash('sha256')
+          .update(await readFile(artifact))
+          .digest('hex');
         return okOutcome(
           replayJson(kind === 'fix' ? 'not_reproduced' : 'reproduced', {
             mode,
+            artifact_digest: digest,
             execution: {
               duration_ms: kind === 'baseline' ? 12_000 : 20_000 + index * 100,
               exit_code: kind === 'baseline' ? 0 : 1,
@@ -361,7 +370,7 @@ export const createFakeWorld = (inputs: FakeWorldInputs): FakeWorld => {
     if (request.command === 'git') return await git(request);
     if (request.command === 'npm') {
       const result = options.hostInstall ?? okOutcome();
-      if (result.exitCode === 0 && !result.timedOut) {
+      if (request.args[0] === 'ci' && result.exitCode === 0 && !result.timedOut) {
         const modules = path.join(request.cwd, 'node_modules', 'example-package');
         await mkdir(modules, { recursive: true });
         await writeFile(path.join(modules, 'index.js'), 'x'.repeat(5000));
@@ -387,4 +396,114 @@ export const createFakeWorld = (inputs: FakeWorldInputs): FakeWorld => {
           call.args[1] === subcommand,
       ),
   };
+};
+
+export const sampleCase: TrialCase = {
+  id: 'X1',
+  sets: ['unit'],
+  title: 'A reproducible failure',
+  repository: 'https://github.com/example-owner/example-repository.git',
+  links: ['https://github.com/example-owner/example-repository/issues/1'],
+  pre_fix_commit: 'a'.repeat(40),
+  fix_commit: 'b'.repeat(40),
+  dependencies: true,
+  reproduction_files: ['test/example.test.js'],
+  subject_files: ['lib/example.js', 'lib/helper.js'],
+  command: ['node', '--test', 'test/example.test.js'],
+  expected_exit_code: 1,
+  expectations: [{ stream: 'stdout', mode: 'contains', value: 'failing literal' }],
+};
+
+export const SAMPLE_CLI_PATH = '/mnt/ci/proofissue/packages/cli/dist/bin.js';
+export const SAMPLE_NODE_PATH = '/mnt/ci/node/bin/node';
+export const SAMPLE_IMAGE = `node@sha256:${'d'.repeat(64)}`;
+
+const temporaryRoots: string[] = [];
+
+export const cleanupTrialHarnesses = async (): Promise<void> => {
+  for (const root of temporaryRoots.splice(0)) await rm(root, { force: true, recursive: true });
+};
+
+export interface TrialHarness {
+  readonly root: string;
+  readonly roots: { work: string; output: string; diagnostics: string };
+  readonly world: FakeWorld;
+  readonly lines: string[];
+  readonly context: PipelineContext;
+}
+
+export const createTrialHarness = async (
+  options: FakeOptions = {},
+  overrides: Partial<PipelineContext> = {},
+): Promise<TrialHarness> => {
+  const root = await mkdtemp(path.join(tmpdir(), 'trial-pipeline-'));
+  temporaryRoots.push(root);
+  const roots = {
+    work: path.join(root, 'work'),
+    output: path.join(root, 'out'),
+    diagnostics: path.join(root, 'diag'),
+  };
+  const world = createFakeWorld({
+    cliPath: SAMPLE_CLI_PATH,
+    nodePath: SAMPLE_NODE_PATH,
+    files: [...sampleCase.reproduction_files, ...sampleCase.subject_files],
+    options,
+  });
+  let tick = 0;
+  const lines: string[] = [];
+  const context: PipelineContext = {
+    exec: world.exec,
+    now: () => {
+      tick += 250;
+      return tick;
+    },
+    environment: {
+      platform: 'linux',
+      arch: 'x64',
+      kernel_release: '6.11.0',
+      cpu_count: 4,
+      cpu_model: 'Example CPU',
+      memory_total_mb: 16384,
+      host_node_version: '24.18.0',
+      approved_image: SAMPLE_IMAGE,
+    },
+    image: SAMPLE_IMAGE,
+    roots,
+    cliPath: SAMPLE_CLI_PATH,
+    nodePath: SAMPLE_NODE_PATH,
+    pathEnv: '/mnt/ci/bin',
+    runs: 5,
+    baselineRuns: 3,
+    fixRuns: 1,
+    scrub: createScrubber([
+      { path: roots.work, token: '<work>' },
+      { path: roots.output, token: '<results>' },
+      { path: roots.diagnostics, token: '<diagnostics>' },
+    ]),
+    log: (line) => {
+      lines.push(line);
+    },
+    ...overrides,
+  };
+  return { root, roots, world, lines, context };
+};
+
+export const readTrialResult = async (harness: TrialHarness): Promise<TrialResult> =>
+  JSON.parse(
+    await readFile(path.join(harness.roots.output, 'X1', 'X1.result.json'), 'utf8'),
+  ) as TrialResult;
+
+export const listFiles = async (directory: string): Promise<string[]> => {
+  const names: string[] = [];
+  for (const entry of await readdir(directory, { recursive: true, withFileTypes: true })) {
+    if (entry.isFile()) names.push(path.join(entry.parentPath, entry.name));
+  }
+  return names.sort();
+};
+
+/** Makes a temporary directory that {@link cleanupTrialHarnesses} removes. */
+export const temporaryDirectory = async (prefix: string): Promise<string> => {
+  const root = await mkdtemp(path.join(tmpdir(), prefix));
+  temporaryRoots.push(root);
+  return root;
 };

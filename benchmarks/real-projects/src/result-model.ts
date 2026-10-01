@@ -14,54 +14,71 @@ import type {
 } from './cli-results.js';
 import type { TrialExpectation } from './manifest.js';
 
-export type StageStatus = 'failed' | 'ok' | 'skipped';
-export type Classification = 'confirmed' | 'finding' | 'harness_error' | 'setup_failed';
+export const STAGE_STATUSES = ['failed', 'ok', 'skipped'] as const;
+export type StageStatus = (typeof STAGE_STATUSES)[number];
 
-export type SetupCode =
-  | 'fetch_failed'
-  | 'file_mismatch'
-  | 'host_install_failed'
-  | 'preflight_exit_code_mismatch'
-  | 'preflight_expectation_missing'
-  | 'preflight_timeout'
-  | 'prepare_network'
-  | 'replay_environment';
+export const CLASSIFICATIONS = ['confirmed', 'finding', 'harness_error', 'setup_failed'] as const;
+export type Classification = (typeof CLASSIFICATIONS)[number];
 
-export type FindingCode =
-  | 'fix_execution_failed'
-  | 'fix_not_verified'
-  | 'pre_fix_checkout_failed'
-  | 'prepare_refused'
-  | 'record_refused'
-  | 'replay_error'
-  | 'snapshot_execution_failed'
-  | 'snapshot_inconsistent'
-  | 'snapshot_not_reproduced';
+export const SETUP_CODES = [
+  'fetch_failed',
+  'file_mismatch',
+  'host_install_failed',
+  'preflight_exit_code_mismatch',
+  'preflight_expectation_missing',
+  'preflight_timeout',
+  'prepare_network',
+  'replay_environment',
+] as const;
+export type SetupCode = (typeof SETUP_CODES)[number];
 
-export type HarnessCode =
-  | 'cli_arguments_rejected'
-  | 'cli_missing'
-  | 'local_path_in_result'
-  | 'record_arguments_rejected'
-  | 'secret_like_value_in_result'
-  | 'unexpected_exception'
-  | 'unparseable_cli_output';
+export const FINDING_CODES = [
+  'fix_execution_failed',
+  'fix_not_verified',
+  'pre_fix_checkout_failed',
+  'prepare_refused',
+  'record_refused',
+  'replay_error',
+  'snapshot_execution_failed',
+  'snapshot_inconsistent',
+  'snapshot_not_reproduced',
+] as const;
+export type FindingCode = (typeof FINDING_CODES)[number];
 
-export type OutcomeCode = FindingCode | HarnessCode | SetupCode | 'all_stages_passed';
+export const HARNESS_CODES = [
+  'cli_arguments_rejected',
+  'cli_missing',
+  'local_path_in_result',
+  'record_arguments_rejected',
+  'secret_like_value_in_result',
+  'unexpected_exception',
+  'unparseable_cli_output',
+] as const;
+export type HarnessCode = (typeof HARNESS_CODES)[number];
 
-export type OutcomeStage =
-  | 'fetch'
-  | 'files'
-  | 'fix_verification'
-  | 'harness'
-  | 'host_install'
-  | 'install_baseline'
-  | 'pre_fix_checkout'
-  | 'preflight'
-  | 'prepare'
-  | 'record'
-  | 'snapshot'
-  | 'write';
+export const OUTCOME_CODES = [
+  ...FINDING_CODES,
+  ...HARNESS_CODES,
+  ...SETUP_CODES,
+  'all_stages_passed',
+] as const;
+export type OutcomeCode = (typeof OUTCOME_CODES)[number];
+
+export const OUTCOME_STAGES = [
+  'fetch',
+  'files',
+  'fix_verification',
+  'harness',
+  'host_install',
+  'install_baseline',
+  'pre_fix_checkout',
+  'preflight',
+  'prepare',
+  'record',
+  'snapshot',
+  'write',
+] as const;
+export type OutcomeStage = (typeof OUTCOME_STAGES)[number];
 
 export interface Outcome {
   readonly classification: Classification;

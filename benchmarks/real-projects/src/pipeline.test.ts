@@ -1,127 +1,26 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, stat } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { mkdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import type { TrialCase } from './manifest.js';
-import { runTrialCase, type PipelineContext } from './pipeline.js';
-import type { TrialResult } from './result-model.js';
-import { createScrubber } from './scrub.js';
+import { runTrialCase } from './pipeline.js';
 import {
-  createFakeWorld,
+  SAMPLE_CLI_PATH as cliPath,
+  SAMPLE_NODE_PATH as nodePath,
+  cleanupTrialHarnesses,
+  createTrialHarness as setup,
   failedOutcome,
   failedReplayJson,
+  listFiles,
   okOutcome,
+  readTrialResult as readResult,
   replayJson,
+  sampleCase,
   timedOutOutcome,
   timeoutReplayJson,
-  type FakeOptions,
-  type FakeWorld,
 } from './test-support.js';
 
-const sampleCase: TrialCase = {
-  id: 'X1',
-  sets: ['unit'],
-  title: 'A reproducible failure',
-  repository: 'https://github.com/example-owner/example-repository.git',
-  links: ['https://github.com/example-owner/example-repository/issues/1'],
-  pre_fix_commit: 'a'.repeat(40),
-  fix_commit: 'b'.repeat(40),
-  dependencies: true,
-  reproduction_files: ['test/example.test.js'],
-  subject_files: ['lib/example.js', 'lib/helper.js'],
-  command: ['node', '--test', 'test/example.test.js'],
-  expected_exit_code: 1,
-  expectations: [{ stream: 'stdout', mode: 'contains', value: 'failing literal' }],
-};
-
-const cliPath = '/mnt/ci/proofissue/packages/cli/dist/bin.js';
-const nodePath = '/mnt/ci/node/bin/node';
-const image = `node@sha256:${'d'.repeat(64)}`;
-
-const temporaryRoots: string[] = [];
-
-afterEach(async () => {
-  for (const root of temporaryRoots.splice(0)) await rm(root, { force: true, recursive: true });
-});
-
-interface Harness {
-  readonly root: string;
-  readonly roots: { work: string; output: string; diagnostics: string };
-  readonly world: FakeWorld;
-  readonly lines: string[];
-  readonly context: PipelineContext;
-}
-
-const setup = async (
-  options: FakeOptions = {},
-  overrides: Partial<PipelineContext> = {},
-): Promise<Harness> => {
-  const root = await mkdtemp(path.join(tmpdir(), 'trial-pipeline-'));
-  temporaryRoots.push(root);
-  const roots = {
-    work: path.join(root, 'work'),
-    output: path.join(root, 'out'),
-    diagnostics: path.join(root, 'diag'),
-  };
-  const world = createFakeWorld({
-    cliPath,
-    nodePath,
-    files: [...sampleCase.reproduction_files, ...sampleCase.subject_files],
-    options,
-  });
-  let tick = 0;
-  const lines: string[] = [];
-  const context: PipelineContext = {
-    exec: world.exec,
-    now: () => {
-      tick += 250;
-      return tick;
-    },
-    environment: {
-      platform: 'linux',
-      arch: 'x64',
-      kernel_release: '6.11.0',
-      cpu_count: 4,
-      cpu_model: 'Example CPU',
-      memory_total_mb: 16384,
-      host_node_version: '24.18.0',
-      approved_image: image,
-    },
-    image,
-    roots,
-    cliPath,
-    nodePath,
-    pathEnv: '/mnt/ci/bin',
-    runs: 5,
-    baselineRuns: 3,
-    fixRuns: 1,
-    scrub: createScrubber([
-      { path: roots.work, token: '<work>' },
-      { path: roots.output, token: '<results>' },
-      { path: roots.diagnostics, token: '<diagnostics>' },
-    ]),
-    log: (line) => {
-      lines.push(line);
-    },
-    ...overrides,
-  };
-  return { root, roots, world, lines, context };
-};
-
-const readResult = async (harness: Harness): Promise<TrialResult> =>
-  JSON.parse(
-    await readFile(path.join(harness.roots.output, 'X1', 'X1.result.json'), 'utf8'),
-  ) as TrialResult;
-
-const listFiles = async (directory: string): Promise<string[]> => {
-  const names: string[] = [];
-  for (const entry of await readdir(directory, { recursive: true, withFileTypes: true })) {
-    if (entry.isFile()) names.push(path.join(entry.parentPath, entry.name));
-  }
-  return names.sort();
-};
+afterEach(cleanupTrialHarnesses);
 
 describe('runTrialCase happy path', () => {
   it('writes a confirmed result with the snapshot runs, the pre-fix checkout, and fix verification', async () => {

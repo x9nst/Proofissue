@@ -41,16 +41,16 @@ export interface EnvironmentInputs {
   readonly cwd: string;
 }
 
-const WORD = /^[a-z0-9]{1,16}$/u;
-const KERNEL_RELEASE = /^[0-9A-Za-z._+~-]{1,64}$/u;
-const CPU_MODEL = /^[A-Za-z0-9 ()@.,+/_-]{1,128}$/u;
-const VERSION = /^[0-9][0-9A-Za-z.+~_-]{0,40}$/u;
+export const WORD = /^[a-z0-9]{1,16}$/u;
+export const KERNEL_RELEASE = /^[0-9A-Za-z._+~-]{1,64}$/u;
+export const CPU_MODEL = /^[A-Za-z0-9 ()@.,+/_-]{1,128}$/u;
+export const VERSION = /^[0-9][0-9A-Za-z.+~_-]{0,40}$/u;
 const GIT_VERSION_LINE = /^git version ([0-9][0-9A-Za-z.+~_-]{0,40})$/u;
-const COMMIT = /^[0-9a-f]{40}$/u;
+export const COMMIT = /^[0-9a-f]{40}$/u;
 const SERVER_URL = /^https:\/\/[A-Za-z0-9.-]{1,64}$/u;
 const REPOSITORY = /^[A-Za-z0-9_.-]{1,100}\/[A-Za-z0-9_.-]{1,100}$/u;
-const RUN_ID = /^[0-9]{1,20}$/u;
-const RUNNER_IMAGE_PART = /^[A-Za-z0-9._-]{1,32}$/u;
+export const RUN_ID = /^[0-9]{1,20}$/u;
+export const RUNNER_IMAGE_PART = /^[A-Za-z0-9._-]{1,32}$/u;
 
 const PROBE_TIMEOUT_MS = 30_000;
 const PROBE_OUTPUT_BYTES = 4096;

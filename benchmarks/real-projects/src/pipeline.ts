@@ -63,6 +63,8 @@ export interface PipelineContext {
   readonly timeouts?: StageTimeouts;
   /** Renders `<ID>.summary.md` from the final result. Omitted in tests of the pipeline alone. */
   readonly renderSummary?: (result: TrialResult) => string;
+  /** The ProofIssue CLI build is missing: every stage is skipped and the case is a harness error. */
+  readonly cliMissing?: boolean;
 }
 
 /** Every stage skipped: the starting point, and the shape of a minimal result. */
@@ -306,7 +308,11 @@ export const runTrialCase = async (
   };
   let harnessError: HarnessIssue | undefined;
   try {
-    await runStages(item, context, ctx, progress);
+    if (context.cliMissing === true) {
+      harnessError = { code: 'cli_missing', detail: 'The ProofIssue CLI build was not found.' };
+    } else {
+      await runStages(item, context, ctx, progress);
+    }
   } catch {
     harnessError = { code: 'unexpected_exception', detail: 'The harness failed unexpectedly.' };
   }
