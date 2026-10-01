@@ -1,16 +1,20 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it, vi, type TestContext } from 'vitest';
+import { afterEach, describe, expect, it, vi, type TestContext } from 'vitest';
 
-import { ARTIFACT_LIMITS, parseAndValidateArtifact } from '@proofissue/artifact-schema';
+import { ARTIFACT_LIMITS, parseAndValidateArtifact, sha256 } from '@proofissue/artifact-schema';
+import { openPackageStore } from '@proofissue/dependencies';
 
 import {
   APPROVED_NODE_IMAGE,
   buildDockerCreateArguments,
   createDockerRunner,
+  DEPENDENCY_INSTALL_FAILED_EXIT_CODE,
   RunnerError,
+  type ContainerCreateSpec,
   type ContainerEngine,
   type ContainerState,
   type CurrentCheckoutReader,
@@ -30,6 +34,12 @@ const symlinkOrSkip = async (context: TestContext, target: string, link: string)
     throw error;
   }
 };
+
+const storeRoots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(storeRoots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+});
 
 const artifact = async () => {
   const source = await readFile('tests/fixtures/artifacts/v1/valid/canonical.proofissue');
@@ -51,6 +61,7 @@ const policy = (timeoutSeconds = 60): RunnerPolicy => ({
     output_bytes_per_stream: 1024,
   },
   writable_workspace_mb: 64,
+  dependency_workspace_mb: 256,
 });
 
 class FakeEngine implements ContainerEngine {
@@ -75,8 +86,10 @@ class FakeEngine implements ContainerEngine {
     await Promise.resolve();
     return true;
   }
-  async create(): Promise<void> {
+  readonly specs: ContainerCreateSpec[] = [];
+  async create(spec: ContainerCreateSpec): Promise<void> {
     this.#operation('create');
+    this.specs.push(spec);
     await Promise.resolve();
   }
   async start(
@@ -286,29 +299,6 @@ describe('runner lifecycle', () => {
       'container_exited',
       'cleanup_completed',
     ]);
-  });
-
-  it('refuses an artifact with dependency files before any engine or workspace work', async () => {
-    // Dependency preparation and offline install are not implemented yet. Running such an
-    // artifact without its dependencies would produce a misleading result.
-    const parsed = parseAndValidateArtifact(
-      await readFile('tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue'),
-    );
-    if (!parsed.ok) throw new Error('Dependency fixture must be valid.');
-    const engine = new FakeEngine();
-    const files = workspace();
-
-    await expect(
-      createDockerRunner({ engine, policy: policy(), workspace: files }).run({
-        artifact: {
-          ...parsed.artifact,
-          environment: { ...parsed.artifact.environment, image: APPROVED_NODE_IMAGE },
-        },
-        mode: 'snapshot',
-      }),
-    ).rejects.toMatchObject({ code: 'policy_rejection' });
-    expect(engine.calls).toEqual([]);
-    expect(files.calls).toEqual([]);
   });
 
   it('rejects an unapproved image before checking Docker or creating a workspace', async () => {
@@ -666,5 +656,395 @@ describe('runner lifecycle', () => {
     ).rejects.toMatchObject({ code: 'policy_rejection' });
     expect(engine.calls).toEqual([]);
     expect(files.calls).toEqual([]);
+  });
+});
+
+describe('artifacts with dependency files', () => {
+  const lockfileWith = (names: readonly string[]): string =>
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        '': { name: 'synthetic' },
+        ...Object.fromEntries(
+          names.map((name) => [
+            `node_modules/${name}`,
+            {
+              version: '1.0.0',
+              resolved: `https://registry.npmjs.org/${name}/-/${name}-1.0.0.tgz`,
+              integrity: `sha512-${createHash('sha512').update(tarballOf(name)).digest('base64')}`,
+            },
+          ]),
+        ),
+      },
+    });
+  const tarballOf = (name: string): Buffer => Buffer.from(`synthetic tarball for ${name}`);
+
+  const dependencyArtifact = async (names: readonly string[] = []) => {
+    const parsed = parseAndValidateArtifact(
+      await readFile('tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue'),
+    );
+    if (!parsed.ok) throw new Error('Dependency fixture must be valid.');
+    const lockfile = lockfileWith(names);
+    return {
+      ...parsed.artifact,
+      environment: { ...parsed.artifact.environment, image: APPROVED_NODE_IMAGE },
+      files: parsed.artifact.files.map((file) =>
+        file.path === 'package-lock.json'
+          ? { ...file, content: lockfile, sha256: sha256(lockfile) }
+          : file,
+      ),
+    };
+  };
+
+  const preparedStore = async (names: readonly string[]): Promise<string> => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-runner-deps-'));
+    storeRoots.push(root);
+    const store = await openPackageStore(path.join(root, 'store'));
+    for (const name of names) {
+      const bytes = tarballOf(name);
+      await store.add(
+        `sha512-${createHash('sha512').update(bytes).digest('base64')}`,
+        (async function* () {
+          yield await Promise.resolve(bytes);
+        })(),
+      );
+    }
+    return store.directory;
+  };
+
+  const run = async (
+    engine: FakeEngine,
+    files: ReturnType<typeof workspace>,
+    names: readonly string[],
+    store?: string,
+  ) =>
+    await createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+      artifact: await dependencyArtifact(names),
+      ...(store === undefined ? {} : { dependency_store: store }),
+      mode: 'snapshot',
+    });
+
+  it('refuses before any engine or workspace work when no prepared store is given', async () => {
+    const engine = new FakeEngine();
+    const files = workspace();
+
+    await expect(run(engine, files, [])).rejects.toMatchObject({
+      code: 'dependencies_not_prepared',
+      message: expect.stringContaining('no prepared store was given') as string,
+    });
+    expect(engine.calls).toEqual([]);
+    expect(files.calls).toEqual([]);
+  });
+
+  it('refuses before any engine work when packages are missing, and says how many', async () => {
+    const engine = new FakeEngine();
+    const files = workspace();
+    const store = await preparedStore(['a']);
+
+    const error = await run(engine, files, ['a', 'b', 'c'], store).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toMatchObject({ code: 'dependencies_not_prepared' });
+    expect((error as RunnerError).message).toContain('2 locked packages are missing');
+    expect(engine.calls).toEqual([]);
+    expect(files.calls).toEqual([]);
+  });
+
+  it('uses the singular for one missing package', async () => {
+    const error = await run(new FakeEngine(), workspace(), ['a'], await preparedStore([])).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect((error as RunnerError).message).toContain('1 locked package is missing');
+  });
+
+  it('refuses a prepared store that does not exist, and creates nothing', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-runner-deps-'));
+    storeRoots.push(root);
+
+    await expect(
+      run(new FakeEngine(), workspace(), [], path.join(root, 'nothing')),
+    ).rejects.toMatchObject({ code: 'dependencies_not_prepared' });
+    expect(await readdir(root)).toEqual([]);
+  });
+
+  it('refuses a store whose entry no longer matches its hash', async () => {
+    const store = await preparedStore(['a']);
+    const hex = createHash('sha512').update(tarballOf('a')).digest('hex');
+    const entry = path.join(
+      store,
+      '_cacache',
+      'content-v2',
+      'sha512',
+      hex.slice(0, 2),
+      hex.slice(2, 4),
+      hex.slice(4),
+    );
+    await rm(entry);
+    await writeFile(entry, 'tampered');
+
+    await expect(run(new FakeEngine(), workspace(), ['a'], store)).rejects.toMatchObject({
+      code: 'dependencies_not_prepared',
+    });
+  });
+
+  it('rejects an artifact whose lockfile cannot be used', async () => {
+    const parsed = await dependencyArtifact([]);
+    const broken = '{"lockfileVersion":2,"packages":{}}';
+    const artifact = {
+      ...parsed,
+      files: parsed.files.map((file) =>
+        file.path === 'package-lock.json'
+          ? { ...file, content: broken, sha256: sha256(broken) }
+          : file,
+      ),
+    };
+    const engine = new FakeEngine();
+
+    await expect(
+      createDockerRunner({ engine, policy: policy(), workspace: workspace() }).run({
+        artifact,
+        dependency_store: await preparedStore([]),
+        mode: 'snapshot',
+      }),
+    ).rejects.toMatchObject({ code: 'policy_rejection' });
+    expect(engine.calls).toEqual([]);
+  });
+
+  it('creates the container with the verified store when it is complete', async () => {
+    const engine = new FakeEngine();
+    const store = await preparedStore(['a', 'b']);
+
+    const result = await run(engine, workspace(), ['a', 'b'], store);
+
+    expect(engine.calls).toEqual(['capabilities', 'image', 'create', 'start', 'remove']);
+    expect(engine.specs).toHaveLength(1);
+    expect(engine.specs[0]?.dependency_cache).toBe(store);
+    expect(result.effective_limits.writable_workspace_mb).toBe(256);
+  });
+
+  it('uses the larger workspace only for artifacts with dependencies', async () => {
+    const engine = new FakeEngine();
+    const withDependencies = await run(engine, workspace(), [], await preparedStore([]));
+    const without = await createDockerRunner({
+      engine: new FakeEngine(),
+      policy: policy(),
+      workspace: workspace(),
+    }).run({ artifact: await artifact(), mode: 'snapshot' });
+
+    expect(withDependencies.effective_limits.writable_workspace_mb).toBe(256);
+    expect(without.effective_limits.writable_workspace_mb).toBe(64);
+  });
+
+  it('ignores a store given for an artifact that has no dependency files', async () => {
+    const engine = new FakeEngine();
+
+    await createDockerRunner({ engine, policy: policy(), workspace: workspace() }).run({
+      artifact: await artifact(),
+      dependency_store: '/does/not/matter',
+      mode: 'snapshot',
+    });
+
+    expect(engine.specs[0]).not.toHaveProperty('dependency_cache');
+  });
+
+  it('reports a failed install, with only the npm error code, when the bootstrap exits 199', async () => {
+    const engine = new FakeEngine();
+    engine.state = { exit_code: DEPENDENCY_INSTALL_FAILED_EXIT_CODE, oom_killed: false };
+    engine.stderr = [
+      'npm error code ENOSPC',
+      'npm error syscall write',
+      'npm error path /workspace/node_modules/some-secret-looking-package/file.js',
+    ].join('\n');
+
+    const error = await run(engine, workspace(), [], await preparedStore([])).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect(error).toMatchObject({
+      code: 'dependency_install_failed',
+      cleanup: { completed: true },
+    });
+    expect((error as RunnerError).message).toBe(
+      'The locked packages could not be installed offline (npm error ENOSPC).',
+    );
+    expect((error as RunnerError).message).not.toContain('some-secret-looking-package');
+  });
+
+  it.each([
+    ['no npm code at all', 'something went wrong'],
+    ['a code that is not an npm error line', 'the package is called npm error code EFAKE'],
+    ['a code in the middle of a line', 'x npm error code EFAKE'],
+    ['a lower-case code', 'npm error code enospc'],
+    ['an over-long code', `npm error code E${'A'.repeat(40)}`],
+  ])('does not echo anything from the output when it holds %s', async (_name, stderr) => {
+    const engine = new FakeEngine();
+    engine.state = { exit_code: DEPENDENCY_INSTALL_FAILED_EXIT_CODE, oom_killed: false };
+    engine.stderr = stderr;
+
+    const error = await run(engine, workspace(), [], await preparedStore([])).catch(
+      (caught: unknown) => caught,
+    );
+
+    expect((error as RunnerError).message).toBe(
+      'The locked packages could not be installed offline.',
+    );
+  });
+
+  it('keeps resource termination ahead of a failed install', async () => {
+    const engine = new FakeEngine();
+    engine.state = { exit_code: 137, oom_killed: true };
+
+    await expect(run(engine, workspace(), [], await preparedStore([]))).rejects.toMatchObject({
+      code: 'resource_termination',
+    });
+  });
+
+  it('does not treat exit status 199 as an install failure when there are no dependencies', async () => {
+    const engine = new FakeEngine();
+    engine.state = { exit_code: DEPENDENCY_INSTALL_FAILED_EXIT_CODE, oom_killed: false };
+
+    const result = await createDockerRunner({
+      engine,
+      policy: policy(),
+      workspace: workspace(),
+    }).run({ artifact: await artifact(), mode: 'snapshot' });
+
+    expect(result.execution).toMatchObject({ exit_code: 199, termination_reason: 'exited' });
+  });
+
+  it('treats an ordinary failing command as the command failing, not the install', async () => {
+    const engine = new FakeEngine();
+    engine.state = { exit_code: 1, oom_killed: false };
+
+    const result = await run(engine, workspace(), [], await preparedStore([]));
+
+    expect(result.execution).toMatchObject({ exit_code: 1, termination_reason: 'exited' });
+  });
+});
+
+describe('Docker arguments for dependencies', () => {
+  const base = {
+    arguments: ['reproduction.mjs'],
+    image: APPROVED_NODE_IMAGE,
+    input_path: '/tmp/proofissue-input',
+    limits: {
+      cpus: 1,
+      memory_mb: 512,
+      output_bytes_per_stream: 1024,
+      processes: 64,
+      timeout_seconds: 60,
+      writable_workspace_mb: 256,
+    },
+    name: 'proofissue-test',
+  };
+  const bootstrapOf = (arguments_: readonly string[]): string => {
+    const index = arguments_.indexOf('-c');
+    return arguments_[index + 1] ?? '';
+  };
+
+  it('adds a second, read-only mount for the prepared store and nothing else', () => {
+    const without = buildDockerCreateArguments(base);
+    const withCache = buildDockerCreateArguments({
+      ...base,
+      dependency_cache: '/prepared/dependency-store',
+    });
+
+    expect(without.join(' ')).not.toContain('proofissue-cache');
+    expect(withCache).toContain(
+      'type=bind,src=/prepared/dependency-store,dst=/proofissue-cache,readonly',
+    );
+    expect(withCache.filter((item) => item === '--mount')).toHaveLength(2);
+    expect(
+      withCache
+        .filter((item) => item.includes('dst='))
+        .every((item) => item.endsWith('readonly') || item.includes('tmpfs')),
+    ).toBe(true);
+  });
+
+  it('keeps the container locked down exactly as before', () => {
+    const withCache = buildDockerCreateArguments({ ...base, dependency_cache: '/store' });
+
+    for (const control of [
+      ['--network', 'none'],
+      ['--read-only'],
+      ['--cap-drop', 'ALL'],
+      ['--security-opt', 'no-new-privileges:true'],
+      ['--user', '65532:65532'],
+      ['--pull', 'never'],
+    ]) {
+      expect(withCache.join(' ')).toContain(control.join(' '));
+    }
+    expect(withCache.join(' ')).not.toContain('privileged');
+    expect(withCache.join(' ')).not.toContain('docker.sock');
+  });
+
+  it('sizes the workspace from the effective limit', () => {
+    const withCache = buildDockerCreateArguments({ ...base, dependency_cache: '/store' });
+
+    expect(withCache.join(' ')).toContain(
+      `/workspace:rw,nosuid,nodev,noexec,size=${String(256 * 1_048_576)}`,
+    );
+  });
+
+  it('uses the dependency bootstrap only when there is a store', () => {
+    const plain = bootstrapOf(buildDockerCreateArguments(base));
+    const dependent = bootstrapOf(
+      buildDockerCreateArguments({ ...base, dependency_cache: '/store' }),
+    );
+
+    expect(plain).not.toContain('npm');
+    expect(dependent).toContain('npm ci --offline --ignore-scripts');
+    expect(dependent).toContain('--cache /proofissue-cache');
+  });
+
+  it('installs offline, without scripts, before it starts the command, and fails closed', () => {
+    const script = bootstrapOf(buildDockerCreateArguments({ ...base, dependency_cache: '/store' }));
+    const lines = script.split('\n');
+
+    expect(lines[0]).toContain('exit 199');
+    expect(lines.at(-1)).toBe('exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"');
+    const install = lines.findIndex((line) => line.includes('npm ci'));
+    expect(install).toBeGreaterThan(0);
+    expect(install).toBeLessThan(lines.length - 1);
+    expect(lines[install]).toMatch(/\|\| fail$/u);
+    for (const line of lines.slice(1, -1)) expect(line).toMatch(/\|\| fail$/u);
+    expect(script).not.toContain('--registry');
+    expect(script).not.toMatch(/npm (install|i|add)\b/u);
+  });
+
+  it('puts no artifact data into the script', () => {
+    const script = bootstrapOf(
+      buildDockerCreateArguments({
+        ...base,
+        arguments: ['; touch /pwned', '$(id)'],
+        dependency_cache: '/store',
+      }),
+    );
+
+    expect(script).not.toContain('pwned');
+    expect(script).not.toContain('$(id)');
+  });
+
+  it('runs npm with an empty, controlled environment', () => {
+    const script = bootstrapOf(buildDockerCreateArguments({ ...base, dependency_cache: '/store' }));
+    const install = script.split('\n').find((line) => line.includes('npm ci')) ?? '';
+
+    expect(install.startsWith('env -i PATH=/usr/local/bin:/usr/bin:/bin HOME=/tmp npm ci')).toBe(
+      true,
+    );
+  });
+
+  it.each([
+    ['a comma', '/store,readonly=false'],
+    ['a double quote', '/store"x'],
+    ['a newline', '/store\nx'],
+    ['a relative path', 'store'],
+    ['an empty path', ''],
+  ])('rejects a prepared store path with %s', (_name, cache) => {
+    expect(() => buildDockerCreateArguments({ ...base, dependency_cache: cache })).toThrow(
+      expect.objectContaining({ code: 'policy_rejection' }) as Error,
+    );
   });
 });

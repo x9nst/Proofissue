@@ -3,7 +3,10 @@ import { readdir } from 'node:fs/promises';
 import { gzipSync } from 'node:zlib';
 import path from 'node:path';
 
-/** Test helpers for inspecting a package store on disk. Not part of the package's API. */
+/**
+ * Test helpers for building hostile package tarballs and inspecting a package store on disk.
+ * Exposed only as `@proofissue/dependencies/testing`, for tests; it is not part of the API.
+ */
 
 const walk = async (directory: string): Promise<string[]> => {
   const found: string[] = [];
@@ -58,7 +61,7 @@ export const entryPathFor = (storeDirectory: string, content: Uint8Array): strin
 export type TarEntryType = 'file' | 'hardlink' | 'symlink';
 
 export interface TarEntry {
-  readonly content?: string;
+  readonly content?: Buffer | string;
   readonly link?: string;
   readonly name: string;
   readonly type?: TarEntryType;

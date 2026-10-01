@@ -9,6 +9,7 @@
   "references": [
     { "path": "../artifact-schema" },
     { "path": "../contracts" },
+    { "path": "../dependencies" },
     { "path": "../process-output" }
   ]
 }
