@@ -11,6 +11,7 @@ import {
   createRecordApplicationService,
   createReplayApplicationService,
   createStaticArtifactApplicationServices,
+  evaluateReplayPolicy,
   evaluateRequiredReplayStatus,
   type RecordConfirmation,
   type RecordPreview,
@@ -53,6 +54,30 @@ describe('evaluateRequiredReplayStatus', () => {
     });
     expect(result.status).toBe('not_reproduced');
   });
+});
+
+describe('evaluateReplayPolicy', () => {
+  it.each([
+    ['reproduced', undefined, true, true, true],
+    ['not_reproduced', undefined, true, true, true],
+    ['reproduced', 'reproduced', true, true, true],
+    ['reproduced', 'not_reproduced', true, false, false],
+    ['not_reproduced', 'not_reproduced', true, true, true],
+    ['not_reproduced', 'reproduced', true, false, false],
+    ['invalid_artifact', undefined, false, true, false],
+    ['execution_failed', undefined, false, true, false],
+    ['invalid_artifact', 'reproduced', false, false, false],
+    ['execution_failed', 'not_reproduced', false, false, false],
+  ] as const)(
+    'maps %s with required %s to completed=%s satisfied=%s success=%s',
+    (status, required, completed, satisfied, success) => {
+      expect(evaluateReplayPolicy(replayResult(status), required)).toEqual({
+        classification_completed: completed,
+        required_status_satisfied: satisfied,
+        success,
+      });
+    },
+  );
 });
 
 describe('static artifact application services', () => {
@@ -233,6 +258,25 @@ describe('record application service', () => {
           })
         ).status,
       ).toBe('valid');
+    } finally {
+      await rm(fixture.root, { force: true, recursive: true });
+    }
+  });
+
+  it('reports the same digest from record, validate, and inspect for the written file', async () => {
+    const fixture = await setup();
+    try {
+      const recorded = await createRecordApplicationService(() =>
+        Promise.resolve(confirmed),
+      ).record(fixture.request);
+      const services = createStaticArtifactApplicationServices();
+      const validated = await services.validate({ artifact_path: fixture.output });
+      const inspected = await services.inspect({ artifact_path: fixture.output });
+      const fileDigest = sha256(await readFile(fixture.output));
+
+      expect(recorded).toMatchObject({ status: 'created', artifact_digest: fileDigest });
+      expect(validated).toMatchObject({ status: 'valid', artifact_digest: fileDigest });
+      expect(inspected).toMatchObject({ artifact_digest: fileDigest });
     } finally {
       await rm(fixture.root, { force: true, recursive: true });
     }

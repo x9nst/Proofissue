@@ -80,6 +80,8 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Output needed for matching was truncated | Matcher | Report insufficient bounded evidence; never infer a match from discarded bytes | Detection |
 | Unknown future field changes meaning | Compatibility | Reject unknown fields and unsupported versions | Rejection |
 | CI artifact tries to read job secrets | CI/container | Provide a clean environment and mount no credentials; use minimal Action permissions | Containment |
+| Hostile result text tries to create a workflow command or misleading summary | CI presentation | Use environment files, randomized output delimiters, and summaries made only from fixed labels and counts | Containment |
+| Action bundle differs from reviewed source | Build supply chain | Pin the bundler, commit the generated entry point, and fail CI when rebuilding changes tracked files | Detection |
 | Cleanup partially fails | Host | Report `execution_failed`, identify residual resource safely, and retry bounded cleanup | Detection and containment |
 
 ## Portable Path Policy
@@ -103,6 +105,14 @@ Redaction tests must cover property-generated stream chunk boundaries, secrets s
 Matcher tests must show that an unrelated failure with the same exit code is not reproduced and that truncated evidence cannot create a match. Property-based tests must preserve basic invariants such as order-independent evaluation of independent expectations and stable explanations for the same bounded inputs.
 
 Terminal and CI presentation tests must include ANSI escapes, carriage returns, backspaces, bidirectional text controls, very long unbroken strings, GitHub workflow command syntax, and invalid Unicode byte sequences. Human output must remain visibly escaped and structured output must remain valid.
+
+Action adapter tests must additionally prove that:
+
+- invalid inputs never invoke replay;
+- both required classifications can pass and mismatches do not alter the result;
+- structured outputs remain valid JSON for later steps;
+- summaries omit application messages and raw execution data;
+- environment-file output does not use deprecated workflow-command syntax.
 
 ## Residual Risks
 

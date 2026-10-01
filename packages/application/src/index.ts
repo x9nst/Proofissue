@@ -95,7 +95,6 @@ export interface ReplayApplicationRequest {
   readonly against_path?: string;
   readonly artifact_path: string;
   readonly mode: 'snapshot' | 'current_checkout';
-  readonly required_status?: Extract<ReplayStatus, 'not_reproduced' | 'reproduced'>;
   readonly signal?: AbortSignal;
 }
 
@@ -234,7 +233,7 @@ export const createRecordApplicationService = (
         return recordFailure(
           new RecorderError('invalid_request', 'The proposed artifact did not pass validation.'),
         );
-      await writeArtifactFile(request.output_path, capture.artifact);
+      const written = await writeArtifactFile(request.output_path, capture.artifact);
       const warnings = [capture.stdout, capture.stderr]
         .filter((stream) => stream.truncated)
         .map(() => ({
@@ -246,7 +245,7 @@ export const createRecordApplicationService = (
         operation: 'record',
         status: 'created',
         artifact_version: 1,
-        artifact_digest: validation.artifact.digest,
+        artifact_digest: written.digest,
         warnings,
         errors: [],
       };
@@ -576,3 +575,29 @@ export const evaluateRequiredReplayStatus = (
   required,
   satisfied: result.status === required,
 });
+
+export interface ReplayPolicyEvaluation {
+  readonly classification_completed: boolean;
+  readonly required_status_satisfied: boolean;
+  readonly success: boolean;
+}
+
+/**
+ * Single source of truth for whether a replay counts as a success for delivery
+ * adapters. A replay succeeds when it reached a reproduced or not_reproduced
+ * classification and, when a status was required, that status was the outcome.
+ */
+export const evaluateReplayPolicy = (
+  result: ReplayOperationResult,
+  required?: Extract<ReplayStatus, 'not_reproduced' | 'reproduced'>,
+): ReplayPolicyEvaluation => {
+  const classificationCompleted =
+    result.status === 'reproduced' || result.status === 'not_reproduced';
+  const requiredStatusSatisfied =
+    required === undefined || evaluateRequiredReplayStatus(result, required).satisfied;
+  return {
+    classification_completed: classificationCompleted,
+    required_status_satisfied: requiredStatusSatisfied,
+    success: classificationCompleted && requiredStatusSatisfied,
+  };
+};

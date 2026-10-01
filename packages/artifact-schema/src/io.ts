@@ -3,6 +3,7 @@ import { link, lstat, open, realpath, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 
+import { sha256 } from './hash.js';
 import { ARTIFACT_LIMITS } from './limits.js';
 import type { ArtifactV1 } from './model.js';
 import { serializeArtifact } from './serialize.js';
@@ -120,6 +121,8 @@ export const readArtifactFile = async (
 
 export interface WriteArtifactFileResult {
   readonly bytes_written: number;
+  /** SHA-256 of the exact bytes written; equals the digest validate and inspect report for the file. */
+  readonly digest: string;
   readonly output_path: string;
 }
 
@@ -185,7 +188,7 @@ export const writeArtifactFile = async (
     await flushDirectoryWhenSupported(parent);
     await unlink(temporaryPath);
     temporaryCreated = false;
-    return { bytes_written: bytes.byteLength, output_path: finalPath };
+    return { bytes_written: bytes.byteLength, digest: sha256(bytes), output_path: finalPath };
   } catch (error: unknown) {
     if (temporaryCreated) await unlink(temporaryPath).catch(() => undefined);
     if (error instanceof ArtifactFileError) throw error;

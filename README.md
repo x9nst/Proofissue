@@ -12,9 +12,11 @@ The project has completed the technical prototype slice. One dependency-free Nod
 - Recorder and redaction: complete
 - Locked-down replay and basic matching: complete
 - Declared-path fix verification: complete
-- GitHub Action behavior: not implemented
+- GitHub Action integration: implemented and locally verified; hosted Linux fixture validation pending
 
-See `IMPLEMENTATION_PLAN.md` for acceptance criteria and evidence. See `docs/README.md` for the documentation map.
+See `IMPLEMENTATION_PLAN.md` for acceptance criteria and evidence. See
+`docs/github-action.md` for Action usage and `docs/README.md` for the complete
+documentation map.
 
 ## Development
 

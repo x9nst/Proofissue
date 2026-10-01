@@ -139,6 +139,17 @@ Tests use synthetic credentials that are unmistakably fake. Snapshots contain re
 
 Redaction findings record category, target, and replacement marker. They never record the original value or a reversible derivative of it.
 
+The GitHub Action writes the stable replay result to the runner-provided output
+file with randomized multiline delimiters. Its workflow summary is derived only
+from typed states, fixed check labels, and numeric counts. It does not include
+raw output, selected file content, expected text, paths, environment values, or
+application messages.
+
+The Action does not use `GITHUB_TOKEN` or call the GitHub API. Example workflows
+grant only `contents: read` for checkout and disable persisted checkout
+credentials. The host Action process may control the local Docker Engine, but
+the replay container never receives the engine socket or credentials.
+
 ## Local Policy Wins
 
 An artifact cannot request weaker protection. If local policy is stricter than artifact limits, the stricter limit applies and is reported. If a difference could change the meaning of replay, the runner stops before execution unless the user explicitly chooses the stricter run.
