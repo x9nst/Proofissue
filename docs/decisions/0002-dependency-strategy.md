@@ -1,6 +1,6 @@
 # Decision 0002: Dependency Strategy for the Initial Supported Node.js Workflow
 
-**Status:** Proposed. A maintainer decision is required before implementation.  
+**Status:** Accepted on 2026-10-01: option B, with lifecycle scripts out of scope. The items marked *assumed* below were not asked of the maintainer and should be confirmed or changed in review.  
 **Date:** 2026-10-01
 
 ## Context
@@ -106,10 +106,30 @@ None of this is built. It is what the choice would entail.
 - **Result contract.** A way to report that preparation is missing or failed, as `execution_failed` and not as evidence about the original failure.
 - **Security.** Threat-model rows for a malicious lockfile, a malicious or compromised package, a registry substitution, store tampering, and install-time scripts, each with a test: path traversal and symlinks in package contents, oversized or numerous packages, and a hash mismatch.
 
-## Questions to decide
+## Decision
 
-1. Is a separate `prepare` step acceptable for maintainers and CI, or must replay work from the artifact alone?
-2. Are projects with native addons or install scripts out of scope for the initial supported workflow, as long as the boundary is documented?
-3. Is the public npm registry the only supported source at first, with private registries and mirrors later?
-4. Is npm with `package-lock.json` the only supported package manager at first, with pnpm and Yarn later?
-5. Should dependency information be an additive part of artifact version 1 or a new artifact version?
+Adopt **option B**: a separate, explicit preparation step, then offline replay.
+
+1. **A separate `prepare` step is acceptable.** Replay itself never touches the network. Fetching packages is a distinct command, and in CI a distinct workflow step. *(Decided by the maintainer.)*
+2. **Native addons and install scripts are out of scope** for the initial supported workflow. Lifecycle scripts stay disabled, and projects that need them are an explicit, documented boundary that the real-project evaluation measures. *(Decided by the maintainer.)*
+3. **The public npm registry is the only source at first.** Lockfile entries that resolve anywhere else, or to a git, file, or arbitrary-URL source, are rejected. Private registries and mirrors are later work. *(Assumed.)*
+4. **npm with `package-lock.json` (lockfile version 3) is the only package manager at first.** pnpm and Yarn are later work. *(Assumed.)*
+5. **Dependency information is an additive, optional part of artifact version 1 for now.** The schema is marked provisional, existing artifacts stay valid, and a version 1 consumer that does not know the new content already rejects it rather than guessing, which is the documented behavior. This is the "new compatibility decision" that `artifact-format.md` requires for any additive field. The representation is two ordinary `files` entries with a new `dependency` role, `package.json` and `package-lock.json` at the project root, so hashing, path rules, redaction, and size limits are reused. The role means "kept exactly as recorded". It must be revisited, and may become a new artifact version, once the schema leaves provisional status. *(Assumed.)*
+
+### Consequences to plan for
+
+- **Lockfile size.** A single file is limited to 1 MiB and all content to 4 MiB. Many real lockfiles exceed 1 MiB. The first supported workflow therefore covers projects whose lockfile fits, and the evaluation report states how many sampled projects were excluded for size. Raising the limit is a separate compatibility decision.
+- **`noexec` workspace.** The prepared tree is not placed in the `noexec` workspace, and loading native code is out of scope.
+- **Coverage is unknown until measured.** The share of real failures that are pure JavaScript with a small lockfile decides how useful this is, and the evaluation must report it before the workflow is described as supported.
+
+### Implementation sequence
+
+Each step is a separate, reviewable change with its own tests and security analysis.
+
+1. Artifact: the `dependency` role, its validation rules, schema, documentation, and compatibility fixtures.
+2. Recorder: capture `package.json` and `package-lock.json` when present.
+3. Lockfile validation: a pure function that accepts only lockfile version 3, the public registry, and an integrity hash on every entry.
+4. Preparation: download into a content-addressed store, verifying every hash, tested against a local fake registry.
+5. Runner: mount the store read-only and install offline with scripts disabled, with network still off.
+6. Application, CLI, and Action: the `prepare` use case and its distinct workflow step.
+7. Real-project trials and the evaluation report.
