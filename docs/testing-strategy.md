@@ -149,7 +149,7 @@ A repeated-run record includes:
 - host operating system and architecture class;
 - classification and expected evidence from each run.
 
-The technical prototype requires five consecutive runs with the same classification and expected evidence under one documented environment. The initial supported Node.js workflow expands this evidence across supported environments and real projects.
+The technical prototype requires five consecutive runs with the same classification and expected evidence under one documented environment. The initial supported Node.js workflow expands this evidence across supported environments and real projects. `real-project-evaluation.md` defines how the real-project trials judge consistency across repeated snapshot runs.
 
 ## Coverage Is Not the Completion Claim
 

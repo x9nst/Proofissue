@@ -110,6 +110,10 @@ Adapts `packages/application` to GitHub Actions inputs, outputs, required-status
 
 Renders structured execution and comparison results. It is deferred until the command-line workflow is reliable and is never required for replay.
 
+### `benchmarks/real-projects`
+
+The real-project trial harness. It is not a package: it has no `package.json`, packages and the Action never import it, and it is built by the root `tsconfig.json` so that lint, type checking, and tests cover it. It drives the built `packages/cli` as a subprocess (record, inspect, prepare, replay) and reads `--json` output, so it depends on the public command-line contract and nothing else inside the product. See `real-project-evaluation.md`.
+
 ## Dependency Direction
 
 Allowed dependencies point inward toward pure contracts and rules, then outward through one application boundary:
