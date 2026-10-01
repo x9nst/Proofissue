@@ -68,6 +68,13 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Lockfile names thousands of downloads or many at once | Package download | Entry-count limit at validation and a hard concurrency cap | Containment |
 | One failure leaves other downloads running or partial files behind | Package download | The first failure stops all work and removes temporary files | Containment |
 | Store entry is corrupted, replaced by a link, or replaced by a directory | Package store | Hash again before trusting; never follow a link; never delete a directory | Rejection |
+| A directory inside the store is replaced by a link to somewhere else | Package store | Resolve every entry's real path and trust it only if it is the expected one inside the store | Rejection |
+| A package declares install scripts, or the project does | Dependency install | Run npm with `--ignore-scripts`; a test shows the same script running without the flag | Containment |
+| A package archive has entries that leave its directory (`../`, absolute paths, symbolic or hard links) | Dependency install | npm's own extraction contains them; tests show nothing is written outside the package directory, on the host and in the Linux container | Containment |
+| npm reaches for a registry during install | Dependency install | `--offline`, a store that is complete before install starts, and a test with an unreachable registry | Containment |
+| npm writes into the store while installing | Dependency install | Log directory and update check redirected, so the store can be mounted read-only; a test shows nothing in the store changes | Containment |
+| A machine's npm configuration changes install behavior | Dependency install | Empty user and global configuration files are passed explicitly | Containment |
+| A store is incomplete or damaged when replay starts | Replay | Check the whole store read-only first and report what is missing before any container starts | Rejection |
 | Two preparations write the same entry at once | Package store | Write under a temporary name and move into place; keep a valid entry rather than replacing it | Containment |
 | Platform fields in a lockfile try to steer what is downloaded | Dependency lockfile | Accept only short lists of plain platform words | Rejection |
 | Lockfile repeats a key so two readers see different entries | Dependency lockfile | Reject duplicate keys after decoding escapes | Rejection |
