@@ -1,0 +1,194 @@
+name: Real-project trials
+
+# Runs third-party test code on the hosted runner during recording; see
+# docs/real-project-evaluation.md. Triggered only by people with write access.
+on:
+  workflow_dispatch:
+    inputs:
+      set:
+        description: Case set in benchmarks/real-projects/cases.json
+        required: false
+        default: pilot
+        type: string
+      cases:
+        description: Comma-separated case IDs; overrides set
+        required: false
+        default: ''
+        type: string
+      runs:
+        description: Snapshot replays per case (1-10)
+        required: false
+        default: '5'
+        type: string
+  push:
+    branches:
+      - 'trials/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: real-project-trials-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'push' }}
+
+jobs:
+  plan:
+    name: Select cases
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      cases: ${{ steps.select.outputs.cases }}
+      image: ${{ steps.select.outputs.image }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js (the approved image's version)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Build the trial harness
+        run: npx tsc -b benchmarks/real-projects
+
+      - name: Select and validate cases
+        id: select
+        env:
+          TRIAL_SET: ${{ inputs.set }}
+          TRIAL_CASES: ${{ inputs.cases }}
+        run: node benchmarks/real-projects/dist/main.js list --set "$TRIAL_SET" --cases "$TRIAL_CASES" --ref "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+  trial:
+    name: Trial ${{ matrix.case }}
+    needs: plan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        case: ${{ fromJSON(needs.plan.outputs.cases) }}
+    env:
+      PROOFISSUE_IMAGE: ${{ needs.plan.outputs.image }}
+      TRIAL_CASE: ${{ matrix.case }}
+      TRIAL_RUNS: ${{ inputs.runs || '5' }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # No npm cache, not even the automatic one setup-node enables because package.json names
+      # npm: third-party code runs in this job and must not seed shared caches.
+      - name: Set up Node.js (the approved image's version)
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Build the CLI and the trial harness
+        run: npm run build:types
+
+      - name: Prepare the approved image explicitly
+        run: docker pull "$PROOFISSUE_IMAGE"
+
+      - name: Record the trial environment
+        run: |
+          docker version --format 'Docker Engine {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
+          uname -m
+
+      - name: Run the trial (records third-party tests on this runner, replays them in the sandbox)
+        timeout-minutes: 55
+        run: >
+          node benchmarks/real-projects/dist/main.js run
+          --cases "$TRIAL_CASE" --runs "$TRIAL_RUNS"
+          --work-dir "$RUNNER_TEMP/trials/work"
+          --output "$RUNNER_TEMP/trials/results"
+          --diagnostics "$RUNNER_TEMP/trials/diagnostics"
+
+      - name: Publish the case summary
+        if: always()
+        run: |
+          summary="$RUNNER_TEMP/trials/results/$TRIAL_CASE/$TRIAL_CASE.summary.md"
+          if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+
+      - name: Upload the trial result and artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trial-result-${{ matrix.case }}
+          path: ${{ runner.temp }}/trials/results/
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload redacted diagnostics
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trial-diagnostics-${{ matrix.case }}
+          path: ${{ runner.temp }}/trials/diagnostics/
+          if-no-files-found: ignore
+          retention-days: 14
+
+      - name: Confirm replay left no containers
+        if: always()
+        run: test -z "$(docker ps --all --quiet --filter label=org.proofissue.replay=true)"
+
+  summary:
+    name: Summarize trials
+    needs: [plan, trial]
+    if: ${{ always() && needs.plan.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      TRIAL_EXPECTED_CASES: ${{ needs.plan.outputs.cases }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          package-manager-cache: false
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Build the trial harness
+        run: npx tsc -b benchmarks/real-projects
+
+      - name: Download trial results
+        uses: actions/download-artifact@v8
+        with:
+          pattern: trial-result-*
+          path: ${{ runner.temp }}/trials/results
+
+      - name: Summarize
+        run: |
+          status=0
+          node benchmarks/real-projects/dist/main.js summarize --input "$RUNNER_TEMP/trials/results" --output "$RUNNER_TEMP/trials/summary" --expected-cases "$TRIAL_EXPECTED_CASES" || status=$?
+          summary="$RUNNER_TEMP/trials/summary/summary.md"
+          if [ -f "$summary" ]; then cat "$summary" >> "$GITHUB_STEP_SUMMARY"; fi
+          exit "$status"
+
+      - name: Upload the summary
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: trial-summary
+          path: ${{ runner.temp }}/trials/summary/
+          if-no-files-found: warn
+          retention-days: 90
