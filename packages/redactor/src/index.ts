@@ -136,7 +136,10 @@ const RULES: readonly RedactionRule[] = [
   {
     // scheme://user:password@host — only the password is removed.
     category: 'password',
-    pattern: /\b([a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@"'`<>]+:)(?!\[REDACTED:)[^\s@/"'`<>]+(?=@)/giu,
+    // Raw brackets cannot appear in a URL user name (RFC 3986), and excluding them keeps a
+    // redaction marker, whose colon looks like user:password, from ever matching here.
+    pattern:
+      /\b([a-z][a-z0-9+.-]{1,20}:\/\/[^\s:/@"'`<>[\]]+:)(?!\[REDACTED:)[^\s@/"'`<>]+(?=@)/giu,
     replace: keepFirstGroup,
   },
   {

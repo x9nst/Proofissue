@@ -361,6 +361,23 @@ describe('redactText false positives', () => {
   });
 });
 
+describe('redactText idempotence regressions', () => {
+  // Found by the property test below. A redaction marker contains a colon, so it must
+  // never be readable as user:password inside a URL.
+  it('does not read a marker as URL credentials', () => {
+    const input = 'Authorization://[REDACTED:api_key]@';
+
+    expect(redactText(input)).toEqual({ text: input, findings: [] });
+  });
+
+  it('settles after one pass when a redacted token sits where URL credentials would', () => {
+    const first = redactText(`token://${jwt}@`);
+
+    expect(first.text).toBe(`token://${m('api_key')}@`);
+    expect(redactText(first.text)).toEqual({ text: first.text, findings: [] });
+  });
+});
+
 describe('redactText idempotence property', () => {
   it('redacting redacted text changes nothing, for text built from credential-like fragments', () => {
     const fragment = fc.constantFrom(
@@ -390,6 +407,23 @@ describe('redactText idempotence property', () => {
       join('-----EN', 'D PRIVATE KEY-----'),
       awsAccess,
       jwt,
+      '[',
+      ']',
+      ':',
+      '/',
+      '//',
+      '\r',
+      'Basic ',
+      'Token ',
+      'passwd',
+      '_password',
+      '_auth',
+      'SECRET',
+      'TOKEN',
+      '_',
+      '.',
+      '-',
+      'x',
     );
     fc.assert(
       fc.property(fc.array(fragment, { maxLength: 32 }), (parts) => {
