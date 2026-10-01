@@ -26,6 +26,14 @@ Validation occurs before any workspace creation or container execution. Replay d
 
 ## Package Boundaries
 
+### `packages/output-rules`
+
+Owns the documented output normalization rules and the exact-directory path contexts the `paths` rule uses. It is a pure package: strings in, strings and replacement counts out, with no filesystem, process, or network access, and every rule is linear in the length of its input.
+
+It exists so that static validation, matching, recording, and the application's self-check all use the same rule names and the same definitions. A normalization rule name has one frozen definition; see `output-matching.md` and `decisions/0003-output-matching-modes.md`.
+
+It depends only on `contracts`, for the rule-name type.
+
 ### `packages/artifact-schema`
 
 Owns the versioned canonical model, JSON Schema, bounded YAML parsing, semantic validation, deterministic serialization, file hashes, and compatibility fixtures.
@@ -111,6 +119,7 @@ application ────────→ artifact-schema, contracts, dependencies
 recorder ───────────→ artifact-schema, contracts, dependencies, process-output, redactor
 runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts
+output-rules ───────→ contracts
 dependencies ───────→ (none)
 matcher ────────────→ contracts
 report-ui ──────────→ contracts

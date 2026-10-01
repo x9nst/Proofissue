@@ -18,6 +18,7 @@ export default defineConfig({
       ),
       '@proofissue/dependencies': workspacePath('./packages/dependencies/src/index.ts'),
       '@proofissue/matcher': workspacePath('./packages/matcher/src/index.ts'),
+      '@proofissue/output-rules': workspacePath('./packages/output-rules/src/index.ts'),
       '@proofissue/process-output': workspacePath('./packages/process-output/src/index.ts'),
       '@proofissue/recorder': workspacePath('./packages/recorder/src/index.ts'),
       '@proofissue/redactor': workspacePath('./packages/redactor/src/index.ts'),
