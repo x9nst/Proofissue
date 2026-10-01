@@ -38,7 +38,7 @@ It depends only on `contracts`, for the rule-name type.
 
 Owns the versioned canonical model, JSON Schema, bounded YAML parsing, semantic validation, deterministic serialization, file hashes, and compatibility fixtures.
 
-It depends on no other ProofIssue package.
+It depends on `output-rules` only, for the normalization rule names and the check that a normalized expectation value is unchanged by its own rules.
 
 ### `packages/dependencies`
 
@@ -120,6 +120,7 @@ recorder ───────────→ artifact-schema, contracts, depend
 runner ─────────────→ artifact-schema, contracts, dependencies, process-output
 process-output ─────→ contracts
 output-rules ───────→ contracts
+artifact-schema ────→ output-rules
 dependencies ───────→ (none)
 matcher ────────────→ contracts, output-rules
 report-ui ──────────→ contracts
