@@ -24,7 +24,7 @@ A replay that ends in `reproduced` or `not_reproduced` is a successful classific
 
 ### Purpose
 
-Run one Node.js command that fails, and capture a minimal artifact that describes the failure. The recorder runs the command exactly as you give it, with no shell and an empty environment, then shows what it intends to write and asks you to confirm.
+Run one Node.js command that fails, and capture a minimal artifact that describes the failure. The recorder runs the command exactly as you give it, with no shell and a minimal environment, then shows what it intends to write and asks you to confirm. The environment is empty on Linux and macOS; on Windows, process creation adds a few names such as `USERNAME` and `TEMP` (see `recording.md`).
 
 ### Syntax
 
@@ -149,7 +149,7 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 
 ### Security notes
 
-You are authorizing the recorder to run the command on your machine, so read the preview before confirming. Secrets are redacted before the artifact is written, but redaction is rule-based and not a guarantee; see `security-model.md`. Only the files you select are collected. See `recording.md` for the full sequence.
+You are authorizing the recorder to run the command on your machine, so read the preview before confirming. Secrets are redacted before the artifact is written, but redaction is rule-based and not a guarantee; see `security-model.md`. Only the files you select are collected. Command output reaches the artifact only through your expected literals, which redaction does not check for user names or paths, so leave absolute paths out of them. See `recording.md` for the full sequence.
 
 ## `validate`
 

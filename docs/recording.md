@@ -55,7 +55,23 @@ Version 1 records only:
 
 It does not collect the username, hostname, home directory, absolute project path, shell history, process list, environment-variable values, npm configuration, Git credentials, or credential files.
 
-The recorded command receives an empty environment on Linux and macOS. On Windows it receives only `SystemRoot`, which is required for normal process startup. The recorder never enumerates or serializes the host environment, and tests verify that unrelated host variables do not reach the child process.
+The recorded command receives an empty environment on Linux and macOS.
+
+On Windows the recorder passes only `SystemRoot`, but the command receives more. Node.js starts processes through libuv, and on Windows libuv adds each of these names that the recorder's own environment has, with the recorder's value:
+
+`HOMEDRIVE`, `HOMEPATH`, `LOGONSERVER`, `PATH`, `SYSTEMDRIVE`, `TEMP`, `USERDOMAIN`, `USERNAME`, `USERPROFILE`, `WINDIR`
+
+So on Windows the command can see the user name, the profile directory, the domain or computer name, and the logon server, and `os.tmpdir()` returns the reporter's own temporary directory. Neither Node.js nor libuv can turn this off. Passing the names with empty values hides the values but not the names, makes `os.homedir()` throw, and, for `PATH`, stops the command from starting other programs by name. Recording on Windows would then break commands that work when recorded on Linux or macOS, so ProofIssue keeps the behavior and documents it.
+
+This hides nothing from the command that it could not learn anyway. It runs as the reporter, in the reporter's real project directory, and on every platform it can read the user name from the operating system and absolute paths from its working directory and stack traces. The environment is kept small to keep unrelated configuration and credentials, such as tokens in environment variables, away from the command. It does not hide who the reporter is.
+
+What reaches the artifact is limited separately:
+
+- stdout and stderr stay in memory, are redacted, and are used only to check the expected literals. Their text is never written to the artifact, the preview, or the structured result; only their byte counts and the category of each secret redacted from them are kept;
+- selected files are read before the command runs, so the command cannot change what is collected;
+- output text reaches an artifact only through an expected literal that the reporter typed and the preview showed. See [Expectations](#expectations).
+
+The recorder never enumerates or serializes the host environment. Tests check the exact set of names the command receives on each platform, that an unrelated host variable does not reach it, and that a command that prints its whole environment produces the same artifact as one that prints nothing.
 
 ## File Roles
 
@@ -115,6 +131,8 @@ The recorder derives each stored value from the recording itself, then:
 The artifact never stores a path from your machine for a normalized expectation. The application then replays the recording's own output against its expectations with the same matcher a replay uses, and writes nothing if the recording does not satisfy them.
 
 The preview shows each expectation's mode, its rules, and the text that will be stored.
+
+Expected literals are copied into the artifact exactly as given. Redaction does not recognize user names, computer names, or paths, so a literal copied from output that contains a home, profile, or temporary path puts the user name into the artifact. Choose the error message itself, not the path around it.
 
 ## Redaction Review
 

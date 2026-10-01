@@ -234,6 +234,10 @@ const readSelectedFile = async (
   }
 };
 
+// On Windows, libuv then adds HOMEDRIVE, HOMEPATH, LOGONSERVER, PATH, SYSTEMDRIVE, TEMP,
+// USERDOMAIN, USERNAME, USERPROFILE, and WINDIR from this process when they are missing, and
+// nothing turns that off. Passing them empty hides the values but breaks os.homedir() and,
+// for PATH, program lookup, so the added names are documented in docs/recording.md instead.
 const minimalChildEnvironment = (): NodeJS.ProcessEnv => {
   if (process.platform !== 'win32') return {};
   const systemRoot = process.env.SystemRoot;
