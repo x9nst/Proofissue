@@ -171,6 +171,34 @@ integration('real locked-down Docker replay', () => {
     expect(result.cleanup.completed).toBe(true);
   }, 30_000);
 
+  it('reports what the home and temporary directories resolve to for the replay user', async () => {
+    // Recording runs as a real account, so os.homedir() resolves there even with no HOME.
+    // The replay user is a bare numeric id, so this shows what the same calls do here.
+    const source = `
+        import { writeFileSync } from 'node:fs';
+        import { homedir, tmpdir, userInfo } from 'node:os';
+        import { join } from 'node:path';
+        const attempt = (action) => {
+          try { return String(action()); } catch (error) { return error.code + '/' + error.info?.code; }
+        };
+        const writable = () => { writeFileSync(join(homedir(), '.proofissue-probe'), 'x'); return 'yes'; };
+        process.stdout.write([
+          'homedir=' + attempt(homedir),
+          'home-writable=' + attempt(writable),
+          'tmpdir=' + attempt(tmpdir),
+          'userinfo=' + attempt(() => userInfo().username),
+        ].join(' '));
+        process.stderr.write('proofissue-marker');
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({ artifact: artifact(source), mode: 'snapshot' });
+
+    expect(result.execution.stdout.decoded_text).toBe(
+      'homedir=ERR_SYSTEM_ERROR/ENOENT home-writable=ERR_SYSTEM_ERROR/ENOENT tmpdir=/tmp userinfo=ERR_SYSTEM_ERROR/ENOENT',
+    );
+    expect(result.cleanup.completed).toBe(true);
+  }, 30_000);
+
   it('blocks DNS resolution and IPv6 connections as well as IPv4', async () => {
     const source = `
         import * as dns from 'node:dns/promises';
