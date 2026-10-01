@@ -102,6 +102,8 @@ export interface InspectApplicationRequest {
 export interface ReplayApplicationRequest {
   readonly against_path?: string;
   readonly artifact_path: string;
+  /** The prepared store for an artifact with dependency files. Ignored for other artifacts. */
+  readonly dependency_store?: string;
   readonly mode: 'snapshot' | 'current_checkout';
   readonly signal?: AbortSignal;
 }
@@ -461,6 +463,9 @@ export const createReplayApplicationService = (
         const result = await runner.run({
           artifact,
           ...(request.against_path === undefined ? {} : { against_path: request.against_path }),
+          ...(request.dependency_store === undefined
+            ? {}
+            : { dependency_store: request.dependency_store }),
           mode: request.mode,
           ...(request.signal === undefined ? {} : { signal: request.signal }),
         });
