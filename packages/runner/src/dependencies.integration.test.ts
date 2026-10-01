@@ -32,6 +32,7 @@ import {
   DEFAULT_RUNNER_POLICY,
   DEPENDENCY_INSTALL_FAILED_EXIT_CODE,
   RunnerError,
+  type RunnerResult,
 } from './index.js';
 
 const enabled = process.env.PROOFISSUE_RUN_CONTAINER_TESTS === '1';
@@ -101,7 +102,7 @@ const project = async (
     wanted[dependency.name] = '1.0.0';
     locked[`node_modules/${dependency.name}`] = {
       version: '1.0.0',
-      resolved: `https://registry.npmjs.org/${dependency.name}/-/${dependency.name}-1.0.0.tgz`,
+      resolved: `https://registry.npmjs.org/${dependency.name}/-/${dependency.name.split('/').at(-1) ?? dependency.name}-1.0.0.tgz`,
       integrity,
       ...(dependency.hasInstallScript === true ? { hasInstallScript: true } : {}),
     };
@@ -156,14 +157,17 @@ const project = async (
   return { artifact: validated.artifact, store: store.directory };
 };
 
-const failureOf = async (run: () => Promise<unknown>): Promise<RunnerError> => {
+const failureOf = async (run: () => Promise<RunnerResult>): Promise<RunnerError> => {
+  let result: RunnerResult;
   try {
-    await run();
+    result = await run();
   } catch (error: unknown) {
     if (error instanceof RunnerError) return error;
     throw error;
   }
-  throw new Error('Expected the replay to fail.');
+  throw new Error(
+    `Expected the replay to fail, but the command ran and printed: ${result.execution.stderr.decoded_text}`,
+  );
 };
 
 integration('replay with prepared dependencies in the real container', () => {
@@ -292,7 +296,11 @@ integration('replay with prepared dependencies in the real container', () => {
       { name: 'package/huge.bin', content: Buffer.alloc(200 * 1024 * 1024) },
     ]);
     const { artifact, store } = await project(
-      `process.stderr.write('proofissue-marker'); process.exitCode = 1;`,
+      `import { statSync, statfsSync } from 'node:fs';
+       const size = statSync('/workspace/node_modules/dep/huge.bin').size;
+       const fs = statfsSync('/workspace');
+       process.stderr.write('proofissue-marker|huge.bin=' + size + '|free=' + fs.bfree * fs.bsize + '|total=' + fs.blocks * fs.bsize);
+       process.exitCode = 1;`,
       [{ name: 'dep', tarball: bomb }],
     );
     const runner = createDockerRunner({
