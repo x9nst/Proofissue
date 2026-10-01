@@ -107,7 +107,10 @@ Replay uses:
 - a read-only base filesystem;
 - no added capabilities;
 - no-new-privileges enforcement;
-- a single temporary workspace mount;
+- a single temporary workspace mount whose host path is validated before it is placed in the mount specification;
+- container creation with image pulling disabled;
+- no engine-side retention of container output;
+- no core dumps and a bounded open-file limit;
 - bounded CPU, memory, process count, output, and wall-clock time;
 - a deliberately clean environment;
 - unconditional container and workspace cleanup.

@@ -57,6 +57,8 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Hash does not match embedded content | Artifact integrity | Reject as `invalid_artifact` | Rejection |
 | Artifact requests arbitrary or mutable image | Image policy | Reject before image acquisition or container creation | Rejection |
 | Approved image is absent | Image policy | Return `execution_failed`; never auto-pull during replay | Rejection |
+| Approved image disappears between the presence check and container creation | Image policy | Create the container with image pulling disabled so creation fails instead of fetching | Rejection |
+| Host temporary directory path contains commas or quotes that add or redirect mount options | Container engine | Reject relative paths and paths containing commas, quotes, or control characters before building engine arguments | Rejection |
 | Argument contains shell syntax or command substitution | Command | Pass as a literal argument without a shell; syntax has no host-shell meaning | Containment |
 | Command directly attempts malicious behavior | Container | Execute only within the complete isolation baseline and resource limits | Containment |
 | Command tries to mount files or change privileges | Container | Non-root user, dropped capabilities, no-new-privileges, no devices, no privileged mode | Containment |
@@ -67,6 +69,8 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Infinite loop or CPU burn | Availability | Enforce CPU and wall-clock limits, then kill and clean up | Containment |
 | Memory exhaustion | Availability | Enforce memory limit and classify resource termination as execution failure | Containment |
 | Output flood | Output/availability | Drain safely, retain only bounded data, mark truncation, and prevent discarded output from matching | Containment |
+| Output flood fills the container engine's log storage | Host availability | Disable engine-side container logging; read output only through the bounded attached stream | Containment |
+| Core dump or file-descriptor exhaustion | Availability | Set the core-dump size to zero and bound open files | Containment |
 | Disk-filling writes | Workspace | Use bounded temporary storage and unconditional cleanup | Containment |
 | Process ignores termination | Cleanup | Escalate from stop to host-controlled kill, remove container, then workspace | Containment |
 | Output contains API key or private key | Secret/log | Redact before presentation or serialization and record only safe finding metadata | Containment |

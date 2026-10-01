@@ -357,12 +357,16 @@ export interface ContainerEngine {
 const CONTAINER_BOOTSTRAP =
   'cp -R /proofissue-input/. /workspace/ && cd /workspace && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"';
 
-export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => [
+const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => [
   'create',
   '--name',
   spec.name,
   '--label',
   'org.proofissue.replay=true',
+  '--pull',
+  'never',
+  '--log-driver',
+  'none',
   '--network',
   'none',
   '--user',
@@ -380,6 +384,10 @@ export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly 
   `${String(spec.limits.memory_mb)}m`,
   '--cpus',
   String(spec.limits.cpus),
+  '--ulimit',
+  'core=0:0',
+  '--ulimit',
+  'nofile=1024:1024',
   '--init',
   '--mount',
   `type=bind,src=${spec.input_path},dst=/proofissue-input,readonly`,
@@ -398,6 +406,33 @@ export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly 
   'node',
   ...spec.arguments,
 ];
+
+const hasUnsafeMountCharacter = (value: string): boolean => {
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    if (code === 0x2c || code === 0x22 || code < 0x20 || code === 0x7f) return true;
+  }
+  return false;
+};
+
+/**
+ * The bind-mount source is interpolated into a comma-separated --mount value, so
+ * a comma or quote in it could append or redirect mount options. The message
+ * deliberately omits the rejected path.
+ */
+const assertSafeMountSource = (inputPath: string): void => {
+  if (!path.isAbsolute(inputPath) || hasUnsafeMountCharacter(inputPath)) {
+    throw new RunnerError(
+      'policy_rejection',
+      'The replay workspace location cannot be mounted safely.',
+    );
+  }
+};
+
+export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => {
+  assertSafeMountSource(spec.input_path);
+  return dockerCreateArguments(spec);
+};
 
 interface DockerCommandResult {
   readonly exit_code: number;
