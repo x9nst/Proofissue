@@ -1,0 +1,74 @@
+name: GitHub Action integration
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  replay:
+    name: Validate Action replay and outputs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      PROOFISSUE_IMAGE: node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Prepare the approved image explicitly
+        run: docker pull "$PROOFISSUE_IMAGE"
+
+      - name: Require the recorded failure
+        id: snapshot
+        uses: ./action
+        with:
+          artifact-path: tests/fixtures/action/reproduced.proofissue
+          replay-mode: snapshot
+          required-status: reproduced
+
+      - name: Verify snapshot outputs are reusable
+        env:
+          PROOFISSUE_DIFFERENCES: ${{ steps.snapshot.outputs.differences }}
+          PROOFISSUE_EVIDENCE: ${{ steps.snapshot.outputs.evidence }}
+          PROOFISSUE_RESULT: ${{ steps.snapshot.outputs.result }}
+          PROOFISSUE_STATUS: ${{ steps.snapshot.outputs.status }}
+        run: >
+          node --input-type=module -e
+          "const result=JSON.parse(process.env.PROOFISSUE_RESULT);
+          const evidence=JSON.parse(process.env.PROOFISSUE_EVIDENCE);
+          const differences=JSON.parse(process.env.PROOFISSUE_DIFFERENCES);
+          if(process.env.PROOFISSUE_STATUS!=='reproduced' ||
+          result.status!=='reproduced' || evidence.length!==2 ||
+          differences.length!==0) process.exit(1);"
+
+      - name: Require the corrected checkout result
+        id: corrected
+        uses: ./action
+        with:
+          artifact-path: tests/fixtures/action/reproduced.proofissue
+          replay-mode: current-checkout
+          checkout-path: tests/fixtures/action/current-checkout
+          required-status: not_reproduced
+
+      - name: Verify current-checkout outputs are reusable
+        env:
+          PROOFISSUE_POLICY: ${{ steps.corrected.outputs.required_status_satisfied }}
+          PROOFISSUE_RESULT: ${{ steps.corrected.outputs.result }}
+          PROOFISSUE_STATUS: ${{ steps.corrected.outputs.status }}
+        run: >
+          node --input-type=module -e
+          "const result=JSON.parse(process.env.PROOFISSUE_RESULT);
+          if(process.env.PROOFISSUE_STATUS!=='not_reproduced' ||
+          process.env.PROOFISSUE_POLICY!=='true' ||
+          result.status!=='not_reproduced' ||
+          result.substituted_paths.join(',')!=='calculate.mjs') process.exit(1);"
+
+      - name: Confirm replay left no containers
+        if: always()
+        run: test -z "$(docker ps --all --quiet --filter label=org.proofissue.replay=true)"

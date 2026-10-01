@@ -39,4 +39,11 @@ Foundation checks use fixed GitHub-hosted runner labels rather than moving `late
 - `ubuntu-24.04` for Linux;
 - `windows-2025` for Windows.
 
-Later replay integration runs on `ubuntu-24.04` x86-64 and records the runner image, Docker Engine version, and architecture as test evidence.
+Locked-down replay and the GitHub Action fixture run on `ubuntu-24.04` x86-64.
+The Action uses GitHub's Node.js 24 runtime and the same Docker Engine policy as
+local replay. The workflow prepares the approved image explicitly, exercises
+snapshot and current-checkout modes, consumes machine outputs, and checks for
+residual replay containers.
+
+The Action is not supported on Windows or macOS runners because the product
+replay claim remains limited to an x86-64 Linux Docker host.

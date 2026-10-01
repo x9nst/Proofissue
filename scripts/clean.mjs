@@ -8,8 +8,9 @@ const packageDirectories = (await readdir(packageRoot, { withFileTypes: true }))
   .filter((entry) => entry.isDirectory())
   .map((entry) => path.join(packageRoot, entry.name));
 
-for (const directory of [...packageDirectories, path.join(workspaceRoot, 'action')]) {
+for (const directory of packageDirectories) {
   await rm(path.join(directory, 'dist'), { force: true, recursive: true });
 }
 
+await rm(path.join(workspaceRoot, 'action', 'lib'), { force: true, recursive: true });
 await rm(path.join(workspaceRoot, 'coverage'), { force: true, recursive: true });

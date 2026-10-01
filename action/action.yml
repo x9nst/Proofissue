@@ -1,0 +1,40 @@
+name: ProofIssue replay
+description: Validate and replay a ProofIssue artifact with the shared locked-down runner.
+author: ProofIssue contributors
+
+inputs:
+  artifact-path:
+    description: Path to the .proofissue artifact to validate and replay.
+    required: true
+  replay-mode:
+    description: Use snapshot or current-checkout replay.
+    required: false
+    default: snapshot
+  checkout-path:
+    description: Checkout root for current-checkout replay. Defaults to GITHUB_WORKSPACE.
+    required: false
+  required-status:
+    description: Optionally require reproduced or not_reproduced for the step to pass.
+    required: false
+
+outputs:
+  status:
+    description: Replay classification.
+  mode:
+    description: Effective replay mode.
+  result:
+    description: Versioned JSON replay result without raw stdout or stderr.
+  evidence:
+    description: JSON array of explainable match evidence.
+  differences:
+    description: JSON array of explainable differences.
+  required_status_satisfied:
+    description: Whether the optional required-status policy was satisfied.
+
+runs:
+  using: node24
+  main: dist/index.js
+
+branding:
+  icon: check-circle
+  color: green

@@ -1,6 +1,10 @@
 node_modules/
 .npm-cache/
+action/lib/
 dist/
+!action/dist/
+!action/dist/index.js
+!action/dist/third-party-licenses.txt
 coverage/
 *.tsbuildinfo
 .eslintcache

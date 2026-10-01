@@ -33,7 +33,7 @@ Completing the technical prototype does not complete the initial supported workf
 | 3. Recorder and redaction | Complete | Milestone 2 | Technical criteria pass and the project owner confirmed Gate B completion on 2026-07-15; see `docs/milestone-3-evidence.md` |
 | 4. Locked-down replay and matching | Complete | Milestones 2-3 | Local quality gates and hosted Linux container validation pass; see `docs/milestone-4-evidence.md` |
 | 5. Fix verification | Complete | Milestone 4 | Original and corrected-source end-to-end fixture; see `docs/milestone-5-evidence.md` |
-| 6. GitHub Actions integration | Planned | Milestone 5 | Passing fixture workflow and stable outputs |
+| 6. GitHub Actions integration | In Progress | Milestone 5 | Action, stable outputs, and Linux fixture workflow implemented; hosted run and dependency-advisory triage pending; see `docs/milestone-6-evidence.md` |
 | 7. Initial supported Node.js workflow | Planned | Milestone 6 | Progressive real-project trials, compatibility suite, and security suite |
 | Early maintainer validation track | In Progress | Runs alongside Milestones 1-7 | Task-based artifact, role, replay, and demand research in `docs/product-validation.md` |
 
@@ -308,7 +308,7 @@ Completion evidence, security analysis, compatibility impact, and validation com
 
 ## Milestone 6 — GitHub Actions Integration
 
-**Status:** Planned
+**Status:** In Progress
 
 **Target outcome:**
 
@@ -325,12 +325,16 @@ Repositories can validate and replay artifacts in GitHub Actions using the same 
 **Acceptance criteria:**
 
 - [ ] A fixture workflow validates and replays on a Linux runner.
-- [ ] The Action can require either `reproduced` or `not_reproduced`.
-- [ ] Structured outputs are usable by later workflow steps.
-- [ ] Workflow summaries do not dump raw potentially sensitive output.
-- [ ] Core replay behavior is not duplicated inside the Action.
+- [x] The Action can require either `reproduced` or `not_reproduced`.
+- [x] Structured outputs are usable by later workflow steps.
+- [x] Workflow summaries do not dump raw potentially sensitive output.
+- [x] Core replay behavior is not duplicated inside the Action.
 
 Issue and pull-request comments remain optional and are not required for this milestone.
+
+Implementation, local evidence, security analysis, the hosted Linux completion
+gate, and dependency-advisory triage are recorded in
+`docs/milestone-6-evidence.md`.
 
 ## Milestone 7 — Initial Supported Node.js Workflow
 

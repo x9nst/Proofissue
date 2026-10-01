@@ -6,6 +6,8 @@ Fixtures are public compatibility and security evidence. They must be minimal, r
 
 - `artifacts/v1`: permanent version 1 valid, invalid, and canonical-byte compatibility fixtures. Public presentation wording remains provisional until maintainer Gate A.
 - `results/v1`: provisional machine-result fixtures until the result contract is accepted.
+- `action`: the approved-image failure and corrected declared subject used by the Linux
+  GitHub Action integration workflow.
 - `synthetic-secrets`: unmistakably fake values used only to prove redaction and leakage checks.
 
 ## Rules
