@@ -129,6 +129,8 @@ Timeout enforcement is host-controlled. It does not depend on cooperation by the
 
 Resource-limit termination is `execution_failed`, not evidence that the original failure reproduced.
 
+The container engine can report a container's exit before it records the kernel's out-of-memory kill, so the engine's out-of-memory flag alone is not reliable. The runner therefore also treats an exit status of 137, which is 128 plus SIGKILL as reported by the container's init process, as resource termination. The cost is that a replayed program that deliberately kills itself with SIGKILL is reported as `execution_failed` and not as an ordinary exit; the alternative would let a replay killed for memory be classified as a clean failure to reproduce.
+
 ## Secret and Log Policy
 
 ProofIssue never intentionally logs raw selected file contents, command output, environment values, authorization headers, or redaction inputs.
