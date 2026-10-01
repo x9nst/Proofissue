@@ -11,6 +11,7 @@
 - `milestone-5-evidence.md` records declared-path fix verification, security cases, result presentation, and validation evidence.
 - `milestone-6-evidence.md` records the GitHub Action implementation, security analysis, dependency advisory triage, local evidence, and the hosted Linux run that completed the milestone.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
+- `decisions/0002-dependency-strategy.md` compares the options for dependency handling in the initial supported Node.js workflow and recommends one; a maintainer decision is pending.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.
 - `maintainer-participant-packet.md` is the answer-free participant research packet.
