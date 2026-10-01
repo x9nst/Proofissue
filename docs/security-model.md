@@ -139,6 +139,26 @@ Tests use synthetic credentials that are unmistakably fake. Snapshots contain re
 
 Redaction findings record category, target, and replacement marker. They never record the original value or a reversible derivative of it.
 
+### Redaction coverage
+
+Detection is rule-based and deterministic. Every rule maps onto one of the five version 1 categories, so the artifact schema does not change.
+
+| Category | Detected |
+| --- | --- |
+| `private_key` | PEM private-key blocks, including encrypted keys and PGP private-key blocks. A block with no end line, such as output cut off at a byte limit, is redacted to the end of the text. |
+| `authorization_header` | `Authorization` with Bearer, Basic, Token, Negotiate, NTLM, ApiKey, Digest, Hawk, or AWS4 schemes, including the JSON-quoted form; `Cookie`, `Set-Cookie`, `X-Api-Key`, `X-Auth-Token`, and `X-Amz-Security-Token` headers. |
+| `password` | `password`, `passwd`, and `pwd` settings including prefixed names such as `db_password`, with unquoted, quoted, JSON, and unterminated-quote values; the password part of `scheme://user:password@host` URLs. |
+| `sensitive_environment` | A fixed list of well-known variables (for example `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `GITHUB_TOKEN`, `DATABASE_URL`); upper-case variable names ending in `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `PRIVATE_KEY`, `ACCESS_KEY`, or `CREDENTIALS`; `api_key`, `access_token`, `auth_token`, `client_secret`, `secret_key`, `private_key`, and `session_token` settings; npm `_authToken`, `_auth`, and `_password`. |
+| `api_key` | AWS access key ids (`AKIA`, `ASIA`), GitHub classic and fine-grained tokens, OpenAI-style `sk-` keys, GitLab `glpat-`, Slack `xox` tokens, Stripe `sk_`/`rk_` keys, Google `AIza` keys, npm `npm_` tokens, and JSON web tokens. |
+
+Properties the rules keep, each covered by tests:
+
+- Redacting already-redacted text changes nothing and adds no findings.
+- Matching time is linear in the input; adversarial inputs have a time budget in the test suite.
+- A value that is truncated or has an unterminated quote is redacted to the end of the line, or of the text for a private key, rather than left behind.
+
+Known limits. Variable-name rules are case-sensitive for the generic upper-case form on purpose, so ordinary lowercase program output such as `token: 5` or `max_tokens=5` is left alone. Header rules can over-redact prose that starts with `Cookie:`. URL credentials are recognized only when the user name has no raw `[` or `]`, which RFC 3986 forbids there and which keeps a redaction marker from being read as `user:password`. A secret with no recognizable shape or label, such as a bare random string, is not detected. Redaction reduces accidental exposure; it is not a guarantee, and the reviewed preview remains a required control.
+
 The GitHub Action writes the stable replay result to the runner-provided output
 file with randomized multiline delimiters. Its workflow summary is derived only
 from typed states, fixed check labels, and numeric counts. It does not include

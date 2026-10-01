@@ -74,6 +74,8 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Disk-filling writes | Workspace | Use bounded temporary storage and unconditional cleanup | Containment |
 | Process ignores termination | Cleanup | Escalate from stop to host-controlled kill, remove container, then workspace | Containment |
 | Output contains API key or private key | Secret/log | Redact before presentation or serialization and record only safe finding metadata | Containment |
+| Output cut off inside a private key or quoted secret | Secret/log | Redact to the end of the line, or of the text for a key block, instead of leaving the remainder | Containment |
+| Crafted output makes a redaction pattern run for a long time | Availability | Linear-time rules with a time budget enforced by tests | Containment |
 | Output contains terminal escape sequences | User terminal | Escape control characters before human display | Containment |
 | Artifact uses redacted marker as expected evidence | Matcher | Reject the expectation during semantic validation | Rejection |
 | Same exit code comes from a different error | Matcher | Require literal output evidence and report every difference | Detection |
