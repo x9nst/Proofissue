@@ -120,6 +120,10 @@ A `contains` value is 1 to 8192 characters and cannot start with `--`, because t
 
 Results hold only manifest values, result-contract fields, counts, and durations. Before any result or summary is written it is path-scrubbed and checked against the repository's local-path pattern and ProofIssue's redactor; a file that fails the check is replaced by a minimal result that carries only an error code.
 
+## Committed Results
+
+Evidence from a clean run is committed under `results/<date>-<set>-run<run-id>/`: the per-case `<ID>.result.json` files and `summary.json`, formatted with Prettier. They hold no third-party code. Recorded `.proofissue` files and diagnostics are never committed.
+
 ## What the Harness Cannot Observe
 
 The result contract does not report peak memory, the process count, or the split between install and test time. The harness estimates the install time from an install-only baseline artifact and treats the rest as unobservable. See the evaluation document for how that shapes the pilot.

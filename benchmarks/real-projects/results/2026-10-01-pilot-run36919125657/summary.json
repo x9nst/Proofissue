@@ -1,0 +1,173 @@
+{
+  "trial_summary_version": 1,
+  "run": {
+    "run_url": "https://github.com/x9nst/Proofissue/actions/runs/36919125657",
+    "harness_commit": "817274a064904a6417c2688e47d06c7e39e932c1"
+  },
+  "image": "node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+  "sets": ["pilot"],
+  "snapshot_runs_per_case": 5,
+  "cases": [
+    {
+      "id": "M3",
+      "repository": "https://github.com/postalsys/mailauth.git",
+      "classification": "confirmed",
+      "stage": "fix_verification",
+      "code": "all_stages_passed",
+      "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+      "additional": [],
+      "record": "created",
+      "prepare": {
+        "status": "ok",
+        "packages": 254,
+        "downloaded_mib": 11.9,
+        "seconds": 1.9
+      },
+      "snapshot": {
+        "reproduced": 5,
+        "total": 5,
+        "consistent": true
+      },
+      "replay_ms": {
+        "min": 3365,
+        "median": 3397,
+        "max": 3421
+      },
+      "baseline_median_ms": 3291,
+      "estimated_command_ms": 106,
+      "headroom": 0.943,
+      "timeout_seconds": 60,
+      "pre_fix": "reproduced",
+      "fix_verified": true,
+      "digest_verified": true,
+      "limits": {},
+      "install_error_codes": [],
+      "node_modules": {
+        "files": 4335,
+        "page_rounded_mib": 58.1
+      },
+      "environment": {
+        "runner_image": "ubuntu24/20260927.320.1",
+        "cpu_count": 4,
+        "cpu_model": "AMD EPYC 7763 64-Core Processor",
+        "memory_total_mb": 15990,
+        "host_node_version": "24.18.0",
+        "host_npm_version": "11.16.0",
+        "host_git_version": "2.55.0",
+        "docker_server_version": "28.0.4"
+      }
+    },
+    {
+      "id": "N1",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "classification": "confirmed",
+      "stage": "fix_verification",
+      "code": "all_stages_passed",
+      "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+      "additional": [],
+      "record": "created",
+      "prepare": {
+        "status": "ok",
+        "packages": 270,
+        "downloaded_mib": 6.4,
+        "seconds": 3.5
+      },
+      "snapshot": {
+        "reproduced": 5,
+        "total": 5,
+        "consistent": true
+      },
+      "replay_ms": {
+        "min": 4164,
+        "median": 4207,
+        "max": 4275
+      },
+      "baseline_median_ms": 4460,
+      "estimated_command_ms": 0,
+      "headroom": 0.929,
+      "timeout_seconds": 60,
+      "pre_fix": "reproduced",
+      "fix_verified": true,
+      "digest_verified": true,
+      "limits": {},
+      "install_error_codes": [],
+      "node_modules": {
+        "files": 6863,
+        "page_rounded_mib": 49
+      },
+      "environment": {
+        "runner_image": "ubuntu24/20260927.320.1",
+        "cpu_count": 4,
+        "cpu_model": "AMD EPYC 7763 64-Core Processor",
+        "memory_total_mb": 15990,
+        "host_node_version": "24.18.0",
+        "host_npm_version": "11.16.0",
+        "host_git_version": "2.55.0",
+        "docker_server_version": "28.0.4"
+      }
+    },
+    {
+      "id": "T1",
+      "repository": "https://github.com/twigjs/twig.js.git",
+      "classification": "confirmed",
+      "stage": "fix_verification",
+      "code": "all_stages_passed",
+      "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+      "additional": [],
+      "record": "created",
+      "prepare": {
+        "status": "ok",
+        "packages": 355,
+        "downloaded_mib": 11.4,
+        "seconds": 3.6
+      },
+      "snapshot": {
+        "reproduced": 5,
+        "total": 5,
+        "consistent": true
+      },
+      "replay_ms": {
+        "min": 4444,
+        "median": 4476,
+        "max": 4574
+      },
+      "baseline_median_ms": 4426,
+      "estimated_command_ms": 50,
+      "headroom": 0.924,
+      "timeout_seconds": 60,
+      "pre_fix": "reproduced",
+      "fix_verified": true,
+      "digest_verified": true,
+      "limits": {},
+      "install_error_codes": [],
+      "node_modules": {
+        "files": 10722,
+        "page_rounded_mib": 86.1
+      },
+      "environment": {
+        "runner_image": "ubuntu24/20260927.320.1",
+        "cpu_count": 4,
+        "cpu_model": "INTEL(R) XEON(R) PLATINUM 8573C",
+        "memory_total_mb": 15989,
+        "host_node_version": "24.18.0",
+        "host_npm_version": "11.16.0",
+        "host_git_version": "2.55.0",
+        "docker_server_version": "28.0.4"
+      }
+    }
+  ],
+  "missing_cases": [],
+  "invalid_results": [],
+  "totals": {
+    "cases": 3,
+    "confirmed": 3,
+    "findings": 0,
+    "setup_failed": 0,
+    "harness_errors": 0,
+    "artifacts_created": 3,
+    "artifacts_prepared": 3,
+    "artifacts_replayed": 3,
+    "consistent_artifacts": 3,
+    "fix_verified": 3
+  }
+}

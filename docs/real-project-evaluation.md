@@ -2,7 +2,7 @@
 
 ## Status
 
-Pilot planned; no trial has run. This is not a Milestone 7 completion claim, and nothing here ticks a Milestone 7 acceptance criterion.
+The pilot (three cases, one hosted run) has run once and every case was confirmed; see Results. This is not a Milestone 7 completion claim, and nothing here ticks a Milestone 7 acceptance criterion. Three cases from three repositories are a smoke test of the harness and of the replay budget, not ten failures, and they say nothing yet about the 90% target.
 
 The harness and the hosted workflow exist (see `../benchmarks/real-projects/README.md` and `../.github/workflows/real-project-trials.yml`). This document describes the method and the pilot so that results can be read against stated rules rather than after the fact. Numbers are added only from a recorded run.
 
@@ -135,11 +135,50 @@ Each case writes its outputs to workflow artifacts:
 
 The result and summary formats are internal evaluation formats (`trial_result_version` 1), not public ProofIssue interfaces. Results and summaries hold only manifest values, result-contract fields, counts, and durations. Diagnostics are never evidence.
 
-`.proofissue` files contain public third-party source code and are never committed to this repository. Per-case result JSON and the summary JSON contain no third-party code and are committed as evidence after a clean run.
+`.proofissue` files contain public third-party source code and are never committed to this repository. Per-case result JSON and the summary JSON contain no third-party code and are committed as evidence after a clean run, under `../benchmarks/real-projects/results/<date>-<set>-run<run-id>/`.
 
 ## Results
 
-Not yet run.
+### Pilot, run 1
+
+- Run: [36919125657](https://github.com/x9nst/Proofissue/actions/runs/36919125657), 2026-10-01, about 2 minutes 40 seconds end to end with the three case jobs in parallel.
+- Harness commit `817274a` on `agent/real-project-trials`, based on `main` commit `dfb35eb`. The product under test is that tree. It predates the change that sets `HOME` for the replayed command, so `os.homedir()` was not available inside the replay container during this run.
+- Environment: runner image `ubuntu24/20260927.320.1`, Docker Engine 28.0.4, host Node.js 24.18.0, npm 11.16.0, git 2.55.0, the approved image digest from `cases.json`, 4 CPUs and about 15.6 GiB per runner (N1 and M3 on an AMD EPYC 7763, T1 on an Intel Xeon Platinum 8573C).
+- Settings: 5 snapshot replays, 3 install-only baseline replays, 1 pre-fix checkout replay, and 1 fix-verification replay per case.
+- Committed evidence: `../benchmarks/real-projects/results/2026-10-01-pilot-run36919125657/` (the three `<ID>.result.json` files and `summary.json`). The recorded `.proofissue` files and the diagnostics stay in the workflow artifacts.
+
+| Case | Outcome | Prepare: packages / MiB downloaded / s | Snapshot reproduced | Replay s (min / median / max) | Install baseline s (median) | Headroom | Host node_modules (est. MiB) | Pre-fix checkout | Fix verified |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| N1 | confirmed | 270 / 6.4 / 3.5 | 5/5 | 4.2 / 4.2 / 4.3 | 4.5 | 93% | 49.0 | reproduced | yes |
+| T1 | confirmed | 355 / 11.4 / 3.6 | 5/5 | 4.4 / 4.5 / 4.6 | 4.4 | 92% | 86.1 | reproduced | yes |
+| M3 | confirmed | 254 / 11.9 / 1.9 | 5/5 | 3.4 / 3.4 / 3.4 | 3.3 | 94% | 58.1 | reproduced | yes |
+
+Headroom is one minus the slowest replay over the 60-second limit. Replay time is the contract's `execution.duration_ms`, which includes workspace setup, the offline install, and the command.
+
+### What the pilot found
+
+In plain words:
+
+- **No finding.** None of the three cases reached the time, memory, workspace, process, or output limit, and none was refused at record or prepare. Every artifact replayed consistently: all 15 snapshot replays reproduced with the same evidence kinds, the pre-fix checkout reproduced, and the fix checkout did not.
+- **Install time is the whole replay.** The install-only baseline median is within about a quarter of a second of the snapshot median for each case, so the estimated command time is 0.1 seconds or less (N1's baseline was slightly slower than its snapshot replays, so its estimate clamps to zero). The offline install of 254 to 355 packages takes a few seconds, against a 60-second budget. The budget was not the binding constraint for these three projects. Heavier installs were not tested.
+- **The in-memory workspace has room.** The host estimates of `node_modules` size (49 to 86 MiB) are well under the 256 MiB workspace. These are host estimates, not measurements inside the container.
+- **Peak memory and the process count are still unobserved.** "Fits" here means that no replay was terminated for a limit. The result contract cannot say how close a run came to 512 MB or 64 processes.
+- **`os.homedir()` did not matter in these cases.** The replays ran without a home directory and still reproduced, so nothing the three test runners and projects did on this path depended on it. This says nothing about other projects.
+- **Output length can vary slightly while the evidence agrees.** N1's stdout was 1433 bytes in four replays and 1429 in one, because `node:test` prints timing text. The raw `contains` literal contains no timing, so the evidence kinds matched. This is the reason the pilot literals avoid durations, paths, and symbols.
+- **Unselected configuration files did not change the result.** The harness listed `.c8rc.json` (N1) and `.npmrc` (M3) at the pre-fix commit. Neither is needed by the replayed test.
+- **Recording was clean.** No redaction findings on any of the three artifacts (4, 21, and 4 files), and the lockfile checks passed. One nodemailer package declares an install script, which prepare reports and replay never runs.
+- **Fix verification used the declared subjects.** Substituting the declared subject files (1, 18, and 1 files) from the fixed checkout turned each reproduction into `not_reproduced`, with the exit code and the missing output as the differences.
+
+Harness observation: `proofissue record` has no `--json` output, so the harness reads its last line and calls `inspect --json`. This is a limitation of the interface, reported and not changed here.
+
+### What the pilot does not show
+
+- It is three failures from three repositories, not ten. It does not count toward the 90% target.
+- Consistency was measured with five replays per case, in one environment, on one day.
+- nodemailer and mailauth share a maintainer, and all three cases are pure-JavaScript libraries with small test files.
+- Install size was far inside the budget. Where the budget starts to bind is not yet known.
+
+Next step: the maintainer reviews this pilot before the full set runs, as Gate D asks.
 
 ## Security of the Trial Workflow
 
