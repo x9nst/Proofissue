@@ -1,6 +1,6 @@
 # Dependencies
 
-**Status:** In progress. Lockfile validation, recording the manifest and lockfile, preparing packages into a local store, checking that a store is complete, and the exact offline install command are implemented as a library and verified against real npm on the host. No command runs preparation yet, and installing inside the replay container is not implemented, so an artifact with dependency files cannot be replayed yet.
+**Status:** In progress. Lockfile validation, recording the manifest and lockfile, preparing packages into a local store, checking that a store is complete, the exact offline install command, and replay of an artifact with dependency files in the locked-down container are implemented. Preparation and replay are not reachable from a command or the GitHub Action yet, so for now this is a library capability.
 
 This document describes how ProofIssue will handle a project's npm dependencies, following [decision 0002](decisions/0002-dependency-strategy.md): a separate, explicit `prepare` step downloads and verifies the packages a lockfile names, and replay then runs offline. It is extended as each step lands.
 
@@ -106,6 +106,20 @@ The design depends on facts about npm that the type system cannot check, so real
 - A package's `postinstall` script does not run with the flag. A control run without the flag shows the same script running, so the test would notice if the flag stopped working.
 - The project's own `preinstall`, `postinstall`, and `prepare` scripts do not run.
 - Archive entries that try to leave the package directory with `../` write nothing outside it. A symbolic-link entry and a hard-link entry write nothing outside it either; the symbolic-link case needs a host that can create links and is also covered by the Linux container tests.
+
+### Replay
+
+`ReplayRequest.dependency_store` carries the prepared store to the runner. For an artifact with dependency files the runner:
+
+1. refuses at once, creating nothing, if no store was given (`dependencies_not_prepared`);
+2. checks the whole store read-only with `verifyPrepared`, and refuses if any locked package for the replay platform is missing or no longer matches its hash, saying how many;
+3. creates the usual locked-down container with the store mounted read-only and a larger in-memory workspace (256 MiB by default);
+4. runs, inside it and before the artifact's command, the single install command from `offlineInstallArguments`, with an empty environment and no network;
+5. replaces itself with the artifact's command, so the command's output is only its own.
+
+If any step before the command fails, the container exits with a reserved status and the result is `dependency_install_failed`, with at most one npm error code in the message and no package text. An artifact without dependency files is replayed exactly as before, and a store supplied for one is ignored.
+
+Container tests cover: an install from the read-only store that the command can then use; scoped packages; install scripts not running; hostile archive entries (`../`, absolute paths, and symbolic and hard links pointing at the container's own writable and read-only areas) writing nothing outside the package; a decompression bomb stopped by the workspace limit; a failed install reported as one; the reserved exit status; a store that cannot be written from inside; and no network.
 
 ### What preparation does not do
 
