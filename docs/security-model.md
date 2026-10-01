@@ -111,7 +111,7 @@ Every replay container must have all of these controls:
 - no core dumps and a bounded open-file limit;
 - bounded writable temporary storage;
 - CPU, memory, process-count, output, and wall-clock limits;
-- a clean allowlisted environment with no inherited host secrets;
+- a clean environment of two fixed values, `PATH` and `HOME=/tmp`, with nothing inherited from the host;
 - a fixed working directory inside the temporary workspace;
 - direct program-and-argument execution without host-shell interpolation;
 - reliable stop, kill, removal, and workspace cleanup on every path.
@@ -156,6 +156,8 @@ The install and the command share one exit-status channel, so a failure before t
 The one host path handed to the container engine for the artifact's own files is the runner-created temporary root. It is interpolated into a comma-separated mount specification, so the runner rejects a path that is relative or that contains a comma, double quote, or control character before building engine arguments. A rejected path is reported as `policy_rejection` without echoing the path.
 
 The container may modify its temporary workspace because tests can create files, but no other host path is mounted. Version 1 uses a fixed 64 MiB writable-workspace ceiling enforced by runner-controlled container storage rather than an artifact setting. Validated host input is exposed read-only when it must be mounted. The entire temporary root is removed after container removal.
+
+Besides the workspace, the runner gives the container a 16 MiB in-memory `/tmp`, mounted `noexec`, `nosuid`, and `nodev`, which belongs to the container and is discarded with it. The command's `HOME` points there. The replay user has no account entry in the image, so without `HOME` Node.js throws from `os.homedir()`, which recording, run as a real account, does not; a container test showed the throw. Setting `HOME` grants nothing new: `/tmp` was already writable by the command, and the value is a constant that carries no host or artifact data. It changes only where well-behaved programs choose to write caches and settings, and those writes stay inside the same 16 MiB. A home directory inside the workspace was rejected because it would place files in the reconstructed project tree, where a test runner or linter could find them. `os.userInfo()` still throws, because answering it would need an account entry, and adding one would mean a different image or another host mount.
 
 ## Resource Policy
 

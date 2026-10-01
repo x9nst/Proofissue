@@ -29,7 +29,10 @@ export const APPROVED_NODE_IMAGE =
  * with the workspace, and `os.tmpdir()` is the temporary directory because `TMPDIR` is unset.
  */
 export const REPLAY_WORKSPACE_PATH = '/workspace';
-/** The temporary directory of the replayed command (a size-limited in-memory filesystem). */
+/**
+ * The temporary directory of the replayed command (a size-limited in-memory filesystem), and
+ * also its `HOME`, so home paths it prints are normalized like temporary ones.
+ */
 export const REPLAY_TEMPORARY_DIRECTORY = '/tmp';
 export const WRITABLE_WORKSPACE_MB = 64;
 /** Room for an installed dependency tree. In memory, so it counts against the memory limit. */
@@ -394,9 +397,16 @@ export interface ContainerEngine {
 // replay as a clean failure to reproduce.
 const SIGKILL_EXIT_CODE = 137;
 
-const CONTAINER_BOOTSTRAP = `cp -R /proofissue-input/. ${REPLAY_WORKSPACE_PATH}/ && cd ${REPLAY_WORKSPACE_PATH} && exec env -i PATH=/usr/local/bin:/usr/bin:/bin "$@"`;
-
 const SANDBOX_PATH = '/usr/local/bin:/usr/bin:/bin';
+
+// The replay user has no account entry in the image, so os.homedir() has only HOME to go on
+// and throws without it, where recording, run as a real account, does not. /tmp is the
+// container's own bounded scratch space, already writable, so pointing HOME there grants no
+// new access. npm and the command get the same fixed values.
+const SANDBOX_ENVIRONMENT = `PATH=${SANDBOX_PATH} HOME=${REPLAY_TEMPORARY_DIRECTORY}`;
+
+const CONTAINER_BOOTSTRAP = `cp -R /proofissue-input/. ${REPLAY_WORKSPACE_PATH}/ && cd ${REPLAY_WORKSPACE_PATH} && exec env -i ${SANDBOX_ENVIRONMENT} "$@"`;
+
 const DEPENDENCY_CACHE_MOUNT = '/proofissue-cache';
 
 // Reads the one error code npm printed, and nothing else. The output is npm's own but it
@@ -439,12 +449,12 @@ const DEPENDENCY_BOOTSTRAP = [
   `: > ${REPLAY_TEMPORARY_DIRECTORY}/npmrc-user || fail`,
   `: > ${REPLAY_TEMPORARY_DIRECTORY}/npmrc-global || fail`,
   `mkdir ${REPLAY_TEMPORARY_DIRECTORY}/npm-logs || fail`,
-  `env -i PATH=${SANDBOX_PATH} HOME=${REPLAY_TEMPORARY_DIRECTORY} npm ${INSTALL_ARGUMENTS.join(' ')} >>${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log 2>&1 || fail`,
+  `env -i ${SANDBOX_ENVIRONMENT} npm ${INSTALL_ARGUMENTS.join(' ')} >>${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log 2>&1 || fail`,
   // npm can report success when extraction ran out of space, leaving a truncated package. A
   // workspace with under 1 MiB free after the install is treated as that, so the command
   // never runs against an incomplete tree.
   `df -P ${REPLAY_WORKSPACE_PATH} | awk 'NR==2 { exit ($4 < 1024) }' || { echo 'npm error code ENOSPC' >>${REPLAY_TEMPORARY_DIRECTORY}/proofissue-setup.log; fail; }`,
-  `exec env -i PATH=${SANDBOX_PATH} "$@"`,
+  `exec env -i ${SANDBOX_ENVIRONMENT} "$@"`,
 ].join('\n');
 
 const dockerCreateArguments = (spec: ContainerCreateSpec): readonly string[] => [

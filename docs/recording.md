@@ -73,6 +73,8 @@ What reaches the artifact is limited separately:
 
 The recorder never enumerates or serializes the host environment. Tests check the exact set of names the command receives on each platform, that an unrelated host variable does not reach it, and that a command that prints its whole environment produces the same artifact as one that prints nothing.
 
+Because the command runs as your own account, `os.homedir()` returns your home directory during recording even without `HOME`. Replay runs as a user with no account entry and sets `HOME=/tmp`, an empty directory, so a reproduction that depends on a file in your home directory will not find it during replay, and one that calls `os.userInfo()` will fail differently. See "Home and temporary directories" in `replay.md`.
+
 ## File Roles
 
 Reproduction files contain the test or inputs needed to observe the bug. Subject files contain the implementation being tested.

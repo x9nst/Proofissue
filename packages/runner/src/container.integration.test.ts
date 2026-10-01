@@ -163,17 +163,47 @@ integration('real locked-down Docker replay', () => {
     expect(disk.execution.stderr.decoded_text).toBe('proofissue-marker');
   }, 60_000);
 
-  it('exposes only PATH to the replayed process and still streams output with daemon logs disabled', async () => {
+  it('exposes only PATH and HOME to the replayed process and still streams output with daemon logs disabled', async () => {
     const source = `
         const keys = Object.keys(process.env).sort().join(',');
+        const fixed = keys === 'HOME,PATH' && process.env.HOME === '/tmp';
         process.stdout.write('stdout-visible');
-        process.stderr.write(keys === 'PATH' ? 'proofissue-marker' : 'environment-leak:' + keys);
+        process.stderr.write(fixed ? 'proofissue-marker' : 'environment-leak:' + keys);
         process.exitCode = 1;
       `;
     const result = await createDockerRunner().run({ artifact: artifact(source), mode: 'snapshot' });
 
     expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
     expect(result.execution.stdout.decoded_text).toBe('stdout-visible');
+    expect(result.cleanup.completed).toBe(true);
+  }, 30_000);
+
+  it('gives the replay user a writable home directory although it has no account entry', async () => {
+    // Recording runs as a real account, so os.homedir() resolves there even with no HOME.
+    // The replay user is a bare numeric id: without HOME the call threw ENOENT here, and
+    // os.userInfo() still does, because only an account entry could answer it.
+    const source = `
+        import { writeFileSync } from 'node:fs';
+        import { homedir, tmpdir, userInfo } from 'node:os';
+        import { join } from 'node:path';
+        const attempt = (action) => {
+          try { return String(action()); } catch (error) { return error.code + '/' + error.info?.code; }
+        };
+        const writable = () => { writeFileSync(join(homedir(), '.proofissue-probe'), 'x'); return 'yes'; };
+        process.stdout.write([
+          'homedir=' + attempt(homedir),
+          'home-writable=' + attempt(writable),
+          'tmpdir=' + attempt(tmpdir),
+          'userinfo=' + attempt(() => userInfo().username),
+        ].join(' '));
+        process.stderr.write('proofissue-marker');
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({ artifact: artifact(source), mode: 'snapshot' });
+
+    expect(result.execution.stdout.decoded_text).toBe(
+      'homedir=/tmp home-writable=yes tmpdir=/tmp userinfo=ERR_SYSTEM_ERROR/ENOENT',
+    );
     expect(result.cleanup.completed).toBe(true);
   }, 30_000);
 

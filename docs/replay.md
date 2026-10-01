@@ -147,7 +147,23 @@ node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
 
 It is the Linux amd64 image digest published for the official `node:24.18.0-bookworm-slim` image. The runner checks that this exact digest is already present and never pulls it. Image preparation is an explicit administrator or CI step.
 
-The runner exposes only a freshly created input directory as a read-only mount. Before the artifact command starts, a fixed trusted container bootstrap copies those declared files into a 64 MiB in-memory workspace and then replaces itself with the exact `node` argument vector. Artifact arguments are positional values and are never interpolated as shell text. The command receives only a minimal `PATH` and cannot write to the base filesystem. The container's one runner-owned init process is added outside the artifact's declared process budget so the effective artifact limit remains accurate.
+The runner exposes only a freshly created input directory as a read-only mount. Before the artifact command starts, a fixed trusted container bootstrap copies those declared files into a 64 MiB in-memory workspace and then replaces itself with the exact `node` argument vector. Artifact arguments are positional values and are never interpolated as shell text. The command's environment is exactly `PATH=/usr/local/bin:/usr/bin:/bin` and `HOME=/tmp`, with nothing inherited from the host, and it cannot write to the base filesystem. The container's one runner-owned init process is added outside the artifact's declared process budget so the effective artifact limit remains accurate.
+
+### Home and temporary directories
+
+Replay runs as the numeric user 65532, which has no account entry in the approved image. Recording runs as your own account. Three Node.js calls show the difference:
+
+| Call             | Recording on Linux or macOS | Replay                               |
+| ---------------- | --------------------------- | ------------------------------------ |
+| `os.homedir()`   | your home directory         | `/tmp`                               |
+| `os.tmpdir()`    | `/tmp`                      | `/tmp`                               |
+| `os.userInfo()`  | your account                | throws `ERR_SYSTEM_ERROR` (`ENOENT`) |
+
+Without `HOME`, Node.js looks the home directory up in the account database, finds no entry, and throws from `os.homedir()`. A reproduction that reads the home directory, directly or through a configuration loader, would then replay a different failure from the one it recorded, so replay sets `HOME=/tmp`.
+
+`/tmp` is a 16 MiB in-memory directory, separate from the workspace, where files cannot be executed. The command could already write there, so `HOME` adds no access. It only tells programs where to keep caches and settings, which then share the 16 MiB and are discarded with the container. A home path a replayed program prints is a `/tmp` path, so normalized output shows it as `<tmp>`. For an artifact with dependency files, `/tmp` also holds the files the install wrote there, including its log.
+
+Apart from those install files, the home directory starts empty. Nothing from your own home directory is recorded, so a reproduction that depends on a file there, such as `~/.npmrc` or a tool's settings, does not find it during replay. `os.userInfo()` cannot be answered without an account entry and still throws, so a reproduction that calls it does not replay the recorded failure.
 
 ## Dependency Boundary
 
