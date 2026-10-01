@@ -234,7 +234,7 @@ export const createRecordApplicationService = (
         return recordFailure(
           new RecorderError('invalid_request', 'The proposed artifact did not pass validation.'),
         );
-      await writeArtifactFile(request.output_path, capture.artifact);
+      const written = await writeArtifactFile(request.output_path, capture.artifact);
       const warnings = [capture.stdout, capture.stderr]
         .filter((stream) => stream.truncated)
         .map(() => ({
@@ -246,7 +246,7 @@ export const createRecordApplicationService = (
         operation: 'record',
         status: 'created',
         artifact_version: 1,
-        artifact_digest: validation.artifact.digest,
+        artifact_digest: written.digest,
         warnings,
         errors: [],
       };
