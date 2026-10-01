@@ -63,15 +63,18 @@ The recorder:
 
 - runs only the displayed program and argument list authorized by the reporter;
 - does not use a shell in version 1;
+- passes the command no host environment variables on Linux and macOS, and only `SystemRoot` on Windows, where process creation then adds the fixed set of names listed in `recording.md`;
 - reads only explicitly selected regular files beneath the chosen project root;
 - does not follow symbolic links or recursively collect directories;
 - collects only allowlisted runtime metadata;
-- captures stdout and stderr in bounded memory;
+- captures stdout and stderr in bounded memory and writes none of it to the artifact except the expected literals the reporter supplies;
 - applies redaction before terminal display, logging, serialization, or snapshots;
 - shows a redaction and collection summary before confirmation;
 - writes a validated artifact atomically only after confirmation.
 
 The recorder cannot guarantee detection of every secret. Explicit minimal collection and user review remain required controls.
+
+On Windows the variables that process creation adds give the recorded command the reporter's user name, profile and temporary paths, domain or computer name, and logon server. Neither Node.js nor libuv can stop this, and passing the names with empty values breaks ordinary programs, so the set is documented and pinned by a test instead. These values are not secret from the command: it runs as the reporter and can learn the same facts from the operating system and its own working directory on any platform. The risk is sharing them: redaction does not recognize user names, computer names, or paths, so an expected literal copied from output can carry them into an artifact. The preview shows every literal before confirmation.
 
 ## Replay Isolation Baseline
 

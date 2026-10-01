@@ -54,6 +54,9 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Unicode or case variant collides with another path | Artifact path | Apply the documented portable-path and collision rules; reject collisions | Rejection |
 | Symlink or junction selected during recording | Host filesystem | Refuse collection and write no artifact | Rejection |
 | Directory swapped for a link to elsewhere between the link check and the read | Host filesystem | Resolve the opened file's real location and require it to remain inside the project root | Rejection |
+| Host variables such as tokens reach the recorded command | Recorder | Pass no host variables on Linux and macOS and only `SystemRoot` on Windows; a test checks the exact names the command receives | Containment |
+| Windows process creation adds the user name, profile and temporary paths, domain or computer name, and logon server to the recorded command's environment | Recorder | Cannot be turned off without breaking ordinary programs; the added names are documented, and none of the command's output is written to the artifact | Containment |
+| Recorded output carries a user name or local path into a shared artifact | Recorder | Use output only to check expected literals; write only those literals, which the reporter typed and the preview shows; a test shows that printing the whole environment leaves the artifact unchanged | Containment |
 | Current subject changes into a symlink between checks | Current checkout | Use no-follow access and final root verification; stop before container execution | Rejection |
 | Hash does not match embedded content | Artifact integrity | Reject as `invalid_artifact` | Rejection |
 | Lockfile points a package at another host, a git or file source, or a look-alike registry address | Dependency lockfile | Accept only the exact registry tarball address implied by name and version | Rejection |
@@ -155,6 +158,7 @@ Action adapter tests must additionally prove that:
 - A container or kernel escape can cross the intended boundary.
 - Docker Desktop and the container daemon are trusted dependencies.
 - Secret detection can miss unknown formats or redact benign values.
+- Redaction does not recognize user names, computer names, or local paths, so an expected literal that contains one puts it into the artifact. On Windows the recorded command also receives these values through its environment.
 - A malicious approved runtime image can act before the replay command.
 - Local administrators can inspect host memory or temporary resources.
 - Resource enforcement differs by container engine and operating-system host.
