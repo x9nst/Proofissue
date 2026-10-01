@@ -158,4 +158,6 @@ Tests and evaluations retain:
 - anonymized product-research findings;
 - documented skipped platform tests and their reason.
 
+A test whose precondition the host cannot provide, such as creating a symbolic link without the required privilege, must report itself as skipped with the reason. It must never return early and pass, because a passing result would claim a check ran that did not. Linux CI can create symbolic links, so those tests run there.
+
 No evidence file may contain a real credential, private repository content, username, hostname, or local absolute path.

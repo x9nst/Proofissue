@@ -53,6 +53,7 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | `../../secret`, absolute, drive, UNC, or backslash path | Artifact path | Reject during static semantic validation | Rejection |
 | Unicode or case variant collides with another path | Artifact path | Apply the documented portable-path and collision rules; reject collisions | Rejection |
 | Symlink or junction selected during recording | Host filesystem | Refuse collection and write no artifact | Rejection |
+| Directory swapped for a link to elsewhere between the link check and the read | Host filesystem | Resolve the opened file's real location and require it to remain inside the project root | Rejection |
 | Current subject changes into a symlink between checks | Current checkout | Use no-follow access and final root verification; stop before container execution | Rejection |
 | Hash does not match embedded content | Artifact integrity | Reject as `invalid_artifact` | Rejection |
 | Artifact requests arbitrary or mutable image | Image policy | Reject before image acquisition or container creation | Rejection |
@@ -74,6 +75,8 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Disk-filling writes | Workspace | Use bounded temporary storage and unconditional cleanup | Containment |
 | Process ignores termination | Cleanup | Escalate from stop to host-controlled kill, remove container, then workspace | Containment |
 | Output contains API key or private key | Secret/log | Redact before presentation or serialization and record only safe finding metadata | Containment |
+| Output cut off inside a private key or quoted secret | Secret/log | Redact to the end of the line, or of the text for a key block, instead of leaving the remainder | Containment |
+| Crafted output makes a redaction pattern run for a long time | Availability | Linear-time rules with a time budget enforced by tests | Containment |
 | Output contains terminal escape sequences | User terminal | Escape control characters before human display | Containment |
 | Artifact uses redacted marker as expected evidence | Matcher | Reject the expectation during semantic validation | Rejection |
 | Same exit code comes from a different error | Matcher | Require literal output evidence and report every difference | Detection |

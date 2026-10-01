@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it } from 'vitest';
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { afterEach, describe, expect, it, vi, type TestContext } from 'vitest';
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import type * as FsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -9,6 +10,13 @@ import { redactText } from '@proofissue/redactor';
 
 import { captureRecording, DEFAULT_RECORD_LIMITS, type RecordRequest } from './index.js';
 import type { RecorderError } from './index.js';
+
+// Passes through to the real implementation unless a test replaces it, so one test can
+// simulate a path that resolves elsewhere after the recorder has opened it.
+vi.mock('node:fs/promises', async (importOriginal) => {
+  const actual = await importOriginal<typeof FsPromises>();
+  return { ...actual, realpath: vi.fn(actual.realpath) };
+});
 
 const roots: string[] = [];
 const image = `node@sha256:${'1'.repeat(64)}`;
@@ -47,6 +55,19 @@ const request = (root: string, overrides: Partial<RecordRequest> = {}): RecordRe
   subject_paths: ['src/subject.mjs'],
   ...overrides,
 });
+
+const symlinkOrSkip = async (context: TestContext, target: string, link: string): Promise<void> => {
+  try {
+    await symlink(target, link, 'file');
+  } catch (error: unknown) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    // Report "skipped" rather than silently passing a test that checked nothing.
+    if (code === 'EPERM')
+      context.skip('Creating symbolic links needs a privilege this host lacks.');
+    throw error;
+  }
+};
 
 describe('captureRecording', () => {
   it('cannot miss a split secret at any captured chunk boundary', () => {
@@ -141,7 +162,7 @@ describe('captureRecording', () => {
     },
   );
 
-  it('rejects directories, oversized files, and symbolic links', async () => {
+  it('rejects directories and oversized files', async () => {
     const root = await project();
     await expect(captureRecording(request(root, { subject_paths: ['src'] }))).rejects.toMatchObject(
       { code: 'unsafe_file' } satisfies Partial<RecorderError>,
@@ -154,39 +175,50 @@ describe('captureRecording', () => {
     await expect(captureRecording(request(root))).rejects.toMatchObject({
       code: 'unsafe_file',
     } satisfies Partial<RecorderError>);
+  });
 
+  it('rejects a symbolic-link subject file', async (context) => {
+    const root = await project();
+    const subject = path.join(root, 'src', 'subject.mjs');
     await writeFile(path.join(root, 'src', 'target.mjs'), 'safe');
-    try {
-      await symlink(
-        path.join(root, 'src', 'target.mjs'),
-        path.join(root, 'src', 'subject.mjs'),
-        'file',
-      );
-    } catch (error: unknown) {
-      const code =
-        typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
-      if (code === 'EEXIST') {
-        await rm(path.join(root, 'src', 'subject.mjs'));
-        try {
-          await symlink(
-            path.join(root, 'src', 'target.mjs'),
-            path.join(root, 'src', 'subject.mjs'),
-            'file',
-          );
-        } catch (retryError: unknown) {
-          const retryCode =
-            typeof retryError === 'object' && retryError !== null && 'code' in retryError
-              ? retryError.code
-              : undefined;
-          if (retryCode === 'EPERM') return;
-          throw retryError;
-        }
-      } else if (code === 'EPERM') return;
-      else throw error;
-    }
+    await rm(subject);
+    await symlinkOrSkip(context, path.join(root, 'src', 'target.mjs'), subject);
+
     await expect(captureRecording(request(root))).rejects.toMatchObject({
       code: 'unsafe_file',
     } satisfies Partial<RecorderError>);
+  });
+
+  it('rejects a selected file that resolves outside the project once it is open', async () => {
+    // Simulates the outcome of a directory being swapped for a link to elsewhere after the
+    // per-segment link check and before the file is read.
+    const root = await project();
+    const outside = await mkdtemp(path.join(tmpdir(), 'proofissue-recorder-outside-'));
+    roots.push(outside);
+    const actual = await vi.importActual<typeof FsPromises>('node:fs/promises');
+    vi.mocked(realpath).mockImplementation(async (target, options) =>
+      path.basename(String(target)) === 'subject.mjs'
+        ? path.join(outside, 'subject.mjs')
+        : await actual.realpath(target, options),
+    );
+    try {
+      await expect(captureRecording(request(root))).rejects.toMatchObject({
+        code: 'unsafe_file',
+      } satisfies Partial<RecorderError>);
+    } finally {
+      vi.mocked(realpath).mockImplementation(actual.realpath);
+    }
+  });
+
+  it('still records normally when every selected file resolves inside the project', async () => {
+    const root = await project();
+
+    const capture = await captureRecording(request(root));
+
+    expect(capture.artifact.files.map((file) => file.path).sort()).toEqual([
+      'src/subject.mjs',
+      'test/reproduction.mjs',
+    ]);
   });
 
   it('does not expose host environment values to the recorded command', async () => {
