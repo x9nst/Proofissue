@@ -12,11 +12,34 @@ The project has completed the technical prototype slice. One dependency-free Nod
 - Recorder and redaction: complete
 - Locked-down replay and basic matching: complete
 - Declared-path fix verification: complete
-- GitHub Action integration: implemented and locally verified; hosted Linux fixture validation pending
+- GitHub Action integration: complete; the fixture workflow passes on a hosted Linux runner
 
 See `IMPLEMENTATION_PLAN.md` for acceptance criteria and evidence. See
 `docs/github-action.md` for Action usage and `docs/README.md` for the complete
 documentation map.
+
+## Quickstart
+
+Build once, then record a failure, check the artifact, and replay it. The example is a dependency-free script with one bug, in `examples/failing-node-test`.
+
+```text
+npm ci
+npm run build
+
+node packages/cli/dist/bin.js record   --project examples/failing-node-test --output failure.proofissue   --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6   --reproduction test/reproduction.mjs --subject src/calculate.mjs   --expect-stderr "Expected 4 from calculate(2)"   -- node test/reproduction.mjs
+
+node packages/cli/dist/bin.js validate failure.proofissue
+node packages/cli/dist/bin.js inspect failure.proofissue --json
+```
+
+`record` prints what it will capture and asks you to confirm. `validate` and `inspect` never run the artifact. Replaying needs Docker Engine 27 or newer on x86-64 Linux, with the approved image already pulled:
+
+```text
+node packages/cli/dist/bin.js replay failure.proofissue --require-status reproduced
+node packages/cli/dist/bin.js replay failure.proofissue --against examples/failing-node-test --require-status not_reproduced
+```
+
+The second command checks a fix: change `value + 1` to `value * 2` in `src/calculate.mjs` first. See `docs/cli.md` for every command, option, exit code, and failure mode, and `examples/failing-node-test/README.md` for the full walkthrough.
 
 ## Development
 
