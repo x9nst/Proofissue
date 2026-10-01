@@ -1,5 +1,6 @@
+import type { PrepareOperationResult, ReplayOperationResult } from '@proofissue/application';
 import { describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -7,6 +8,7 @@ import {
   createCliAdapter,
   parseRecordArguments,
   RECORD_HELP,
+  renderPrepareResult,
   renderReplayResult,
   renderRecordPreview,
   runCli,
@@ -122,6 +124,28 @@ describe('CLI argument errors', () => {
     ],
     [['replay', 'a.proofissue', '--against'], '--against requires a checkout directory.'],
     [['replay', 'a.proofissue', '--against', '--json'], '--against requires a checkout directory.'],
+    [['prepare'], 'An artifact path is required.'],
+    [['prepare', '--json'], 'An artifact path is required.'],
+    [['prepare', 'a.proofissue'], '--dependency-store is required.'],
+    [['prepare', 'a.proofissue', '--json'], '--dependency-store is required.'],
+    [['prepare', 'a.proofissue', '--dependency-store'], '--dependency-store requires a directory.'],
+    [
+      ['prepare', 'a.proofissue', '--dependency-store', '--json'],
+      '--dependency-store requires a directory.',
+    ],
+    [
+      ['prepare', 'a.proofissue', '--dependency-store', 'store', '--against', 'x'],
+      'Unknown option: --against',
+    ],
+    [
+      ['prepare', 'a.proofissue', '--dependency-store', 'store', '--require-status', 'reproduced'],
+      'Unknown option: --require-status',
+    ],
+    [['replay', 'a.proofissue', '--dependency-store'], '--dependency-store requires a directory.'],
+    [
+      ['validate', 'a.proofissue', '--dependency-store', 'store'],
+      'Unknown option: --dependency-store',
+    ],
     [['frobnicate'], 'Unknown command: frobnicate'],
   ])('%j exits 2 with a message and the usage text', async (arguments_, message) => {
     const { io, output } = capture();
@@ -147,6 +171,7 @@ describe('CLI argument errors', () => {
     const { io } = capture();
     const application = {
       inspect: () => Promise.reject(new Error('must not be called')),
+      prepare: () => Promise.reject(new Error('must not be called')),
       replay: () => Promise.reject(new Error('must not be called')),
       validate: () => Promise.reject(new Error('must not be called')),
     };
@@ -155,9 +180,10 @@ describe('CLI argument errors', () => {
       runCli(['validate', '--json'], io, application),
       runCli(['inspect', 'a.proofissue', '--bogus'], io, application),
       runCli(['replay', 'a.proofissue', '--require-status', 'bogus'], io, application),
+      runCli(['prepare', 'a.proofissue'], io, application),
     ]);
 
-    expect(results.map((result) => result.exit_code)).toEqual([2, 2, 2]);
+    expect(results.map((result) => result.exit_code)).toEqual([2, 2, 2, 2]);
   });
 });
 
@@ -293,6 +319,244 @@ describe('replay CLI', () => {
     expect(rendered).not.toContain('::error::');
     expect(rendered).toContain('\\u{001b}');
     expect(rendered).toContain('\\:\\:error\\:\\:spoof');
+  });
+});
+
+describe('prepare CLI', () => {
+  const preparedResult: PrepareOperationResult = {
+    result_schema_version: 1,
+    operation: 'prepare',
+    status: 'prepared',
+    artifact_version: 1,
+    artifact_digest: '0'.repeat(64),
+    warnings: [
+      {
+        code: 'install_scripts_not_run',
+        message: '1 package declares install scripts, which are never run.',
+      },
+    ],
+    errors: [],
+    preparation: {
+      packages: 3,
+      downloaded_tarballs: 2,
+      downloaded_bytes: 2048,
+      reused_tarballs: 1,
+      skipped_for_platform: 1,
+      install_script_packages: 1,
+    },
+  };
+
+  const withStatus = (status: PrepareOperationResult['status']): PrepareOperationResult => ({
+    result_schema_version: 1,
+    operation: 'prepare',
+    status,
+    warnings: [],
+    errors: [],
+  });
+
+  it('passes the artifact and store to the shared prepare service and exits 0 when prepared', async () => {
+    const { io, output } = capture();
+    let received: { artifact_path: string; dependency_store: string } | undefined;
+
+    const result = await runCli(
+      ['prepare', 'failure.proofissue', '--dependency-store', 'the-store'],
+      io,
+      {
+        prepare: (request) => {
+          received = request;
+          return Promise.resolve(preparedResult);
+        },
+      },
+    );
+
+    expect(result.exit_code).toBe(0);
+    expect(received).toMatchObject({
+      artifact_path: 'failure.proofissue',
+      dependency_store: 'the-store',
+    });
+    expect(output()).toContain('Preparation result: prepared');
+  });
+
+  it('treats not_required as success', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['prepare', 'a.proofissue', '--dependency-store', 's'], io, {
+      prepare: () => Promise.resolve(withStatus('not_required')),
+    });
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toBe(
+      'Preparation result: not_required\nThe artifact has no dependency files; replay needs no prepared store.\n',
+    );
+  });
+
+  it.each(['invalid_input', 'invalid_artifact', 'execution_failed'] as const)(
+    'exits 1 for %s',
+    async (status) => {
+      const { io, output } = capture();
+
+      const result = await runCli(['prepare', 'a.proofissue', '--dependency-store', 's'], io, {
+        prepare: () => Promise.resolve(withStatus(status)),
+      });
+
+      expect(result.exit_code).toBe(1);
+      expect(output()).toContain(`Preparation result: ${status}`);
+    },
+  );
+
+  it('--json emits one parseable versioned prepare result', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(
+      ['prepare', 'a.proofissue', '--dependency-store', 's', '--json'],
+      io,
+      { prepare: () => Promise.resolve(preparedResult) },
+    );
+
+    expect(result.exit_code).toBe(0);
+    expect(output().trimEnd().split('\n')).toHaveLength(1);
+    expect(JSON.parse(output())).toMatchObject({
+      result_schema_version: 1,
+      operation: 'prepare',
+      status: 'prepared',
+      preparation: { packages: 3 },
+    });
+  });
+
+  it('renders counts and the install-script warning without package names', () => {
+    const rendered = renderPrepareResult(preparedResult);
+
+    expect(rendered).toBe(
+      [
+        'Preparation result: prepared',
+        'Packages for the replay platform: 3',
+        'Tarballs downloaded: 2 (2048 bytes)',
+        'Tarballs already in the store: 1',
+        'Skipped for another platform: 1',
+        'Warning: 1 package declares install scripts, which are never run.',
+        'Replay offline with the same --dependency-store.',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  it('shows the failing package location after an error and neutralizes terminal controls', () => {
+    const escape = String.fromCharCode(27);
+    const rendered = renderPrepareResult({
+      ...withStatus('execution_failed'),
+      errors: [
+        {
+          code: 'dependency_download_failed',
+          message: `${escape}]0;title::error::spoof`,
+          details: { reason: 'http_status', package_path: 'node_modules/synthetic-left-pad' },
+        },
+      ],
+    });
+
+    expect(rendered).not.toContain(escape);
+    expect(rendered).not.toContain('::error::');
+    expect(rendered).toContain('\\:\\:error\\:\\:spoof (node_modules/synthetic-left-pad)');
+  });
+
+  it('prepares a dependency-free artifact end to end without creating the store', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-prepare-'));
+    const store = path.join(root, 'store');
+    try {
+      const { io, output } = capture();
+
+      const result = await runCli(['prepare', validFixture, '--dependency-store', store], io);
+
+      expect(result.exit_code).toBe(0);
+      expect(output()).toContain('Preparation result: not_required');
+      await expect(stat(store)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it('prepares the zero-package dependency fixture end to end', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-prepare-'));
+    const store = path.join(root, 'store');
+    try {
+      const { io, output } = capture();
+
+      const result = await runCli(
+        [
+          'prepare',
+          'tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue',
+          '--dependency-store',
+          store,
+        ],
+        io,
+      );
+
+      expect(result.exit_code).toBe(0);
+      expect(output()).toContain('Packages for the replay platform: 0');
+      expect((await stat(path.join(store, '_cacache', 'content-v2', 'sha512'))).isDirectory()).toBe(
+        true,
+      );
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+});
+
+describe('replay CLI dependency store', () => {
+  const replayResult = (errors: ReplayOperationResult['errors'] = []): ReplayOperationResult => ({
+    result_schema_version: 1,
+    operation: 'replay',
+    status: errors.length === 0 ? 'reproduced' : 'execution_failed',
+    mode: 'snapshot',
+    warnings: [],
+    errors,
+    evidence: [],
+    differences: [],
+    substituted_paths: [],
+    scope_limitations: [],
+  });
+
+  it('passes --dependency-store to the shared replay service', async () => {
+    const { io } = capture();
+    let received: { dependency_store?: string } | undefined;
+
+    await runCli(['replay', 'a.proofissue', '--dependency-store', 'the-store'], io, {
+      replay: (request) => {
+        received = request;
+        return Promise.resolve(replayResult());
+      },
+    });
+
+    expect(received?.dependency_store).toBe('the-store');
+  });
+
+  it('sends no dependency store without the option', async () => {
+    const { io } = capture();
+    let received: object | undefined;
+
+    await runCli(['replay', 'a.proofissue'], io, {
+      replay: (request) => {
+        received = request;
+        return Promise.resolve(replayResult());
+      },
+    });
+
+    expect(received).not.toHaveProperty('dependency_store');
+  });
+
+  it('suggests prepare when the store is missing', async () => {
+    const failing = replayResult([
+      { code: 'dependencies_not_prepared', message: 'The dependencies are not prepared.' },
+    ]);
+    const human = capture();
+    const machine = capture();
+
+    await runCli(['replay', 'a.proofissue'], human.io, { replay: () => Promise.resolve(failing) });
+    await runCli(['replay', 'a.proofissue', '--json'], machine.io, {
+      replay: () => Promise.resolve(failing),
+    });
+
+    expect(human.output()).toContain('Hint: run proofissue prepare');
+    expect(machine.output()).not.toContain('Hint:');
   });
 });
 
@@ -481,7 +745,7 @@ describe('record CLI dependency capture', () => {
     expect(RECORD_HELP).toContain('--dependencies');
     expect(RECORD_HELP).toContain('lockfile version 3');
     expect(RECORD_HELP).toContain('public npm registry');
-    expect(RECORD_HELP).toContain('not supported yet');
+    expect(RECORD_HELP).toContain('run proofissue prepare');
   });
 
   it('asks for dependency files only when --dependencies is given', () => {
@@ -526,13 +790,13 @@ describe('record CLI dependency capture', () => {
     expect(parsed.noninteractive_confirmation).toBe(true);
   });
 
-  it('shows the dependency files, package count, and the replay limitation', () => {
+  it('shows the dependency files, package count, and the prepare step', () => {
     const rendered = renderRecordPreview({ ...basePreview, dependencies: dependencies(42, 0) });
 
     expect(rendered).toContain('Dependency files (recorded exactly as they are');
     expect(rendered).toContain('  package.json\n  package-lock.json');
     expect(rendered).toContain('42 packages from the public npm registry');
-    expect(rendered).toContain('Replaying an artifact with dependency files is not supported yet.');
+    expect(rendered).toContain('Run proofissue prepare before replay');
     expect(rendered).not.toContain('install scripts');
   });
 

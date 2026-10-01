@@ -29,7 +29,7 @@ export interface PrepareApplicationRequest {
 }
 
 export interface PrepareApplicationService {
-  prepare(request: PrepareApplicationRequest): Promise<PrepareOperationResult>;
+  readonly prepare: (request: PrepareApplicationRequest) => Promise<PrepareOperationResult>;
 }
 
 export interface PrepareApplicationDependencies {
