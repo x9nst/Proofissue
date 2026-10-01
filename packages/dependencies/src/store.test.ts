@@ -1,0 +1,324 @@
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+
+import { afterEach, describe, expect, it, type TestContext } from 'vitest';
+
+import { openPackageStore, StoreError, type StoreErrorCode } from './store.js';
+
+const roots: string[] = [];
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((root) => rm(root, { force: true, recursive: true })));
+});
+
+const workspace = async (): Promise<string> => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proofissue-store-'));
+  roots.push(root);
+  return root;
+};
+
+const integrityOf = (content: Uint8Array): string =>
+  `sha512-${createHash('sha512').update(content).digest('base64')}`;
+
+async function* chunked(content: Uint8Array, size = 7): AsyncGenerator<Uint8Array> {
+  for (let offset = 0; offset < content.byteLength; offset += size) {
+    yield content.subarray(offset, offset + size);
+    await Promise.resolve();
+  }
+}
+
+const codeOf = async (run: () => Promise<unknown>): Promise<StoreErrorCode | undefined> => {
+  try {
+    await run();
+  } catch (error: unknown) {
+    if (error instanceof StoreError) return error.code;
+    throw error;
+  }
+  return undefined;
+};
+
+const symlinkOrSkip = async (context: TestContext, target: string, link: string): Promise<void> => {
+  try {
+    await symlink(target, link);
+  } catch (error: unknown) {
+    const code =
+      typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
+    if (code === 'EPERM')
+      context.skip('Creating symbolic links needs a privilege this host lacks.');
+    throw error;
+  }
+};
+
+const tarball = Buffer.from('synthetic tarball bytes '.repeat(100));
+
+describe('openPackageStore', () => {
+  it('creates a missing directory, including parents', async () => {
+    const root = await workspace();
+
+    const store = await openPackageStore(path.join(root, 'a', 'b', 'store'));
+
+    expect((await stat(store.directory)).isDirectory()).toBe(true);
+  });
+
+  it('reopens an existing store and keeps its entries', async () => {
+    const root = await workspace();
+    const first = await openPackageStore(path.join(root, 'store'));
+    await first.add(integrityOf(tarball), chunked(tarball));
+
+    const second = await openPackageStore(path.join(root, 'store'));
+
+    expect((await second.lookup(integrityOf(tarball)))?.bytes).toBe(tarball.byteLength);
+  });
+
+  it('refuses a path that is a file', async () => {
+    const root = await workspace();
+    await writeFile(path.join(root, 'file'), 'x');
+
+    expect(await codeOf(async () => await openPackageStore(path.join(root, 'file')))).toBe(
+      'store_unsafe',
+    );
+  });
+
+  it('refuses a store directory that is a symbolic link', async (context) => {
+    const root = await workspace();
+    await mkdir(path.join(root, 'real'));
+    await symlinkOrSkip(context, path.join(root, 'real'), path.join(root, 'link'));
+
+    expect(await codeOf(async () => await openPackageStore(path.join(root, 'link')))).toBe(
+      'store_unsafe',
+    );
+  });
+
+  it('refuses a store whose entry directory is a file', async () => {
+    const root = await workspace();
+    await mkdir(path.join(root, 'store'));
+    await writeFile(path.join(root, 'store', 'v1'), 'x');
+
+    expect(await codeOf(async () => await openPackageStore(path.join(root, 'store')))).toBe(
+      'store_unsafe',
+    );
+  });
+});
+
+describe('package store', () => {
+  const open = async () => await openPackageStore(path.join(await workspace(), 'store'));
+
+  it('stores a verified download and returns it from lookup', async () => {
+    const store = await open();
+    const integrity = integrityOf(tarball);
+
+    const added = await store.add(integrity, chunked(tarball));
+    const found = await store.lookup(integrity);
+
+    expect(added).toEqual({
+      bytes: tarball.byteLength,
+      file: expect.any(String) as string,
+      integrity,
+    });
+    expect(found).toEqual(added);
+    expect((await readFile(added.file)).equals(tarball)).toBe(true);
+  });
+
+  it('names the file after the digest alone, inside the store', async () => {
+    const store = await open();
+    const hex = createHash('sha512').update(tarball).digest('hex');
+
+    const added = await store.add(integrityOf(tarball), chunked(tarball));
+
+    expect(added.file).toBe(path.join(store.directory, 'v1', `sha512-${hex}.tgz`));
+  });
+
+  it('makes entries readable by an unprivileged container user', async (context) => {
+    if (process.platform === 'win32') context.skip('POSIX permissions do not apply on Windows.');
+    const store = await open();
+
+    const added = await store.add(integrityOf(tarball), chunked(tarball));
+
+    expect((await stat(added.file)).mode & 0o777).toBe(0o444);
+  });
+
+  it('stores an empty-bytes-per-chunk download and a large one', async () => {
+    const store = await open();
+    const large = Buffer.alloc(3 * 1024 * 1024, 5);
+
+    const added = await store.add(integrityOf(large), chunked(large, 65_536));
+
+    expect(added.bytes).toBe(large.byteLength);
+    expect((await store.lookup(integrityOf(large)))?.bytes).toBe(large.byteLength);
+  });
+
+  it('returns nothing for a package that is not stored', async () => {
+    const store = await open();
+
+    expect(await store.lookup(integrityOf(tarball))).toBeUndefined();
+  });
+
+  it('rejects bytes that do not match the integrity hash and leaves nothing behind', async () => {
+    const store = await open();
+    const other = Buffer.from('different bytes');
+
+    expect(await codeOf(async () => await store.add(integrityOf(tarball), chunked(other)))).toBe(
+      'integrity_mismatch',
+    );
+
+    expect(await store.lookup(integrityOf(tarball))).toBeUndefined();
+    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+  });
+
+  it('rejects a download that is a prefix of the expected bytes', async () => {
+    const store = await open();
+
+    expect(
+      await codeOf(
+        async () => await store.add(integrityOf(tarball), chunked(tarball.subarray(0, 100))),
+      ),
+    ).toBe('integrity_mismatch');
+    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+  });
+
+  it('rejects a download with extra bytes appended', async () => {
+    const store = await open();
+    const extended = Buffer.concat([tarball, Buffer.from('x')]);
+
+    expect(await codeOf(async () => await store.add(integrityOf(tarball), chunked(extended)))).toBe(
+      'integrity_mismatch',
+    );
+  });
+
+  it('leaves no partial file when the download fails midway, and passes the error on', async () => {
+    const store = await open();
+    async function* failing(): AsyncGenerator<Uint8Array> {
+      yield tarball.subarray(0, 50);
+      await Promise.resolve();
+      throw new Error('connection reset');
+    }
+
+    await expect(store.add(integrityOf(tarball), failing())).rejects.toThrow('connection reset');
+
+    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+  });
+
+  it('does not trust an entry whose content changed on disk, and repairs it', async () => {
+    const store = await open();
+    const integrity = integrityOf(tarball);
+    const added = await store.add(integrity, chunked(tarball));
+    await rm(added.file);
+    await writeFile(added.file, 'corrupted');
+
+    expect(await store.lookup(integrity)).toBeUndefined();
+
+    await store.add(integrity, chunked(tarball));
+    expect((await store.lookup(integrity))?.bytes).toBe(tarball.byteLength);
+    expect((await readFile(added.file)).equals(tarball)).toBe(true);
+  });
+
+  it('does not trust a symbolic link planted as an entry, and replaces only the link', async (context) => {
+    const store = await open();
+    const integrity = integrityOf(tarball);
+    const outside = path.join(path.dirname(store.directory), 'outside.tgz');
+    await writeFile(outside, tarball);
+    const entry = path.join(
+      store.directory,
+      'v1',
+      `sha512-${createHash('sha512').update(tarball).digest('hex')}.tgz`,
+    );
+    await symlinkOrSkip(context, outside, entry);
+
+    expect(await store.lookup(integrity)).toBeUndefined();
+
+    const added = await store.add(integrity, chunked(tarball));
+    expect(added.file).toBe(entry);
+    expect((await readFile(outside)).equals(tarball)).toBe(true);
+    expect((await store.lookup(integrity))?.bytes).toBe(tarball.byteLength);
+  });
+
+  it('never deletes a directory planted as an entry', async () => {
+    const store = await open();
+    const integrity = integrityOf(tarball);
+    const entry = path.join(
+      store.directory,
+      'v1',
+      `sha512-${createHash('sha512').update(tarball).digest('hex')}.tgz`,
+    );
+    await mkdir(entry);
+    await writeFile(path.join(entry, 'keep.txt'), 'important');
+
+    expect(await store.lookup(integrity)).toBeUndefined();
+    expect(await codeOf(async () => await store.add(integrity, chunked(tarball)))).toBe(
+      'store_write_failed',
+    );
+
+    expect(await readFile(path.join(entry, 'keep.txt'), 'utf8')).toBe('important');
+    expect(
+      (await readdir(path.join(store.directory, 'v1'))).filter((name) => name.startsWith('.tmp')),
+    ).toEqual([]);
+  });
+
+  it('leaves a valid existing entry untouched when the same package is added again', async () => {
+    const store = await open();
+    const integrity = integrityOf(tarball);
+    const first = await store.add(integrity, chunked(tarball));
+    const before = await stat(first.file);
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 40);
+    });
+
+    const second = await store.add(integrity, chunked(tarball));
+    const after = await stat(second.file);
+
+    expect(second.file).toBe(first.file);
+    expect(after.mtimeMs).toBe(before.mtimeMs);
+    expect(after.ino).toBe(before.ino);
+    expect(await readdir(path.join(store.directory, 'v1'))).toHaveLength(1);
+  });
+
+  it('survives several writers adding the same package at once', async () => {
+    const store = await open();
+    const integrity = integrityOf(tarball);
+
+    const results = await Promise.all(
+      Array.from({ length: 6 }, async () => await store.add(integrity, chunked(tarball, 13))),
+    );
+
+    expect(new Set(results.map((item) => item.file)).size).toBe(1);
+    expect(await readdir(path.join(store.directory, 'v1'))).toHaveLength(1);
+    expect((await store.lookup(integrity))?.bytes).toBe(tarball.byteLength);
+  });
+
+  it('treats two spellings of one digest as the same entry', async () => {
+    const store = await open();
+    const canonical = integrityOf(tarball);
+    // The last base64 character carries four bits plus two ignored padding bits, so a
+    // neighbouring character with the same top bits decodes to identical bytes.
+    const last = canonical.charAt(canonical.length - 3);
+    const alias = `${canonical.slice(0, -3)}${last === 'A' ? 'B' : 'A'}==`;
+    fc: {
+      const aliasBytes = Buffer.from(alias.slice('sha512-'.length), 'base64');
+      const canonicalBytes = Buffer.from(canonical.slice('sha512-'.length), 'base64');
+      if (!aliasBytes.equals(canonicalBytes)) break fc;
+      await store.add(canonical, chunked(tarball));
+      expect((await store.lookup(alias))?.bytes).toBe(tarball.byteLength);
+    }
+  });
+
+  it.each([
+    ['a missing algorithm', 'A'.repeat(88)],
+    ['sha1', `sha1-${'A'.repeat(27)}=`],
+    ['sha256', `sha256-${'A'.repeat(43)}=`],
+    ['a short sha512', `sha512-${'A'.repeat(85)}==`],
+    ['a path traversal', 'sha512-../../../../etc/passwd'],
+    ['a slash in the digest', `sha512-${'A'.repeat(40)}/${'A'.repeat(45)}==`.replace('/', '\\')],
+    ['an empty string', ''],
+    ['two hashes', `sha512-${'A'.repeat(86)}== sha512-${'B'.repeat(86)}==`],
+  ])('refuses %s for both add and lookup', async (_name, integrity) => {
+    const store = await open();
+
+    expect(await codeOf(async () => await store.lookup(integrity))).toBe('store_unsafe');
+    expect(await codeOf(async () => await store.add(integrity, chunked(tarball)))).toBe(
+      'store_unsafe',
+    );
+    expect(await readdir(path.join(store.directory, 'v1'))).toEqual([]);
+  });
+});
