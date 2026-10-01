@@ -74,7 +74,7 @@ Each expectation lists its rules explicitly. The canonical order is also the app
 
 **Pipeline.** At record time: raw bytes, bounded retention, UTF-8 decoding, redaction, then normalization (only for expectations that list `normalize`) with the record-time path context. At replay time: the same order with the replay path context. Normalization never runs on raw bytes, never before redaction, and never on a stream for a raw expectation.
 
-**Fixed point rule.** A normalized value must be unchanged by its own rules (with no path context). Otherwise it can never match, and validation rejects it. This relies on the rule chain being idempotent, which a property test proves.
+**Fixed point rule.** A normalized value must be unchanged by its own rules (with no path context). Otherwise it can never match, and validation rejects it. This relies on the rule chain being idempotent, which property tests check at scale. Those tests found one subtlety that is now part of the rule definitions: the tokens end in an angle bracket, so a later rule could create a word boundary (or a path root could follow a replaced number) that an earlier rule had been blocked by. A closing angle bracket is therefore treated like a name character in the left-hand boundary of the `paths`, `node_version`, `node_internal_locations`, and `durations` rules, and each pinned counterexample is a permanent regression test.
 
 **Items for sign-off.**
 

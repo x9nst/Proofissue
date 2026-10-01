@@ -65,7 +65,7 @@ Human and structured results must list all substituted subject paths and state t
 9. Capture bounded raw stdout and stderr bytes, drain discarded bytes, decode retained buffers with the shared UTF-8 rules, redact whole decoded buffers, and record exit code, termination reason, duration, and structured lifecycle events.
 10. Stop or kill the container when execution finishes, exceeds a limit, or is interrupted.
 11. Remove the container and temporary workspace.
-12. Match the bounded result against the artifact expectations.
+12. Match the bounded result against the artifact expectations. An expectation that lists normalization rules is compared against the normalized redacted output, using the fixed replay directories `/workspace` and `/tmp`.
 13. Return a structured classification with evidence.
 
 Cleanup runs even when matching or result formatting fails.
@@ -78,7 +78,16 @@ Execution completed and every expected exit-code and output condition matched. E
 
 ### `not_reproduced`
 
-Execution completed but one or more expectations differed. Differences show the expected exit code, actual exit code, missing literal evidence, truncation, and other bounded facts needed to understand the result.
+Execution completed but one or more expectations differed. Differences show the expected exit code, actual exit code, missing literal evidence, the first position at which an exact comparison differed, truncation, and other bounded facts needed to understand the result.
+
+Each explanation says which comparison was made and, for a normalized one, which rules changed the replay output, in counts only. For example:
+
+```text
+Matched: Normalized replay stderr matched the expected output exactly; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.
+Different: Normalized replay stderr differed from the expected output at line 1, column 1 (expected 76 characters, received 0); normalization changed nothing in the replay output.
+```
+
+Normalization cannot see a change confined to what it replaces. A fix that only changes a duration, a process ID, or a Node.js internal line number would go unnoticed by a normalized expectation, so a raw literal is the right choice for a number that is the point of the bug. See `output-matching.md`.
 
 In current-checkout mode, this classification is limited to the declared subject substitutions listed in the result. It is not a verdict on undeclared checkout changes.
 

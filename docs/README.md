@@ -24,6 +24,7 @@
 - `artifact-format.md` defines the proposed version 1 artifact fields, limits, validation order, and compatibility rules.
 - `artifact-io-contract.md` defines exact parser limits, deterministic serialization, and no-overwrite atomic publication.
 - `output-handling.md` defines raw-byte capture, UTF-8 decoding, truncation, whole-buffer redaction, and matching input.
+- `output-matching.md` defines the `contains` and `exact` modes, the eight normalization rules, the record and replay path contexts, the explanation messages, and known limitations.
 - `result-contract.md` defines neutral versioned operation results and the error taxonomy.
 - `cli.md` is the command reference: syntax, options, examples, exit codes, failure behavior, and security notes for `record`, `validate`, `inspect`, `prepare`, and `replay`.
 - `dependencies.md` describes npm dependency handling for the initial supported workflow and the lockfile validation rules; it grows as each step lands.

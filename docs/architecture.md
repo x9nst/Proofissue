@@ -84,7 +84,7 @@ It does not decide whether the failure matched.
 
 Owns the product use cases shared by every delivery adapter:
 
-- record and write an artifact;
+- record and write an artifact, after checking with the matcher that the recording satisfies its own expectations;
 - validate an artifact;
 - inspect an artifact;
 - prepare an artifact's locked npm packages into a verified local store, validating the artifact and lockfile before any request;
