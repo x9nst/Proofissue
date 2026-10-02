@@ -421,10 +421,11 @@
         {
           "stream": "stdout",
           "mode": "contains",
-          "value": "to equal '2+0N6TGjliQoFdJdtrrT2L+rW8/fHATw1dk9Wxv6Tcc='"
-        }
+          "value": "2+0N6TGjliQoFdJdtrrT2L+rW8/fHATw1dk9Wxv6Tcc="
+        },
+        { "stream": "stdout", "mode": "contains", "value": "1 failing" }
       ],
-      "notes": "The literal is the expected SHA-256 hash (base64) of the canonicalized body, taken from the test. Fixture reads happen only in other tests that the --grep skips.",
+      "notes": "The first literal is the full expected SHA-256 hash (base64) of the canonicalized body, taken from observed host preflight output (run 36974395767): chai shortens the strings in its one-line message, so the original literal `to equal '<hash>'` did not appear, and the full expected hash is printed only in the diff. Fixture reads happen only in other tests that the --grep skips.",
       "dependencies": true,
       "expected_exit_code": 1
     },
