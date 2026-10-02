@@ -130,7 +130,7 @@ On x86-64 Linux with Docker you can check it yourself first:
   proofissue replay reproduction.proofissue.yaml --require-status reproduced
 ```
 
-The preview names the file and image. It adds a warning when the image is not the approved one, and when you recorded with a Node.js major other than 24, because replay always uses Node.js 24. After the artifact is written, the output says where it is, the first 12 characters of its SHA-256, how to attach it, and the commands to replay it; for an artifact recorded with `--dependencies` those are `proofissue prepare <file> --dependency-store .proofissue-store` followed by `proofissue replay <file> --dependency-store .proofissue-store`. GitHub refuses attachments ending in `.proofissue`, so when you chose such a name the output says to copy the file to a name ending in `.yaml` before attaching it. The artifact is YAML either way.
+The preview names the file and image. It adds a warning when the image is not the approved one, and when you recorded with a Node.js major other than 24, because replay always uses Node.js 24. After the artifact is written, the output says where it is, the first 12 characters of its SHA-256, how to attach it, and the commands to replay it; for an artifact recorded with `--dependencies` that is the single command `proofissue replay <file> --prepare --dependency-store .proofissue-store`. GitHub refuses attachments ending in `.proofissue`, so when you chose such a name the output says to copy the file to a name ending in `.yaml` before attaching it. The artifact is YAML either way.
 
 With `--json`, stdout holds one line and the preview and these hints are not printed:
 
@@ -426,7 +426,7 @@ Run the artifact's command in a locked-down container and report whether the cap
 
 ```text
 proofissue replay <artifact.proofissue> [--against <directory>]
-  [--dependency-store <directory>]
+  [--dependency-store <directory> [--prepare]]
   [--require-status reproduced|not_reproduced] [--json]
 ```
 
@@ -436,6 +436,7 @@ proofissue replay <artifact.proofissue> [--against <directory>]
 | --- | --- |
 | `--against <directory>` | Current-checkout mode: replace the artifact's declared subject files from the same relative paths under this directory. Undeclared additions, removals, and renames are not evaluated. |
 | `--dependency-store <directory>` | The store filled by `prepare`. Needed only for an artifact with dependency files; ignored otherwise. Replay never uses the network. |
+| `--prepare` | Run `prepare` first with the same `--dependency-store`, then replay. This is an explicit opt-in to the one network step: both results are printed, and if preparation fails nothing is replayed (exit `1`). It requires `--dependency-store` and cannot be combined with `--json` (exit `2`). Without `--prepare`, replay never fetches anything. |
 | `--require-status <status>` | Exit `0` only if the replay ends in this classification. The classification itself is unchanged. |
 | `--json` | Print the versioned result as one line of JSON. |
 
@@ -453,7 +454,13 @@ After fixing `src/calculate.mjs` in your checkout, confirm the failure is gone:
 proofissue replay failure.proofissue --against . --require-status not_reproduced
 ```
 
-For an artifact with dependency files, prepare the packages first and pass the same directory to replay:
+For an artifact with dependency files, `--prepare` downloads and verifies the locked packages into the store and then replays offline from it:
+
+```text
+proofissue replay failure.proofissue --prepare --dependency-store .proofissue-store --require-status reproduced
+```
+
+This is the same as running the two steps yourself, which you can do when you want to prepare once and replay several times:
 
 ```text
 proofissue prepare failure.proofissue --dependency-store .proofissue-store
@@ -549,7 +556,7 @@ A process killed for exceeding the memory limit, including one reported only as 
 
 ### Failure behavior
 
-Exit `1` for `execution_failed`, `invalid_artifact`, or a status other than the one `--require-status` asked for. Exit `2` for malformed arguments. `Ctrl+C` stops the container and removes the workspace before the command returns.
+Exit `1` for `execution_failed`, `invalid_artifact`, or a status other than the one `--require-status` asked for, and, with `--prepare`, for a failed preparation (nothing is replayed then). Exit `2` for malformed arguments, including `--prepare` without `--dependency-store` or with `--json`. `Ctrl+C` stops the container and removes the workspace before the command returns.
 
 An `execution_failed` result carries one error code. None of them is evidence about the original failure. `result-contract.md` defines the full contract.
 

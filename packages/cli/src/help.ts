@@ -28,7 +28,7 @@ with dependency files.
 
 export const REPLAY_HELP = `Usage:
   proofissue replay <artifact> [--against <directory>]
-    [--dependency-store <directory>]
+    [--dependency-store <directory> [--prepare]]
     [--require-status reproduced|not_reproduced] [--json]
 
 Replay validates before execution, accepts only the approved digest-pinned image,
@@ -36,6 +36,9 @@ uses a locked-down local Docker Engine on x86-64 Linux, and never pulls an image
 Without --against, replay uses every file embedded in the artifact. With --against,
 only declared subject paths are replaced; undeclared additions, removals, and renames
 are not evaluated.
+--prepare (which needs --dependency-store, and cannot be combined with --json) first runs the
+prepare step, the only step that uses the network, with the same store, then replays offline.
+If preparation fails, nothing is replayed.
 `;
 
 export const DOCTOR_HELP = `Usage:

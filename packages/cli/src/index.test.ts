@@ -1211,7 +1211,7 @@ describe('record CLI dependency capture', () => {
     ]);
   });
 
-  it('prints the prepare and replay commands for an artifact with dependencies', () => {
+  it('prints the single replay --prepare command for an artifact with dependencies', () => {
     const rendered = renderRecordSuccess({
       digest: 'f'.repeat(64),
       has_dependencies: true,
@@ -1219,12 +1219,12 @@ describe('record CLI dependency capture', () => {
     });
 
     expect(rendered).toContain(
-      '  proofissue prepare failure.proofissue.yaml --dependency-store .proofissue-store\n',
+      '  proofissue replay failure.proofissue.yaml --prepare --dependency-store .proofissue-store\n',
     );
     expect(rendered).toContain(
-      '  proofissue replay failure.proofissue.yaml --dependency-store .proofissue-store\n',
+      '--prepare --dependency-store .proofissue-store --require-status reproduced',
     );
-    expect(rendered).toContain('--dependency-store .proofissue-store --require-status reproduced');
+    expect(rendered).not.toContain('proofissue prepare');
   });
 
   it('says how to attach a .proofissue file, which GitHub refuses', () => {

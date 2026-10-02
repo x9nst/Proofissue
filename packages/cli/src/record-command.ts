@@ -412,16 +412,13 @@ export const renderRecordSuccess = (success: RecordSuccess): string => {
   const file = quotePathForCommand(success.output_path);
   const attachable = /\.ya?ml$/iu.test(success.output_path);
   const store = SUGGESTED_DEPENDENCY_STORE;
+  // --prepare is the one explicit network step, run before the offline replay.
   const replay = success.has_dependencies
-    ? [
-        `  proofissue prepare ${file} --dependency-store ${store}`,
-        `  proofissue replay ${file} --dependency-store ${store}`,
-      ]
+    ? [`  proofissue replay ${file} --prepare --dependency-store ${store}`]
     : [`  proofissue replay ${file}`];
   const check = success.has_dependencies
     ? [
-        `  proofissue prepare ${file} --dependency-store ${store}`,
-        `  proofissue replay ${file} --dependency-store ${store} --require-status reproduced`,
+        `  proofissue replay ${file} --prepare --dependency-store ${store} --require-status reproduced`,
       ]
     : [`  proofissue replay ${file} --require-status reproduced`];
   return [
