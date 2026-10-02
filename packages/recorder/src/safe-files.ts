@@ -161,14 +161,23 @@ export const readProjectTextFile = async (
   }
 };
 
+// Package directories may also hold `@` and `~` (scoped and legacy names); nothing else is
+// accepted, and no empty, `.`, or `..` segment.
+const PROJECT_LOOKUP_PATH = /^[A-Za-z0-9_.@~-]+(?:\/[A-Za-z0-9_.@~-]+)*$/u;
+
 /**
- * Whether a portable project-relative path names one regular file reached without any
+ * Whether a project-relative path (forward slashes) names one regular file reached without any
  * symbolic link. It never reads the file, and never throws.
  */
-export const isSafeRegularFile = async (root: string, artifactPath: string): Promise<boolean> => {
-  if (!isArtifactPath(artifactPath)) return false;
+export const isSafeRegularFile = async (root: string, projectPath: string): Promise<boolean> => {
+  if (
+    !PROJECT_LOOKUP_PATH.test(projectPath) ||
+    projectPath.split('/').some((segment) => segment === '.' || segment === '..')
+  ) {
+    return false;
+  }
   try {
-    await assertSafePathComponents(root, artifactPath);
+    await assertSafePathComponents(root, projectPath);
     return true;
   } catch {
     return false;

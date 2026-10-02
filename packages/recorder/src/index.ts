@@ -56,6 +56,8 @@ export type {
   UnselectableReason,
 } from './observation.js';
 
+export { hintForCommand } from './bin-hint.js';
+export type { CommandHint, CommandHintRequest } from './bin-hint.js';
 export { roleOfPath, SUGGESTION_LIMITS, suggestFiles } from './suggest.js';
 export type { FileSuggestions, SuggestedFile, SuggestionLimit, SuggestRequest } from './suggest.js';
 
