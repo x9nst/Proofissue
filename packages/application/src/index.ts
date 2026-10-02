@@ -1,7 +1,15 @@
 import { createMatcher } from '@proofissue/matcher';
 import type { Matcher } from '@proofissue/matcher';
 import { createRecorder, RecorderError } from '@proofissue/recorder';
-import type { RecordCapture, RecordOutputExpectation, Recorder } from '@proofissue/recorder';
+import { MAX_GUIDED_SELECTIONS, parseLineId } from '@proofissue/recorder';
+import type {
+  ExpectationRequest,
+  GuidedRecorder,
+  ObservationListing,
+  RecordCapture,
+  RecordOutputExpectation,
+  Recorder,
+} from '@proofissue/recorder';
 import { createOutputPathContext } from '@proofissue/output-rules';
 import { createRedactor } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
@@ -15,6 +23,23 @@ import {
 import type { Runner } from '@proofissue/runner';
 
 export type { RecordOutputExpectation } from '@proofissue/recorder';
+export {
+  LISTING_LIMITS,
+  lineId,
+  MAX_GUIDED_SELECTIONS,
+  MAX_SELECTABLE_LINE_BYTES,
+  parseLineId,
+  SUGGESTION_RULES,
+} from '@proofissue/recorder';
+export type {
+  LineSuggestion,
+  ObservationListing,
+  ObservedLine,
+  ObservedStreamName,
+  StreamListing,
+  SuggestionRule,
+  UnselectableReason,
+} from '@proofissue/recorder';
 
 /** The only replay image replay accepts; recording defaults to it. */
 export const APPROVED_REPLAY_IMAGE: string = APPROVED_NODE_IMAGE;
@@ -314,27 +339,156 @@ const selfCheckFailure = (capture: RecordCapture, matcher: Matcher): string | un
     : (result.differences[0]?.message ?? 'The recording did not match its own output.');
 };
 
+/**
+ * What a person chose after seeing the observed output: output line ids such as `e3` and `o12`,
+ * or nothing, which cancels the recording.
+ */
+export type ExpectationChoice =
+  | { readonly line_ids: readonly string[]; readonly status: 'chosen' }
+  | { readonly status: 'cancelled' };
+
+/**
+ * The listing a person chooses from: the normalized, redacted lines of both streams and the
+ * suggested line. It holds output text, so it goes only to the selector, which shows it to the
+ * person who ran the command, and never into an operation result.
+ */
+export type RecordObservationView = ObservationListing;
+
+/** Asks the person which observed lines the artifact should expect. */
+export type SelectExpectations = (view: RecordObservationView) => Promise<ExpectationChoice>;
+
+export interface RecordApplicationOptions {
+  /**
+   * Enables guided recording: when a request carries no expected output, the command is run
+   * first and this callback chooses the expected lines from what it printed. It is never called
+   * for a request that already names its expectations.
+   */
+  readonly select_expectations?: SelectExpectations;
+}
+
+type CaptureOutcome =
+  | { readonly capture: RecordCapture; readonly kind: 'captured' }
+  | { readonly kind: 'ended'; readonly result: RecordOperationResult };
+
+const isGuidedRecorder = (recorder: Recorder): recorder is GuidedRecorder =>
+  'observe' in recorder && 'finalize' in recorder && 'list' in recorder;
+
+const lineIdsToExpectations = (
+  view: RecordObservationView,
+  lineIds: readonly string[],
+): ExpectationRequest | undefined => {
+  const unique = [...new Set(lineIds)];
+  if (unique.length === 0 || unique.length > MAX_GUIDED_SELECTIONS) return undefined;
+  const stdout: RecordOutputExpectation[] = [];
+  const stderr: RecordOutputExpectation[] = [];
+  for (const id of unique) {
+    const parsed = parseLineId(id);
+    if (parsed === undefined) return undefined;
+    const listing = parsed.stream === 'stdout' ? view.stdout : view.stderr;
+    const listed = listing.lines.find((line) => line.number === parsed.number);
+    // An omitted or unselectable line cannot be chosen, whatever the selector sent.
+    if (listed === undefined || !listed.selectable) return undefined;
+    (parsed.stream === 'stdout' ? stdout : stderr).push({ mode: 'line', line: parsed.number });
+  }
+  return { expect_stdout: stdout, expect_stderr: stderr };
+};
+
+const cancelledResult = (): RecordOperationResult => ({
+  result_schema_version: 1,
+  operation: 'record',
+  status: 'cancelled',
+  warnings: [],
+  errors: [],
+});
+
+const guidedCapture = async (
+  recorder: GuidedRecorder,
+  select: SelectExpectations,
+  request: RecordApplicationRequest,
+): Promise<CaptureOutcome> => {
+  // The selected files are read before the command runs, as they are for every recording.
+  const observation = await recorder.observe({
+    arguments: request.arguments,
+    environment_image: request.environment_image,
+    ...(request.include_dependencies === undefined
+      ? {}
+      : { include_dependencies: request.include_dependencies }),
+    ...(request.limits === undefined ? {} : { limits: request.limits }),
+    program: request.program,
+    project_root: request.project_root,
+    reproduction_paths: request.reproduction_paths,
+    subject_paths: request.subject_paths,
+  });
+  const view = recorder.list(observation);
+  if (![...view.stdout.lines, ...view.stderr.lines].some((line) => line.selectable)) {
+    return {
+      kind: 'ended',
+      result: recordFailure(
+        new RecorderError(
+          'invalid_request',
+          'The command printed no line that can be recorded as expected output: every listed line was empty, held a redaction marker or a local path, looked like a secret, or was too long. Give an expectation with an --expect option instead.',
+        ),
+      ),
+    };
+  }
+  const choice = await select(view);
+  if (choice.status === 'cancelled' || choice.line_ids.length === 0) {
+    return { kind: 'ended', result: cancelledResult() };
+  }
+  const expectations = lineIdsToExpectations(view, choice.line_ids);
+  if (expectations === undefined) {
+    return {
+      kind: 'ended',
+      result: recordFailure(
+        new RecorderError(
+          'invalid_request',
+          `Choose between 1 and ${String(MAX_GUIDED_SELECTIONS)} listed, selectable output lines.`,
+        ),
+      ),
+    };
+  }
+  return { kind: 'captured', capture: recorder.finalize(observation, expectations) };
+};
+
+const hasNoExpectations = (request: RecordApplicationRequest): boolean =>
+  request.expect_stdout.length + request.expect_stderr.length === 0;
+
 export const createRecordApplicationService = (
   confirm: ConfirmRecording,
   recorder: Recorder = createRecorder(),
   matcher: Matcher = createMatcher(),
+  options: RecordApplicationOptions = {},
 ): RecordApplicationService => ({
   record: async (request): Promise<RecordOperationResult> => {
     try {
-      const capture = await recorder.capture({
-        arguments: request.arguments,
-        environment_image: request.environment_image,
-        expect_stderr: request.expect_stderr,
-        expect_stdout: request.expect_stdout,
-        ...(request.include_dependencies === undefined
-          ? {}
-          : { include_dependencies: request.include_dependencies }),
-        ...(request.limits === undefined ? {} : { limits: request.limits }),
-        program: request.program,
-        project_root: request.project_root,
-        reproduction_paths: request.reproduction_paths,
-        subject_paths: request.subject_paths,
-      });
+      let outcome: CaptureOutcome;
+      if (
+        options.select_expectations !== undefined &&
+        hasNoExpectations(request) &&
+        isGuidedRecorder(recorder)
+      ) {
+        outcome = await guidedCapture(recorder, options.select_expectations, request);
+      } else {
+        outcome = {
+          kind: 'captured',
+          capture: await recorder.capture({
+            arguments: request.arguments,
+            environment_image: request.environment_image,
+            expect_stderr: request.expect_stderr,
+            expect_stdout: request.expect_stdout,
+            ...(request.include_dependencies === undefined
+              ? {}
+              : { include_dependencies: request.include_dependencies }),
+            ...(request.limits === undefined ? {} : { limits: request.limits }),
+            program: request.program,
+            project_root: request.project_root,
+            reproduction_paths: request.reproduction_paths,
+            subject_paths: request.subject_paths,
+          }),
+        };
+      }
+      if (outcome.kind === 'ended') return outcome.result;
+      const { capture } = outcome;
       const mismatch = selfCheckFailure(capture, matcher);
       if (mismatch !== undefined) {
         return recordFailure(

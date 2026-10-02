@@ -85,6 +85,7 @@ The recorder:
 - applies redaction before terminal display, logging, serialization, or snapshots;
 - shows a redaction and collection summary before confirmation;
 - derives exact and normalized expectation values from the recording, validates every pattern before the command runs and checks it against the recording, refuses a value or pattern that holds a likely secret after normalization or a path from this computer, and checks that the recording satisfies its own expectations before writing;
+- in guided selection, lists the redacted and normalized output to the person who ran the command, escaping and bounding every line, refusing to offer a line that is empty, holds a redaction marker or a path from this computer, looks like a secret, or exceeds the value limit, applying a suggestion only when the person presses Enter on it, never in noninteractive or machine-readable mode, and keeping the output out of results and logs;
 - writes a validated artifact atomically only after confirmation.
 
 The recorder cannot guarantee detection of every secret. Explicit minimal collection and user review remain required controls.

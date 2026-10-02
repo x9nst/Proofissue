@@ -33,13 +33,33 @@ import {
   requestedLiterals,
   validateExpectationRequest,
 } from './expectations.js';
-import type { RecordOutputExpectation } from './expectations.js';
+import type { RecordOutputExpectation, RecordPathContexts } from './expectations.js';
+import { listObservation } from './observation.js';
+import type { ObservationListing } from './observation.js';
 
 export { findNonPortableArgument } from './arguments.js';
 export type { NonPortableArgument, NonPortableArgumentOptions } from './arguments.js';
 export { RecorderError } from './errors.js';
 export type { RecorderErrorCode } from './errors.js';
-export type { RecordOutputExpectation } from './expectations.js';
+export type { RecordOutputExpectation, RecordPathContexts } from './expectations.js';
+export {
+  LISTING_LIMITS,
+  listObservation,
+  lineId,
+  MAX_GUIDED_SELECTIONS,
+  MAX_SELECTABLE_LINE_BYTES,
+  parseLineId,
+  SUGGESTION_RULES,
+} from './observation.js';
+export type {
+  LineSuggestion,
+  ObservationListing,
+  ObservedLine,
+  ObservedStreamName,
+  StreamListing,
+  SuggestionRule,
+  UnselectableReason,
+} from './observation.js';
 
 export const DEFAULT_RECORD_LIMITS: ArtifactLimitsV1 = Object.freeze({
   timeout_seconds: 60,
@@ -88,8 +108,48 @@ export interface RecordCapture {
   readonly stdout: BoundedStreamCapture;
 }
 
+/** What an expectation-free observation needs: a request without any expected output. */
+export type ObserveRequest = Omit<RecordRequest, 'expect_stderr' | 'expect_stdout'>;
+
+/** The expected output a recording is finalized with. */
+export interface ExpectationRequest {
+  readonly expect_stderr: readonly RecordOutputExpectation[];
+  readonly expect_stdout: readonly RecordOutputExpectation[];
+}
+
+/**
+ * A command's redacted observed output, before any expectation was chosen.
+ *
+ * It holds host paths in `contexts`, so it must never be serialized, logged, previewed, or
+ * placed in a result. The output text is redacted but may still hold anything the command
+ * printed; it may be shown to the person who ran the command, and nowhere else.
+ */
+export interface RecordObservation {
+  readonly arguments: readonly string[];
+  readonly contexts: RecordPathContexts;
+  /** Present only when dependency files were recorded. */
+  readonly dependencies?: DependencySummary;
+  readonly duration_ms: number;
+  readonly environment_image: string;
+  readonly exit_code: number;
+  readonly files: readonly ArtifactFileV1[];
+  readonly findings: readonly ArtifactRedactionFindingV1[];
+  readonly limits: ArtifactLimitsV1;
+  /** The redacted text, as `decoded_text`. */
+  readonly stderr: BoundedStreamCapture;
+  readonly stdout: BoundedStreamCapture;
+}
+
 export interface Recorder {
   capture(request: RecordRequest): Promise<RecordCapture>;
+}
+
+/** A recorder that can also split a recording, which guided selection needs. */
+export interface GuidedRecorder extends Recorder {
+  finalize(observation: RecordObservation, expectations: ExpectationRequest): RecordCapture;
+  /** The normalized lines of the observed output and the suggested line. */
+  list(observation: RecordObservation): ObservationListing;
+  observe(request: ObserveRequest): Promise<RecordObservation>;
 }
 
 const isMissing = (error: unknown): boolean =>
@@ -417,7 +477,7 @@ const summarizeDependencies = (files: readonly ArtifactFileV1[]): DependencySumm
   };
 };
 
-const validateSelections = (request: RecordRequest): void => {
+const validateSelections = (request: ObserveRequest, expectations?: ExpectationRequest): void => {
   if (request.arguments.length === 0 || request.arguments.length > 128) {
     throw new RecorderError('invalid_request', 'At least one Node.js argument is required.');
   }
@@ -443,11 +503,13 @@ const validateSelections = (request: RecordRequest): void => {
       'Select at least one reproduction file and at least one subject file.',
     );
   }
-  validateExpectationRequest(
-    request.expect_stdout,
-    request.expect_stderr,
-    ARTIFACT_LIMITS.output_expectations,
-  );
+  if (expectations !== undefined) {
+    validateExpectationRequest(
+      expectations.expect_stdout,
+      expectations.expect_stderr,
+      ARTIFACT_LIMITS.output_expectations,
+    );
+  }
   if (!/^[a-z0-9]+(?:[._/-][a-z0-9]+)*@sha256:[a-f0-9]{64}$/u.test(request.environment_image)) {
     throw new RecorderError(
       'invalid_request',
@@ -512,11 +574,21 @@ const redactTarget = (
   }
 };
 
-export const captureRecording = async (
-  request: RecordRequest,
+/**
+ * Reads the selected files, runs the command, and redacts what it printed, without deciding
+ * what the artifact will expect. This is the first half of a recording: the file contents are
+ * read before the command runs, and nothing here has chosen an expectation. Pass the
+ * expectations only to have them checked for shape before the command runs.
+ *
+ * The result holds host paths (in its path contexts): it must never be serialized, logged,
+ * previewed, or placed in a result.
+ */
+export const observeRecording = async (
+  request: ObserveRequest,
   redactor: Redactor = createRedactor(),
-): Promise<RecordCapture> => {
-  validateSelections(request);
+  expectations?: ExpectationRequest,
+): Promise<RecordObservation> => {
+  validateSelections(request, expectations);
   if (request.arguments.some((argument) => redactor.redact(argument).findings.length > 0)) {
     throw new RecorderError('redaction_failed', 'A command argument contains a likely secret.');
   }
@@ -592,9 +664,34 @@ export const captureRecording = async (
     );
   }
 
+  return {
+    arguments: request.arguments,
+    contexts,
+    ...(dependencies === undefined ? {} : { dependencies }),
+    duration_ms: command.duration_ms,
+    environment_image: request.environment_image,
+    exit_code: command.exit_code,
+    files: redactedFiles.map((item) => item.file),
+    findings,
+    limits,
+    stdout: { ...command.stdout, decoded_text: stdout.text },
+    stderr: { ...command.stderr, decoded_text: stderr.text },
+  };
+};
+
+/**
+ * Derives the expectations from an observation and builds the artifact. This is the second
+ * half of a recording. It is synchronous and runs no command.
+ */
+export const finalizeRecording = (
+  observation: RecordObservation,
+  expectations: ExpectationRequest,
+  redactor: Redactor = createRedactor(),
+): RecordCapture => {
+  const { contexts } = observation;
   for (const literal of [
-    ...requestedLiterals(request.expect_stdout),
-    ...requestedLiterals(request.expect_stderr),
+    ...requestedLiterals(expectations.expect_stdout),
+    ...requestedLiterals(expectations.expect_stderr),
   ]) {
     if (redactor.redact(literal).findings.length > 0) {
       throw new RecorderError(
@@ -603,19 +700,29 @@ export const captureRecording = async (
       );
     }
   }
+  const stdout = {
+    name: 'stdout',
+    text: observation.stdout.decoded_text,
+    truncated: observation.stdout.truncated,
+  } as const;
+  const stderr = {
+    name: 'stderr',
+    text: observation.stderr.decoded_text,
+    truncated: observation.stderr.truncated,
+  } as const;
   const stdoutExpectations = deriveOutputExpectations(
-    { name: 'stdout', text: stdout.text, truncated: command.stdout.truncated },
-    request.expect_stdout,
+    stdout,
+    expectations.expect_stdout,
     contexts,
     redactor,
-    { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
+    stderr,
   );
   const stderrExpectations = deriveOutputExpectations(
-    { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
-    request.expect_stderr,
+    stderr,
+    expectations.expect_stderr,
     contexts,
     redactor,
-    { name: 'stdout', text: stdout.text, truncated: command.stdout.truncated },
+    stdout,
   );
 
   const version = process.versions.node.split('.')[0];
@@ -637,22 +744,22 @@ export const captureRecording = async (
       runtime: 'node',
       runtime_version: version,
       operating_system: 'linux',
-      image: request.environment_image,
+      image: observation.environment_image,
     },
     capture: {
       host_operating_system: process.platform,
       host_architecture: process.arch,
       node_version: process.versions.node,
     },
-    command: { program: 'node', arguments: request.arguments, working_directory: '.' },
-    files: redactedFiles.map((item) => item.file),
+    command: { program: 'node', arguments: observation.arguments, working_directory: '.' },
+    files: observation.files,
     expect: {
-      exit_code: command.exit_code,
+      exit_code: observation.exit_code,
       stdout: stdoutExpectations,
       stderr: stderrExpectations,
     },
-    limits,
-    redaction: { enabled: true, findings },
+    limits: observation.limits,
+    redaction: { enabled: true, findings: observation.findings },
   };
   const validation = validateArtifactValue(artifact);
   if (!validation.ok) {
@@ -664,14 +771,24 @@ export const captureRecording = async (
 
   return {
     artifact,
-    ...(dependencies === undefined ? {} : { dependencies }),
-    duration_ms: command.duration_ms,
+    ...(observation.dependencies === undefined ? {} : { dependencies: observation.dependencies }),
+    duration_ms: observation.duration_ms,
     path_context: contexts.output,
-    stdout: { ...command.stdout, decoded_text: stdout.text },
-    stderr: { ...command.stderr, decoded_text: stderr.text },
+    stdout: observation.stdout,
+    stderr: observation.stderr,
   };
 };
 
-export const createRecorder = (redactor: Redactor = createRedactor()): Recorder => ({
+/** Validates the request, observes the command, and finalizes: the whole recording at once. */
+export const captureRecording = async (
+  request: RecordRequest,
+  redactor: Redactor = createRedactor(),
+): Promise<RecordCapture> =>
+  finalizeRecording(await observeRecording(request, redactor, request), request, redactor);
+
+export const createRecorder = (redactor: Redactor = createRedactor()): GuidedRecorder => ({
   capture: async (request) => await captureRecording(request, redactor),
+  finalize: (observation, expectations) => finalizeRecording(observation, expectations, redactor),
+  list: (observation) => listObservation(observation, redactor),
+  observe: async (request) => await observeRecording(request, redactor),
 });

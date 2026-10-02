@@ -338,6 +338,7 @@ describe('output expectation modes', () => {
       );
 
       expect(message).toContain('The command printed 2 stdout lines and 1 stderr line;');
+      expect(message).toContain('run record without --expect options in a terminal to choose one.');
     });
 
     it('never repeats the literal or output text in the hint', async () => {
