@@ -793,6 +793,53 @@ describe('record CLI', () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it('does not repeat a likely secret given as an expected value', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-secret-'));
+    await mkdir(path.join(root, 'test'));
+    await mkdir(path.join(root, 'src'));
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      "process.stderr.write('failure marker'); process.exitCode = 1;\n",
+    );
+    await writeFile(path.join(root, 'src', 'subject.mjs'), 'export const value = 3;\n');
+    const output = path.join(root, 'failure.proofissue');
+    // Built at run time so no secret-shaped literal is committed.
+    const secret = 'sk-' + 'proj-' + 'SYNTHETICTESTONLYvalue';
+    const { io, output: text } = capture();
+    try {
+      const result = await runCli(
+        [
+          'record',
+          '--project',
+          root,
+          '--output',
+          output,
+          '--image',
+          `node@sha256:${'1'.repeat(64)}`,
+          '--reproduction',
+          'test/reproduction.mjs',
+          '--subject',
+          'src/subject.mjs',
+          '--expect-stderr',
+          secret,
+          '--yes',
+          '--',
+          'node',
+          'test/reproduction.mjs',
+        ],
+        io,
+      );
+
+      expect(result.exit_code).toBe(1);
+      expect(text()).toContain('Recording failed:');
+      expect(text()).not.toContain(secret);
+      expect(JSON.stringify(result)).not.toContain(secret);
+      await expect(readFile(output)).rejects.toMatchObject({ code: 'ENOENT' });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
 });
 
 describe('record CLI dependency capture', () => {
