@@ -16,6 +16,14 @@ Expected 4 from calculate(2)
 
 ## Turn it into a replayable report
 
+In a terminal, from this directory, the command alone is enough (`proofissue` stands for `node <checkout>/packages/cli/dist/bin.js`):
+
+```text
+proofissue record -- node test/reproduction.mjs
+```
+
+It suggests `test/reproduction.mjs` and `src/calculate.mjs` with the reason for each, asks `Use these files? [y/N]`, runs the command once, and lists what it printed so that you can press Enter to take the suggested line `Expected 4 from calculate(2)`. Nothing is chosen for you under `--yes`, with `--json`, or without a terminal; there, name the files and the expected text as below.
+
 From the repository root, after `npm ci && npm run build`:
 
 ```text

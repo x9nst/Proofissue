@@ -8,7 +8,17 @@ import type {
 } from '@proofissue/application';
 
 export interface CliIo {
+  /**
+   * Reads one typed line for guided recording. Resolves to undefined when input ended (end of
+   * file or Ctrl+C). Optional, and used only when `interactive` is true.
+   */
+  readonly ask?: (question: string) => Promise<string | undefined>;
   readonly confirm: (question: string) => Promise<boolean>;
+  /**
+   * Whether a person is at a terminal: standard input and output are both terminals. Guided
+   * recording needs this and `ask`; without them no suggestion is ever shown or applied.
+   */
+  readonly interactive?: boolean;
   readonly write: (text: string) => void;
   /**
    * Where text goes that must not mix with machine-readable output on stdout, such as the
@@ -20,6 +30,23 @@ export interface CliIo {
 export const defaultIo = (): CliIo => ({
   write: (text) => stdout.write(text),
   writeError: (text) => stderr.write(text),
+  interactive: stdin.isTTY && stdout.isTTY,
+  ask: async (question) => {
+    const reader = createInterface({ input: stdin, output: stdout });
+    try {
+      // Closing the input (Ctrl+D, Ctrl+C) never settles the question, so it is raced.
+      return await new Promise<string | undefined>((resolve) => {
+        reader.once('close', () => {
+          resolve(undefined);
+        });
+        reader.question(question).then(resolve, () => {
+          resolve(undefined);
+        });
+      });
+    } finally {
+      reader.close();
+    }
+  },
   confirm: async (question) => {
     const reader = createInterface({ input: stdin, output: stdout });
     try {
