@@ -347,3 +347,93 @@ describe('replay rendering of output matching', () => {
     );
   });
 });
+
+describe('record --json', () => {
+  const captureBoth = (): { io: CliIo; stderr: () => string; stdout: () => string } => {
+    let out = '';
+    let err = '';
+    return {
+      io: {
+        confirm: () => Promise.resolve(false),
+        write: (text) => {
+          out += text;
+        },
+        writeError: (text) => {
+          err += text;
+        },
+      },
+      stderr: () => err,
+      stdout: () => out,
+    };
+  };
+
+  it('record --json --yes prints one versioned result line and writes the preview to stderr', async () => {
+    const root = await project("console.error('failure marker'); process.exitCode = 1;\n");
+    const { io, stderr, stdout } = captureBoth();
+
+    const result = await runCli(
+      recordArguments(root, '--json', '--expect-stderr', 'failure marker'),
+      io,
+    );
+
+    expect(result.exit_code).toBe(0);
+    expect(stdout().endsWith('\n')).toBe(true);
+    expect(stdout().trimEnd().split('\n')).toHaveLength(1);
+    expect(JSON.parse(stdout())).toMatchObject({
+      result_schema_version: 1,
+      operation: 'record',
+      status: 'created',
+      artifact_version: 1,
+      artifact_digest: expect.stringMatching(/^[a-f0-9]{64}$/u) as string,
+      errors: [],
+    });
+    expect(stdout()).not.toContain('failure marker');
+    expect(stderr()).toContain('ProofIssue recording preview');
+    expect(stderr()).toContain('failure marker');
+    expect(await exists(path.join(root, 'failure.proofissue'))).toBe(true);
+  });
+
+  it('prints a failed recording as one result line with the exit code 1', async () => {
+    const root = await project("console.error('failure marker'); process.exitCode = 1;\n");
+    const { io, stderr, stdout } = captureBoth();
+
+    const result = await runCli(
+      recordArguments(root, '--json', '--expect-stderr', 'never printed'),
+      io,
+    );
+
+    expect(result.exit_code).toBe(1);
+    const parsed = JSON.parse(stdout()) as { errors: { message: string }[]; status: string };
+    expect(parsed.status).toBe('invalid_input');
+    expect(parsed.errors[0]?.message).toContain('was not observed in retained output.');
+    expect(stderr()).toBe('');
+  });
+
+  it('shows no preview when the Io has no error stream, and still prints one line', async () => {
+    const root = await project("console.error('failure marker'); process.exitCode = 1;\n");
+    const { io, output } = capture();
+
+    const result = await runCli(
+      recordArguments(root, '--json', '--expect-stderr', 'failure marker'),
+      io,
+    );
+
+    expect(result.exit_code).toBe(0);
+    expect(output().trimEnd().split('\n')).toHaveLength(1);
+    expect(JSON.parse(output())).toMatchObject({ operation: 'record', status: 'created' });
+  });
+
+  it('record --json without --yes is a usage error', async () => {
+    const root = await project("console.error('failure marker'); process.exitCode = 1;\n");
+    const { io, output } = capture();
+    const withoutYes = recordArguments(root, '--json', '--expect-stderr', 'failure marker').filter(
+      (argument) => argument !== '--yes',
+    );
+
+    const result = await runCli(withoutYes, io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output()).toContain('--json needs --yes');
+    expect(await exists(path.join(root, 'failure.proofissue'))).toBe(false);
+  });
+});

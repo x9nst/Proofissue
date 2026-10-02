@@ -130,4 +130,4 @@ Evidence from a clean run is committed under `results/<date>-<set>-run<run-id>/`
 
 The result contract does not report peak memory, the process count, or the split between install and test time. The harness estimates the install time from an install-only baseline artifact and treats the rest as unobservable. See the evaluation document for how that shapes the pilot.
 
-`proofissue record` has no `--json` output. The harness reads its exit code and last line, then calls `inspect --json` for structured detail. Adding `--json` would change a public interface and is a separate proposal.
+`proofissue record --json` (which needs `--yes`) prints one `RecordOperationResult` line on stdout, with the preview on stderr. The harness reads that line and its exit code, then calls `inspect --json` for structured detail.

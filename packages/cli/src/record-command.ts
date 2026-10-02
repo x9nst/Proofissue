@@ -27,7 +27,7 @@ export const RECORD_HELP = `Usage:
     [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
     [--expect-stdout-exact] [--expect-stderr-exact]
     [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
-    [--dependencies] [--yes] -- node <arguments...>
+    [--dependencies] [--yes] [--json] -- node <arguments...>
 
 Defaults:
   --project  The current directory.
@@ -72,6 +72,7 @@ public npm registry. Before replaying such an artifact, run proofissue prepare t
 verify the locked packages.
 The command runs directly as Node.js arguments; shell syntax is not interpreted.
 Use --yes only for explicit noninteractive approval after reviewing these selections.
+--json (which needs --yes) prints one result line on stdout and the preview on stderr.
 `;
 
 const quoteArgument = (value: string): string => JSON.stringify(value);
@@ -193,6 +194,7 @@ export const renderRecordPreview = (preview: RecordPreview): string => {
 };
 
 export interface ParsedRecordCommand {
+  readonly json: boolean;
   readonly noninteractive_confirmation: boolean;
   readonly request: RecordApplicationRequest;
 }
@@ -273,6 +275,7 @@ export const parseRecordArguments = (
   let outputPath: string | undefined;
   let image: string | undefined;
   let noninteractive = false;
+  let json = false;
   let includeDependencies = false;
   const reproductionPaths: string[] = [];
   const subjectPaths: string[] = [];
@@ -288,6 +291,10 @@ export const parseRecordArguments = (
     }
     if (argument === '--yes') {
       noninteractive = true;
+      continue;
+    }
+    if (argument === '--json') {
+      json = true;
       continue;
     }
     if (argument === '--dependencies') {
@@ -356,6 +363,7 @@ export const parseRecordArguments = (
     throw new Error('The command after -- must start with node and include at least one argument.');
   }
   return {
+    json,
     noninteractive_confirmation: noninteractive,
     request: {
       arguments: command.slice(1),
@@ -391,9 +399,19 @@ export const runRecordCommand = async (
     );
     return { exit_code: 2 };
   }
+  if (parsed.json && !parsed.noninteractive_confirmation) {
+    io.write(
+      usageError(
+        'record',
+        '--json needs --yes: a prompt cannot be answered while the result is machine-readable.',
+      ),
+    );
+    return { exit_code: 2 };
+  }
 
   const confirm = async (preview: RecordPreview): Promise<RecordConfirmation> => {
-    io.write(renderRecordPreview(preview));
+    // Under --json the single result line owns stdout, so the preview goes to stderr.
+    (parsed.json ? io.writeError : io.write)?.(renderRecordPreview(preview));
     if (parsed.noninteractive_confirmation) {
       return {
         reproduction_files_confirmed: true,
@@ -424,7 +442,8 @@ export const runRecordCommand = async (
   };
 
   const result = await createRecordApplicationService(confirm).record(parsed.request);
-  if (result.status === 'created') io.write('Artifact created.\n');
+  if (parsed.json) io.write(`${JSON.stringify(result)}\n`);
+  else if (result.status === 'created') io.write('Artifact created.\n');
   else if (result.status === 'cancelled')
     io.write('Recording cancelled; no artifact was written.\n');
   else io.write(renderRecordFailure(result.errors));

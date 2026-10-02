@@ -273,41 +273,66 @@ describe('parseInspect', () => {
 });
 
 describe('parseRecordOutput', () => {
-  const preview = 'ProofIssue recording preview\n\nAuthorized command (no shell):\n  node "x"\n\n';
+  const result = (status: string, errors: readonly object[] = []): string =>
+    `${JSON.stringify({
+      result_schema_version: 1,
+      operation: 'record',
+      status,
+      warnings: [],
+      errors,
+    })}\n`;
 
-  it('reads a created recording from the last line', () => {
-    expect(parseRecordOutput(`${preview}Artifact created.\n`)).toEqual({ status: 'created' });
+  it('reads a created recording', () => {
+    expect(parseRecordOutput(result('created'))).toEqual({ status: 'created' });
   });
 
   it('reads a failed recording and its message', () => {
     expect(
       parseRecordOutput(
-        `${preview}Recording failed: An expected stdout literal was not observed in retained output.\n`,
+        result('invalid_input', [
+          {
+            code: 'policy_rejection',
+            message: 'An expected stdout literal was not observed in retained output.',
+          },
+        ]),
       ),
     ).toEqual({
       status: 'failed',
       message: 'An expected stdout literal was not observed in retained output.',
     });
+    expect(parseRecordOutput(result('execution_failed'))).toEqual({
+      status: 'failed',
+      message: '',
+    });
   });
 
   it('reads a cancelled recording', () => {
-    expect(parseRecordOutput(`${preview}Recording cancelled; no artifact was written.\n`)).toEqual({
-      status: 'cancelled',
-    });
+    expect(parseRecordOutput(result('cancelled'))).toEqual({ status: 'cancelled' });
   });
 
   it('reads CRLF output and bounds the message', () => {
-    expect(parseRecordOutput('Artifact created.\r\n')).toEqual({ status: 'created' });
-    const failed = parseRecordOutput(`Recording failed: ${'m'.repeat(5000)}\n`);
+    expect(parseRecordOutput(result('created').replace('\n', '\r\n'))).toEqual({
+      status: 'created',
+    });
+    const failed = parseRecordOutput(
+      result('invalid_input', [{ code: 'policy_rejection', message: 'm'.repeat(5000) }]),
+    );
     expect(failed.status === 'failed' ? failed.message.length : 0).toBe(1024);
   });
 
-  it('reports unparseable for empty output or an unknown last line', () => {
+  it('reports unparseable for empty output, other operations, or an unknown status', () => {
     expect(parseRecordOutput('')).toEqual({ status: 'unparseable' });
     expect(parseRecordOutput('\n\n')).toEqual({ status: 'unparseable' });
-    expect(parseRecordOutput(`${preview}Something else happened.\n`)).toEqual({
+    expect(parseRecordOutput('Artifact created.\n')).toEqual({ status: 'unparseable' });
+    expect(parseRecordOutput(result('something_else'))).toEqual({ status: 'unparseable' });
+    expect(parseRecordOutput(result('created').replace('"record"', '"replay"'))).toEqual({
       status: 'unparseable',
     });
+    expect(
+      parseRecordOutput(
+        result('created').replace('"result_schema_version":1', '"result_schema_version":2'),
+      ),
+    ).toEqual({ status: 'unparseable' });
   });
 });
 

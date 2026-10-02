@@ -516,26 +516,22 @@ export const parseInspect = (stdout: string): InspectObservation => {
   };
 };
 
-const RECORD_FAILED_PREFIX = 'Recording failed: ';
-
-/** Reads `record` output, which has no JSON form: the last non-empty line says what happened. */
+/** Reads one `record --json` line. Wrong operation, wrong schema version, or no status is `unparseable`. */
 export const parseRecordOutput = (stdout: string): RecordObservation => {
-  const lines = stdout
-    .split('\n')
-    .map((line) => line.replace(/\r$/u, ''))
-    .filter((line) => line.trim() !== '');
-  const last = lines[lines.length - 1];
-  if (last === undefined) return { status: 'unparseable' };
-  if (last === 'Artifact created.') return { status: 'created' };
-  if (last === 'Recording cancelled; no artifact was written.') return { status: 'cancelled' };
-  if (last.startsWith(RECORD_FAILED_PREFIX)) {
-    return {
-      status: 'failed',
-      message: last.slice(
-        RECORD_FAILED_PREFIX.length,
-        RECORD_FAILED_PREFIX.length + MAX_RECORD_MESSAGE_LENGTH,
-      ),
-    };
+  const record = parseJsonObject(stdout);
+  if (
+    record === undefined ||
+    record['operation'] !== 'record' ||
+    record['result_schema_version'] !== 1
+  ) {
+    return { status: 'unparseable' };
+  }
+  const status = record['status'];
+  if (status === 'created') return { status: 'created' };
+  if (status === 'cancelled') return { status: 'cancelled' };
+  if (status === 'invalid_input' || status === 'execution_failed') {
+    const message = readErrors(record)[0]?.message ?? '';
+    return { status: 'failed', message: message.slice(0, MAX_RECORD_MESSAGE_LENGTH) };
   }
   return { status: 'unparseable' };
 };
