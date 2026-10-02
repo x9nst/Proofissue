@@ -306,6 +306,34 @@ describe('Action execution', () => {
     expect(summary).not.toContain(sensitive);
   });
 
+  it('labels pattern checks with fixed text only', () => {
+    const sensitive = 'synthetic-expected-pattern-in-a-message';
+    const normalization = {
+      rules: ['line_endings', 'paths'],
+      changes: [{ rule: 'paths', count: 1 }],
+    } as const;
+    const result = replayResult('not_reproduced', {
+      evidence: [
+        { kind: 'stdout_regex', message: sensitive },
+        { kind: 'stderr_regex', message: sensitive, normalization },
+      ],
+      differences: [
+        { kind: 'stdout_no_match', message: sensitive },
+        { kind: 'stderr_no_match', message: sensitive, normalization },
+        { kind: 'regex_step_limit', message: sensitive },
+      ],
+    });
+
+    const summary = renderActionSummary(result, undefined, true);
+
+    expect(summary).toContain('- stdout matched the expected pattern\n');
+    expect(summary).toContain('- stderr matched the expected pattern after normalization\n');
+    expect(summary).toContain('- stdout did not match the expected pattern\n');
+    expect(summary).toContain('- stderr did not match the expected pattern after normalization\n');
+    expect(summary).toContain('- a pattern exceeded its step limit\n');
+    expect(summary).not.toContain(sensitive);
+  });
+
   it('rejects invalid inputs before invoking the application', async () => {
     const application: ActionApplicationServices = {
       replay: vi.fn(() => Promise.resolve(replayResult('reproduced'))),

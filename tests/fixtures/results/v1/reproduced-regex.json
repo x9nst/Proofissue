@@ -1,0 +1,107 @@
+{
+  "result_schema_version": 1,
+  "operation": "replay",
+  "status": "reproduced",
+  "artifact_version": 1,
+  "artifact_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "warnings": [],
+  "errors": [],
+  "mode": "snapshot",
+  "image_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "effective_limits": {
+    "cpus": 1,
+    "memory_mb": 512,
+    "output_bytes_per_stream": 1048576,
+    "processes": 64,
+    "timeout_seconds": 60,
+    "writable_workspace_mb": 64
+  },
+  "execution": {
+    "duration_ms": 125,
+    "exit_code": 1,
+    "stdout": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 22,
+      "total_bytes": 22,
+      "truncated": false
+    },
+    "stderr": {
+      "discarded_bytes": 0,
+      "had_decoding_replacement": false,
+      "retained_bytes": 89,
+      "total_bytes": 89,
+      "truncated": false
+    },
+    "termination_reason": "exited"
+  },
+  "evidence": [
+    {
+      "kind": "exit_code",
+      "message": "Exit code matched: 1."
+    },
+    {
+      "kind": "stdout_regex",
+      "message": "Replay stdout matched the expected pattern."
+    },
+    {
+      "kind": "stderr_regex",
+      "message": "Normalized replay stderr matched the expected pattern; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.",
+      "normalization": {
+        "rules": [
+          "line_endings",
+          "ansi_escapes",
+          "trailing_whitespace",
+          "paths",
+          "node_version",
+          "node_internal_locations",
+          "process_ids",
+          "durations"
+        ],
+        "changes": [
+          {
+            "rule": "line_endings",
+            "count": 2
+          },
+          {
+            "rule": "ansi_escapes",
+            "count": 2
+          },
+          {
+            "rule": "paths",
+            "count": 1
+          },
+          {
+            "rule": "durations",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "kind": "stderr_regex",
+      "message": "Normalized replay stderr matched the expected pattern; normalization changed 2 line endings and 1 path in the replay output.",
+      "normalization": {
+        "rules": ["line_endings", "paths"],
+        "changes": [
+          {
+            "rule": "line_endings",
+            "count": 2
+          },
+          {
+            "rule": "paths",
+            "count": 1
+          }
+        ]
+      }
+    }
+  ],
+  "differences": [],
+  "substituted_paths": [],
+  "scope_limitations": [],
+  "cleanup": {
+    "completed": true,
+    "attempted_resources": ["container", "workspace"],
+    "residual_resources": []
+  }
+}

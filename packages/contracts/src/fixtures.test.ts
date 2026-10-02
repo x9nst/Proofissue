@@ -84,6 +84,8 @@ describe('provisional prepare result fixtures', () => {
 const outputMatchingFixtureNames = [
   'reproduced-normalized.json',
   'not-reproduced-output-modes.json',
+  'reproduced-regex.json',
+  'not-reproduced-regex.json',
 ] as const;
 
 // The canonical rule order is part of the public contract (see docs/output-matching.md).
@@ -158,5 +160,27 @@ describe('output-matching result fixtures', () => {
       'stderr_missing',
       'stderr_differs',
     ]);
+  });
+
+  it('covers the pattern kinds, with a summary only where the expectation was normalized', async () => {
+    const [, , reproduced, corrected] = await readOutputMatchingFixtures();
+
+    expect(reproduced?.evidence.map((item) => item.kind)).toEqual([
+      'exit_code',
+      'stdout_regex',
+      'stderr_regex',
+      'stderr_regex',
+    ]);
+    expect(reproduced?.evidence[1]).not.toHaveProperty('normalization');
+    expect(reproduced?.evidence[2]).toHaveProperty('normalization');
+    expect(corrected?.differences.map((item) => item.kind)).toEqual([
+      'exit_code',
+      'stderr_no_match',
+      'regex_step_limit',
+    ]);
+    // Messages are fixed sentences: a pattern or output text never appears in them.
+    for (const item of [...(reproduced?.evidence ?? []), ...(corrected?.differences ?? [])]) {
+      expect(item.message).toMatch(/^[A-Z][A-Za-z0-9 ,.:;-]*\.$/u);
+    }
   });
 });

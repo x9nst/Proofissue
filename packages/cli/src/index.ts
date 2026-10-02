@@ -31,6 +31,7 @@ export const RECORD_HELP = `Usage:
     --reproduction <path> --subject <path>
     [--expect-stdout <literal>] [--expect-stderr <literal>]
     [--expect-stdout-normalized <text>] [--expect-stderr-normalized <text>]
+    [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
     [--expect-stdout-exact] [--expect-stderr-exact]
     [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
     [--dependencies] [--yes] -- node <arguments...>
@@ -46,6 +47,14 @@ Expected output (give at least one; the value options may be repeated):
       Text as it was printed here. Replay compares after ignoring line endings, terminal
       escape sequences, trailing whitespace, the project and temporary directories,
       durations, process IDs, the Node.js version, and Node.js internal line numbers.
+  --expect-stdout-regex, --expect-stderr-regex
+      A pattern that must match somewhere in the stream after the same normalization.
+      The pattern language is a bounded subset of JavaScript regular expressions (no
+      lookaround or backreferences, at most 1024 characters, no case-insensitive or
+      Unicode-property forms) that always runs in linear time; a pattern that cannot match
+      without consuming output, such as a*, is refused. It is checked before the command runs.
+      Write a pattern against normalized output, for example "took <duration>" and
+      "<project>/test/a\\.mjs:\\d+:\\d+".
   --expect-stdout-exact, --expect-stderr-exact
       The whole stream must match exactly. Take no value, at most once per stream.
   --expect-stdout-exact-normalized, --expect-stderr-exact-normalized
@@ -163,6 +172,9 @@ const describeExpectation = (
   const value = quoteExpectation(item.value);
   if (item.mode === 'exact') {
     return `  ${stream} ${normalized ? 'after normalization is' : 'is'} exactly: ${value}`;
+  }
+  if (item.mode === 'regex') {
+    return `  ${stream} matches pattern${normalized ? ' after normalization' : ''}: ${value}`;
   }
   return `  ${stream} contains${normalized ? ' after normalization' : ''}: ${value}`;
 };
@@ -311,6 +323,12 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
         break;
       case '--expect-stderr-normalized':
         expectStderr.push({ mode: 'contains', normalized: true, value });
+        break;
+      case '--expect-stdout-regex':
+        expectStdout.push({ mode: 'regex', normalized: true, pattern: value });
+        break;
+      case '--expect-stderr-regex':
+        expectStderr.push({ mode: 'regex', normalized: true, pattern: value });
         break;
       default:
         throw new Error(`Unknown record option: ${argument}`);

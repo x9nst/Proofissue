@@ -116,7 +116,13 @@ export interface NormalizationSummary {
 
 export interface MatchEvidence {
   readonly kind:
-    'exit_code' | 'stderr_contains' | 'stderr_exact' | 'stdout_contains' | 'stdout_exact';
+    | 'exit_code'
+    | 'stderr_contains'
+    | 'stderr_exact'
+    | 'stderr_regex'
+    | 'stdout_contains'
+    | 'stdout_exact'
+    | 'stdout_regex';
   readonly message: string;
   /** Present when the expectation compared normalized output. */
   readonly normalization?: NormalizationSummary;
@@ -126,10 +132,13 @@ export interface Difference {
   readonly kind:
     | 'exit_code'
     | 'insufficient_output'
+    | 'regex_step_limit'
     | 'stderr_differs'
     | 'stderr_missing'
+    | 'stderr_no_match'
     | 'stdout_differs'
-    | 'stdout_missing';
+    | 'stdout_missing'
+    | 'stdout_no_match';
   readonly message: string;
   /** Present when the expectation compared normalized output. */
   readonly normalization?: NormalizationSummary;
@@ -175,7 +184,7 @@ export interface ArtifactInspectionRedactionFinding {
 
 /** How one output expectation compares, never its value. An empty `normalize` means raw. */
 export interface ArtifactInspectionOutputExpectation {
-  readonly mode: 'contains' | 'exact';
+  readonly mode: 'contains' | 'exact' | 'regex';
   readonly normalize: readonly OutputNormalizationRule[];
 }
 

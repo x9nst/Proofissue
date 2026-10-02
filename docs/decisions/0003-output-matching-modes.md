@@ -1,6 +1,6 @@
 # Decision 0003: Exact, Normalized, and Bounded Regular-Expression Output Matching
 
-**Status:** Proposed on 2026-10-01. The `contains`/`exact` modes and output normalization are implemented with the defaults below. Bounded regular-expression matching is the **next step** and is not implemented yet. Every item marked *assumed; awaiting maintainer sign-off* was implemented with the recommended default and should be confirmed or changed in review.  
+**Status:** Proposed on 2026-10-01. The `contains`, `exact`, and `regex` modes and output normalization are implemented with the defaults below. Every item marked *assumed; awaiting maintainer sign-off* was implemented with the recommended default and should be confirmed or changed in review.  
 **Date:** 2026-10-01
 
 ## Context
@@ -11,7 +11,7 @@ Real failures are not byte-identical across those two places. A test runner prin
 
 This decision adds three things, each additive and explainable:
 
-1. a per-expectation **match mode**: `contains` (today's behavior), `exact`, and, as the next step, `regex`;
+1. a per-expectation **match mode**: `contains` (today's behavior), `exact`, and `regex`;
 2. a per-expectation list of **normalization rules**, each with a frozen definition;
 3. result evidence that says which mode and which normalization produced each match or difference, without publishing output.
 
@@ -38,7 +38,7 @@ The project guardrails still apply: matching must be deterministic and explainab
 **Choice: (c).** Each entry becomes:
 
 ```yaml
-- mode: contains | exact           # required (regex follows as the next step)
+- mode: contains | exact | regex  # required
   normalize:                       # optional; present means compare normalized output
     - line_endings
     - ...                          # non-empty, unique, in documented order
@@ -47,7 +47,8 @@ The project guardrails still apply: matching must be deterministic and explainab
 
 - `contains` without `normalize` is exactly today's behavior and serializes to the same bytes, so existing artifacts are unchanged and replay identically.
 - `exact` means the whole retained redacted stream, after the listed rules if any, equals `value`.
-- The stored value for a normalized `contains` or `exact` entry is already normalized. The artifact never stores a host path, so replay never needs one.
+- `regex` means the stored value is a pattern in the bounded language (D3) that matches somewhere in the stream, after the listed rules if any.
+- The stored value for a normalized `contains` or `exact` entry is already normalized. A `regex` pattern is stored as typed and matched against the normalized stream. The artifact never stores a host path, so replay never needs one.
 
 A version bump would force migration machinery for no safety gain: the schema is provisional, decision 0002 set the precedent for an additive change, and closed objects already make a consumer that predates the change reject the new content. A separate `match:` section would duplicate the per-stream lists and break the existing ordering semantics.
 
@@ -80,7 +81,7 @@ Each expectation lists its rules explicitly. The canonical order is also the app
 
 - **[SIGN-OFF: rule names, tokens, and the CLI default of all rules]** The eight names, the token spellings, and the choice that every CLI option for normalized matching applies all eight rules. The artifact format supports any subset. *Assumed; awaiting maintainer sign-off.*
 
-### D3. Regular expressions (next step, not implemented)
+### D3. Regular expressions
 
 **Choice.** An in-house, linear-time, Pike-VM engine over a documented subset of ECMAScript syntax, with deterministic step accounting. Every accepted pattern means the same as `new RegExp(pattern, 'mu').test(text)`, and differential property tests against V8 enforce that.
 
@@ -103,7 +104,14 @@ Each expectation lists its rules explicitly. The canonical order is also the app
 
 Exceeding the step limit is a deterministic `regex_step_limit` difference, never a match.
 
-**Status.** This part is the follow-up change. It adds the artifact mode `regex`, the `--expect-stdout-regex` and `--expect-stderr-regex` options, the evidence kinds `stdout_regex` and `stderr_regex`, the difference kinds `stdout_no_match`, `stderr_no_match`, and `regex_step_limit`, and the engine inside the package described in D4. Nothing in this change reserves or accepts those names; a consumer built from this change rejects `mode: regex` as a schema violation, which is the intended behavior until the follow-up lands.
+**Implementation.** The engine is in `packages/output-rules/src/regex`: a parser to an AST, a compiler to a Thompson/Pike program with instructions `char`, `set`, `assert`, `split`, `jump`, and `match`, and a search that advances every live thread one code point at a time. The program size is computed from the AST before anything is emitted, so `(a{100}){100}` is refused without building it. Every instruction visit counts as a step.
+
+- **Meaning.** Accepted patterns mean what `new RegExp(pattern, 'mu')` means, with one documented exception: the match is attempted only at code point boundaries, as the specification defines it, and V8 additionally tries a pattern that begins with an assertion in the middle of a surrogate pair. The differential property tests compare against a sticky V8 match at every code point boundary for that reason, and a pinned case records the difference.
+- **Evidence.** `stdout_regex` and `stderr_regex`; the differences `stdout_no_match`, `stderr_no_match`, and `regex_step_limit`; and `insufficient_output` when the stream was truncated and the pattern did not match.
+- **Checked at validation.** The artifact validator compiles each pattern with the same compiler the matcher uses, rejects `REDACTED:` in a pattern, and applies the canonical order of `normalize` as for the other modes.
+- **Checked at record time.** The recorder compiles the pattern before the command runs and then requires it to match the recording (normalized for the command-line options).
+- **Calibration.** The full step limit takes roughly 0.4 to 0.7 seconds on the development machine, so the worst case across 16 expectations is bounded by about 10 seconds of matching before the process time limit applies.
+- **Explicit code-point reading.** The engine and its parser read code points with a small function over `charCodeAt` (`regex/code-point.ts`) instead of `String.prototype.codePointAt`, so surrogate handling is explicit and tested in one place. During development, one differential-test run on Node.js 24.15 appeared to get a wrong lone surrogate (U+D83E for U+D83D) from `codePointAt`. A standalone check of two million reads of the same string, with and without optimizing compilers, found no mismatch, so this is **not** a confirmed runtime defect and may have come from the test setup. Both readers agree on every input tested; the explicit reader is kept for clarity, not as a workaround.
 
 **Item for sign-off.**
 
@@ -111,7 +119,7 @@ Exceeding the step limit is a deterministic `regex_step_limit` difference, never
 
 ### D4. Package placement
 
-A new pure package, **`@proofissue/output-rules`**, holds the normalization rules and path contexts (and, in the follow-up, the bounded regular-expression language).
+A new pure package, **`@proofissue/output-rules`**, holds the normalization rules and path contexts and the bounded regular-expression language.
 
 Static validation in `artifact-schema` has to use the same rule names, and later the same pattern parser, as matching, and `artifact-schema` must not depend on higher layers. New allowed edges:
 
@@ -138,7 +146,9 @@ There is no recorder-to-matcher edge. The check that a recording satisfies its o
 | `--expect-stdout-exact` / `--expect-stderr-exact` (flag) | `exact`, raw | The whole redacted stream |
 | `--expect-stdout-exact-normalized` / `--expect-stderr-exact-normalized` (flag) | `exact` with all rules | The whole normalized stream |
 
-At most one `exact` expectation (raw or normalized) per stream; a repeat is a usage error with exit code 2. The follow-up adds the regular-expression options. The `record` preview shows the mode and the rule list. `inspect --json` reports each expectation's mode and rules, never its value. The GitHub Action gains no inputs or outputs.
+| `--expect-stdout-regex <pattern>` / `--expect-stderr-regex <pattern>` (repeatable) | `regex` with all rules | The pattern as typed; it is checked before the command runs and must match the normalized recording |
+
+At most one `exact` expectation (raw or normalized) per stream; a repeat is a usage error with exit code 2. The regular-expression options are below. The `record` preview shows the mode and the rule list. `inspect --json` reports each expectation's mode and rules, never its value. The GitHub Action gains no inputs or outputs.
 
 **Item for sign-off.**
 
@@ -146,7 +156,7 @@ At most one `exact` expectation (raw or normalized) per stream; a repeat is a us
 
 ### D6. Result contract
 
-Additive only. Evidence kinds `stdout_exact` and `stderr_exact`; difference kinds `stdout_differs` and `stderr_differs`; an optional `normalization` object on evidence and differences naming the rules the expectation asked for and how many replacements each made in the replay output; and `stdout_expectations` and `stderr_expectations` in the inspection summary. Messages are fixed sentences built from counts and positions and never contain expected values or output. Details are in `result-contract.md` and `output-matching.md`.
+Additive only. Evidence kinds `stdout_exact`, `stderr_exact`, `stdout_regex`, and `stderr_regex`; difference kinds `stdout_differs`, `stderr_differs`, `stdout_no_match`, `stderr_no_match`, and `regex_step_limit`; an optional `normalization` object on evidence and differences naming the rules the expectation asked for and how many replacements each made in the replay output; and `stdout_expectations` and `stderr_expectations` in the inspection summary. Messages are fixed sentences built from counts and positions and never contain expected values or output. Details are in `result-contract.md` and `output-matching.md`.
 
 **Item for sign-off.**
 
@@ -166,6 +176,7 @@ Raw `contains` is unchanged. For the new modes the recorder:
 
 - derives the normalized value from the text as printed locally and requires it to appear in the normalized recording;
 - refuses an `exact` expectation when the stream was truncated, is empty, exceeds 8192 bytes, or contains a redaction marker;
+- compiles each regular-expression pattern before the command runs and requires it to match the (normalized) recording, and refuses a pattern that names the project or home directory;
 - checks every stored value for a likely secret after normalization, because removing terminal escapes can join a token that redaction missed;
 - refuses a stored value that still contains the project directory or the home directory in any spelling, because that value could not replay and would leak a user name.
 
@@ -173,14 +184,14 @@ The application then runs the matcher over the recording's own output with the r
 
 ## Decision
 
-Adopt the design above, implemented in two changes: this one (modes `contains` and `exact`, all eight rules, the new package, the CLI options, results, fixtures, and documentation) and a follow-up for bounded regular expressions.
+Adopt the design above, implemented in two changes: the first (modes `contains` and `exact`, all eight rules, the new package, the CLI options, results, fixtures, and documentation) and a second for bounded regular expressions (the `regex` mode, the engine, its options, results, fixtures, and documentation). Both are in place.
 
 1. **Additive change inside artifact version 1, recorded here.** The schema stays provisional, existing artifacts stay valid, and a consumer that does not know the new content rejects it. This is the "new compatibility decision" that `artifact-format.md` requires. It must be revisited before the schema leaves provisional status. *(Assumed; awaiting maintainer sign-off.)*
 2. **Normalization rules, names, and tokens as in D2.** *(Assumed; awaiting maintainer sign-off.)*
 3. **A new `@proofissue/output-rules` package and its dependency edges as in D4.** *(Assumed; awaiting maintainer sign-off.)*
 4. **The command-line options as in D5.** *(Assumed; awaiting maintainer sign-off.)*
 5. **The additive result contract as in D6.** *(Assumed; awaiting maintainer sign-off.)*
-6. **An in-house, linear-time engine for regular expressions, as the next step, rather than `re2js`.** *(Assumed; awaiting maintainer sign-off.)*
+6. **An in-house, linear-time engine for regular expressions rather than `re2js`.** Implemented with the recommended default: no new dependency, no native code, and no WebAssembly. *(Assumed; awaiting maintainer sign-off.)*
 
 ## Rule-versioning policy
 
@@ -199,7 +210,7 @@ Adopt the design above, implemented in two changes: this one (modes `contains` a
 | `exact` stream size at record time | 8192 bytes | Recorder |
 | Path roots considered | At most 1024 characters each, no control characters | Path context |
 
-The regular-expression limits are in D3 and take effect with the follow-up.
+The regular-expression limits are in D3 and are enforced at validation, record time, and search.
 
 ## Consequences
 
@@ -210,4 +221,4 @@ The regular-expression limits are in D3 and take effect with the follow-up.
 
 ## Fallback
 
-If maintainers decide not to carry an in-house regular-expression engine, the fallback is `re2js` (or RE2 compiled to WebAssembly) behind the same limits and the same step-style bound. That choice changes only the follow-up change, not the modes and normalization described above.
+If maintainers decide not to carry an in-house regular-expression engine, the fallback is `re2js` (or RE2 compiled to WebAssembly) behind the same limits and the same step-style bound. That choice would change only the regular-expression engine, not the modes and normalization described above.

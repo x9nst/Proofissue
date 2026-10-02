@@ -80,7 +80,7 @@ export interface RecordApplicationRequest {
 
 /** An expectation as the recording derived it: the text that will be stored. */
 export interface RecordPreviewExpectation {
-  readonly mode: 'contains' | 'exact';
+  readonly mode: 'contains' | 'exact' | 'regex';
   /** Empty means the raw redacted stream. */
   readonly normalize: readonly OutputNormalizationRule[];
   readonly value: string;

@@ -2,7 +2,7 @@
 
 ## Status
 
-Implemented for the modes `contains` and `exact`, with optional normalization. The design, the choices that await maintainer sign-off, and the planned follow-up for bounded regular expressions are recorded in `decisions/0003-output-matching-modes.md`. This document describes what exists.
+Implemented for the modes `contains`, `exact`, and `regex`, with optional normalization. The design and the choices that await maintainer sign-off are recorded in `decisions/0003-output-matching-modes.md`. This document describes what exists.
 
 ## Why
 
@@ -18,8 +18,9 @@ Every output expectation has a `mode`:
 | --- | --- |
 | `contains` | The stored value appears somewhere in the stream. |
 | `exact` | The whole retained stream equals the stored value. |
+| `regex` | The stored value is a pattern in the bounded regular-expression language, and the pattern matches somewhere in the stream. |
 
-An expectation may also list `normalize` rules. When it does, the replay stream is normalized with those rules before the comparison, and the stored value is already normalized. Without `normalize`, the comparison uses the redacted stream as it is, which is the original behavior: a `contains` entry without `normalize` is the prototype's literal check, byte for byte.
+An expectation may also list `normalize` rules. When it does, the replay stream is normalized with those rules before the comparison, and the stored value is already normalized. A `regex` value is the exception: it is a pattern, so it is stored as typed and matched against the normalized stream. Without `normalize`, the comparison uses the redacted stream as it is, which is the original behavior: a `contains` entry without `normalize` is the prototype's literal check, byte for byte.
 
 An exact comparison can never be established for a truncated stream, because bytes were discarded. The result is `insufficient_output`, never a match or a difference.
 
@@ -123,9 +124,79 @@ Known limitation: output that literally contains `<project>` is treated as equal
 
 A closing angle bracket blocks a path root and starts no word boundary for the later rules. That keeps the rule chain idempotent: normalizing a normalized value changes nothing, which is why a normalized value can be validated without a path context.
 
+## Regular expressions
+
+A `regex` expectation holds a pattern in a small, documented language. The language is a subset of JavaScript regular expressions, so a pattern means what it means in JavaScript, and it is matched by an engine written for ProofIssue that runs in time proportional to the length of the output however the pattern is written. It never uses the JavaScript `RegExp` engine, which can run for hours on a pattern such as `(a+)+$`.
+
+Patterns are searched, not anchored: a pattern holds when it matches anywhere in the stream, the way `new RegExp(pattern, 'mu').test(output)` does. Matching is case-sensitive, works on Unicode code points, and `^` and `$` match at line boundaries. There are no flags.
+
+### What a pattern may contain
+
+| Syntax | Meaning |
+| --- | --- |
+| a character | That character. Any character that is not special; a surrogate pair is one character. |
+| `.` | Any character except a line terminator (`\n`, `\r`, U+2028, U+2029). |
+| `^`, `$` | The start or end of a line (or of the text). |
+| `\b`, `\B` | A word boundary or not, where word characters are `A-Z a-z 0-9 _`. |
+| `\d`, `\D`, `\w`, `\W`, `\s`, `\S` | Digits `0-9`, word characters, and the JavaScript space set; and their complements. |
+| `\n`, `\r`, `\t`, `\f`, `\v` | The control characters. |
+| `\^ \$ \\ \. \* \+ \? \( \) \[ \] \{ \} \| \/` | That character, literally. |
+| `[abc]`, `[^abc]`, `[a-z_]`, `[\d.]` | A set of characters. `[]` matches nothing and `[^]` matches any character. Inside a set, `\d`, `\w`, `\s`, the control escapes, the escapes above, and `\-` are allowed. |
+| `(…)` and `(?:…)` | A group. Both group the same way; no group is captured. |
+| `a\|b` | Either. |
+| `*`, `+`, `?`, `{n}`, `{n,}`, `{n,m}` | Repetition, optionally lazy (`*?`). Laziness never changes whether a pattern matches. |
+
+### What is refused
+
+Each of these is rejected when the artifact is validated or recorded, with the feature and the position (in UTF-16 code units from the start of the pattern) where it starts:
+
+- backreferences (`\1`, `\k<name>`);
+- lookahead and lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`), named groups, and inline modifiers (`(?i:`);
+- property escapes (`\p{…}`, `\P{…}`);
+- `\u`, `\x`, `\c`, `\0`, and every other escape that is not listed above (write the character itself);
+- a lone `{`, `}`, or `]`;
+- `\D`, `\W`, `\S`, and `\b` inside a set;
+- a set escape used as a range end, and a range that runs backwards;
+- a quantifier with nothing to repeat, including on an assertion, and two quantifiers in a row;
+- an unbalanced bracket and a trailing backslash.
+
+A pattern that can match without consuming any output (`a*`, `^`, `\b`, `(?:)`, `a|`) is refused too. Like an empty literal, it would hold for every output and so cannot identify a failure. A pattern containing `REDACTED:` is refused, because redaction markers are never evidence.
+
+### Limits
+
+| Limit | Value |
+| --- | --- |
+| Pattern length | 1024 UTF-16 code units |
+| Repetition count in `{n}`, `{n,}`, `{n,m}` | 100 |
+| Group nesting | 16 |
+| Compiled program size (after repetition is expanded) | 2048 instructions |
+| Work per search | 20,000,000 instruction visits |
+
+`(a{100}){100}` is refused because it would expand to ten thousand instructions. The check happens before anything is built.
+
+### The step limit
+
+Every instruction the engine visits counts as a step, and a search stops with the difference `regex_step_limit` after 20,000,000 steps. The count is the same on every machine, so the outcome never depends on how fast the computer is. A search that stops this way is never a match. On the development machine the full limit takes about 0.4 to 0.7 seconds. A pattern like `(?:.?){100}x` against a megabyte of output reaches it; ordinary patterns use a few steps for each character of output.
+
+### Patterns and normalization
+
+From the command line, `--expect-stdout-regex` and `--expect-stderr-regex` always match the normalized output, so write the pattern against the normalized text:
+
+```text
+took <duration>
+<project>/test/reproduction\.mjs:\d+:\d+
+```
+
+The tokens contain no special characters, so they are written as they are. Escape the characters that are special in the pattern, such as the dot in a file name. The artifact format also allows a regex without `normalize`, which is matched against the redacted stream as printed; the command line does not offer it.
+
+### Known differences from `RegExp`
+
+- A pattern is matched only at code point boundaries, as the language definition says. V8 will try a pattern that starts with an assertion (such as `\B`) in the middle of a surrogate pair, and the specification, and this engine, do not.
+- Case-insensitive matching, property escapes, and lookaround are absent, not approximated.
+
 ## What the result says
 
-Every explanation is a fixed sentence built from counts and positions. It never contains an expected value or any output text.
+Every explanation is a fixed sentence built from counts and positions. It never contains an expected value, a pattern, or any output text.
 
 | Situation | Message |
 | --- | --- |
@@ -137,6 +208,11 @@ Every explanation is a fixed sentence built from counts and positions. It never 
 | `exact`, equal after normalization | `Normalized replay stdout matched the expected output exactly; normalization changed nothing in the replay output.` |
 | `exact`, different | `Replay stderr differed from the expected output at line 2, column 9 (expected 28 characters, received 28).` |
 | `exact`, truncated | `Retained stderr was truncated, so its exact content could not be established.` |
+| `regex`, matched | `Replay stdout matched the expected pattern.` |
+| `regex`, matched after normalization | `Normalized replay stderr matched the expected pattern; normalization changed 1 path in the replay output.` |
+| `regex`, no match | `Replay stdout did not match the expected pattern.` (after normalization: `Normalized replay stdout did not match the expected pattern; normalization changed nothing in the replay output.`) |
+| `regex`, truncated and no match | `Retained stderr was truncated before the expected pattern could be established.` |
+| `regex`, step limit | `The stderr pattern could not be evaluated within the deterministic limit of 20000000 steps.` |
 
 Line and column are 1-based and count Unicode code points. Lengths are code points. A normalized evidence or difference item also carries a `normalization` object naming the requested rules (in canonical order) and the number of replacements each made in the replay output; rules that changed nothing are omitted. See `result-contract.md`.
 
@@ -146,6 +222,7 @@ Line and column are 1-based and count Unicode code points. Lengths are code poin
 | --- | --- |
 | This exact text appears, and nothing about it varies | `--expect-stderr <literal>` |
 | This text appears, but durations, paths, escape sequences, or line endings may differ | `--expect-stderr-normalized <text>` |
+| Part of the text varies in a way normalization does not cover (a port, a timestamp, a random suffix, a count) | `--expect-stderr-regex <pattern>`, for example `listening on port \d+` |
 | The whole output is the failure, and it fits in 8 KiB | `--expect-stderr-exact` (raw) or `--expect-stderr-exact-normalized` |
 | A number is the point of the bug (a count, a version, a size) | A raw literal. Normalization would hide a change to it. |
 
@@ -158,4 +235,7 @@ Line and column are 1-based and count Unicode code points. Lengths are code poin
 - `exact` is limited to what fits in one stored value, 8 KiB.
 - `insufficient_output` classifies as `not_reproduced`, so `--require-status not_reproduced` can pass when the stream was truncated. This predates output modes.
 - Human `inspect` still prints only the status line; use `--json` for the expectation modes and rules.
-- Regular-expression matching is not implemented yet. It is the next step in `decisions/0003-output-matching-modes.md`.
+- A pattern can widen what counts as the same failure: `\d+` accepts any number. Prefer a literal for a number that is the point of the bug. A pattern in the artifact is never normalized, and it can match a redaction marker through a character set such as `REDACTE[D]:`; validation refuses only the marker spelled out.
+- The pattern language has no case-insensitive form, no `\u` escapes, no lookaround, and no capture groups. The pattern is checked against the whole stream, not line by line unless it uses `^` and `$`.
+- `regex_step_limit` is, like `insufficient_output`, a result that could not be established, and classifies as `not_reproduced`. `--require-status not_reproduced` can therefore pass when a pattern ran into the step limit.
+- The command-line regex options always run against normalized output.

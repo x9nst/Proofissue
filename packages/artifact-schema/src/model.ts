@@ -35,7 +35,7 @@ export interface ArtifactFileV1 {
 }
 
 /** How an output expectation compares its value with a stream. */
-export type ArtifactOutputMatchModeV1 = 'contains' | 'exact';
+export type ArtifactOutputMatchModeV1 = 'contains' | 'exact' | 'regex';
 
 /** A normalization rule name. Each name has one frozen definition; see docs/output-matching.md. */
 export type ArtifactNormalizationRuleV1 = OutputNormalizationRule;
@@ -44,7 +44,8 @@ export interface ArtifactOutputExpectationV1 {
   readonly mode: ArtifactOutputMatchModeV1;
   /**
    * Present means the replay stream is normalized with these rules before the comparison, and
-   * `value` is already normalized. Non-empty, unique, and in the documented order.
+   * `value` is already normalized, except for `regex`, whose pattern is matched against the
+   * normalized stream. Non-empty, unique, and in the documented order.
    */
   readonly normalize?: readonly ArtifactNormalizationRuleV1[];
   readonly value: string;

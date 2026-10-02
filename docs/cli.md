@@ -34,6 +34,7 @@ proofissue record --project <directory> --output <file.proofissue>
   --reproduction <path> --subject <path>
   [--expect-stdout <literal>] [--expect-stderr <literal>]
   [--expect-stdout-normalized <text>] [--expect-stderr-normalized <text>]
+  [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
   [--expect-stdout-exact] [--expect-stderr-exact]
   [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
   [--dependencies] [--yes] -- node <arguments...>
@@ -50,13 +51,14 @@ proofissue record --project <directory> --output <file.proofissue>
 | `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. |
 | `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain, byte for byte. Repeatable. |
 | `--expect-stdout-normalized <text>`, `--expect-stderr-normalized <text>` | no | Text as it was printed on your machine. Replay compares after ignoring line endings, terminal escape sequences, trailing whitespace, the project and temporary directories, durations, process IDs, the Node.js version, and Node.js internal line numbers. Repeatable. |
+| `--expect-stdout-regex <pattern>`, `--expect-stderr-regex <pattern>` | no | A pattern that must match somewhere in the stream after the same normalization, written against the normalized text (for example `took <duration>` or `<project>/test/a\.mjs:\d+:\d+`). The language is a bounded subset of JavaScript regular expressions that always runs in linear time: no lookaround or backreferences, at most 1024 characters, and a pattern that can match nothing, such as `a*`, is refused. It is checked before the command runs and must match the recording. Repeatable. |
 | `--expect-stdout-exact`, `--expect-stderr-exact` | no | A flag, with no value. The whole stream must match exactly. At most one exact option per stream. |
 | `--expect-stdout-exact-normalized`, `--expect-stderr-exact-normalized` | no | A flag, with no value. The whole stream must match exactly after the same normalization. At most one exact option per stream, counting the raw one. |
 | `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Replay such an artifact only after `prepare`. See `dependencies.md`. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. |
 
-The expected exit code is whatever the recorded command actually returned. The options that take no value derive the expectation from the recording itself, and the preview shows what will be stored. `output-matching.md` defines each normalization rule and says how to choose between the options.
+The expected exit code is whatever the recorded command actually returned. The options that take no value derive the expectation from the recording itself, and the preview shows what will be stored. `output-matching.md` defines each normalization rule and the pattern language, and says how to choose between the options.
 
 ### Example
 
@@ -129,6 +131,17 @@ Expected failure:
   normalization: line endings, terminal escape sequences, trailing whitespace, paths (<project>, <tmp>), Node.js version, Node.js internal locations, process IDs, durations
 ```
 
+For text that varies in a way the rules do not cover, such as a port or a count, give a pattern instead. It is written against the normalized output and checked before the command runs. This block is also rendered by the CLI's own renderer, for a recording made with `--expect-stdout-exact`, `--expect-stderr-regex 'Expected \d+ from calculate\(\d+\) \(<duration>\)'`, and `--expect-stderr-regex '^ {4}at <project>/test/reproduction\.mjs$'`; the preview prints a pattern with each backslash doubled, as it does for any quoted value:
+
+```text
+Expected failure:
+  exit code: 1
+  stdout is exactly: "checking calculate(2)\n"
+  stderr matches pattern after normalization: "Expected \\d+ from calculate\\(\\d+\\) \\(<duration>\\)"
+  stderr matches pattern after normalization: "^ {4}at <project>/test/reproduction\\.mjs$"
+  normalization: line endings, terminal escape sequences, trailing whitespace, paths (<project>, <tmp>), Node.js version, Node.js internal locations, process IDs, durations
+```
+
 Before it writes anything, the application replays the recording's own output against these expectations with the same matcher a replay uses. A recording that does not satisfy its own expectations is refused.
 
 Without `--yes`, the recorder asks three questions in turn: whether the reproduction files are classified correctly, whether the subject files are, and whether to create the artifact. Answering no to any of them writes nothing.
@@ -138,8 +151,9 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 - Malformed arguments exit `2`: a missing `--project`, `--output`, or `--image`, an unknown option, a command that does not start with `node` and have an argument, or an exact option given twice for the same stream (a raw and a normalized exact option for one stream count as twice).
 - A request with no `--reproduction` path, no `--subject` path, or no expectation exits `1` and writes no artifact.
 - An expected output literal that the command did not actually print, within the retained output, exits `1` and writes no artifact. A normalized literal must appear in the normalized output.
+- A pattern outside the bounded language (lookaround, a backreference, an unknown escape, an unbalanced bracket, a pattern beyond a limit, or one that can match without consuming output) exits `1` before the command runs, and the message names the feature and its position without repeating the pattern. A pattern that does not match the normalized recording exits `1` and writes no artifact.
 - An exact expectation for a stream that was truncated, is empty, is larger than 8192 bytes, or contains a redaction marker exits `1`, and the message suggests a normalized literal instead.
-- An expected value that holds a likely secret once escape sequences are removed, or that still holds your project or home directory, exits `1`. The message never repeats the value.
+- An expected value that holds a likely secret once escape sequences are removed, or that still holds your project or home directory (in a literal or a pattern), exits `1`. The message never repeats the value.
 - A command that cannot start, runs out of time, is ended by a signal, or returns no usable exit code exits `1` and writes no artifact.
 - A selected path that is missing, a directory, a symbolic link, larger than the limit, not valid UTF-8, or outside the project exits `1` and writes no artifact.
 - An `--output` path that already exists exits `1`; artifacts are never overwritten.
@@ -391,6 +405,30 @@ After a fix, the same artifact explains what no longer holds (rendered from `not
 Different: Expected exit code 1 but received 0.
 Different: Expected stderr text was not present after normalization; normalization changed nothing in the replay output.
 Different: Normalized replay stderr differed from the expected output at line 1, column 1 (expected 76 characters, received 0); normalization changed nothing in the replay output.
+```
+
+A pattern expectation is explained without the pattern. This block is rendered from `reproduced-regex.json`:
+
+```text
+Replay result: reproduced
+Mode: snapshot
+Approved image: sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+Termination: exited
+Exit code: 1
+Output retained: stdout 22 bytes, stderr 89 bytes
+Matched: Exit code matched: 1.
+Matched: Replay stdout matched the expected pattern.
+Matched: Normalized replay stderr matched the expected pattern; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.
+Matched: Normalized replay stderr matched the expected pattern; normalization changed 2 line endings and 1 path in the replay output.
+Cleanup complete: true
+```
+
+and the differences after a fix, rendered from `not-reproduced-regex.json`, where the last line is a pattern that ran into the deterministic step limit (a result that is never a match):
+
+```text
+Different: Expected exit code 1 but received 0.
+Different: Normalized replay stderr did not match the expected pattern; normalization changed nothing in the replay output.
+Different: The stderr pattern could not be evaluated within the deterministic limit of 20000000 steps.
 ```
 
 ### Result states

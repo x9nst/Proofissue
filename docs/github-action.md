@@ -129,8 +129,9 @@ The structured result contains bounded execution facts and counts. It does not
 contain raw standard output or standard error.
 
 Evidence and differences use the kinds `exit_code`, `stdout_contains`,
-`stderr_contains`, `stdout_exact`, `stderr_exact`, `stdout_missing`,
-`stderr_missing`, `stdout_differs`, `stderr_differs`, and `insufficient_output`.
+`stderr_contains`, `stdout_exact`, `stderr_exact`, `stdout_regex`, `stderr_regex`,
+`stdout_missing`, `stderr_missing`, `stdout_differs`, `stderr_differs`,
+`stdout_no_match`, `stderr_no_match`, `regex_step_limit`, and `insufficient_output`.
 An item for a normalized comparison also carries a `normalization` object with the
 requested rules and the number of replacements each made. This is additive: the
 Action has no new inputs or outputs, and the existing `evidence`, `differences`, and
@@ -156,7 +157,7 @@ The summary shows only:
 
 - classification and mode;
 - counts of evidence, differences, warnings, errors, and substitutions;
-- fixed labels for matched and differing checks, for example "stderr matched the expected output exactly" or "expected stdout text was absent after normalization" (the words "after normalization" are added when the comparison used normalized output);
+- fixed labels for matched and differing checks, for example "stderr matched the expected output exactly", "stdout did not match the expected pattern", "a pattern exceeded its step limit", or "expected stdout text was absent after normalization" (the words "after normalization" are added when the comparison used normalized output);
 - required-result and cleanup state.
 
 It never publishes command output, file contents, expected text, environment

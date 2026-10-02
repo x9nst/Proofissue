@@ -22,7 +22,7 @@ const pathSchema: AnySchema = {
 
 const expectationSchema = closedObject(
   {
-    mode: { enum: ['contains', 'exact'] },
+    mode: { enum: ['contains', 'exact', 'regex'] },
     normalize: {
       items: { enum: [...OUTPUT_NORMALIZATION_RULES] },
       maxItems: OUTPUT_NORMALIZATION_RULES.length,

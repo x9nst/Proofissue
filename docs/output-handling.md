@@ -83,5 +83,6 @@ Adapters may offer an explicitly requested detailed view later, but it must use 
 - matching after replacement decoding;
 - normalization that runs only after redaction, never on a raw expectation, and is idempotent;
 - an exact expectation that is never satisfied by a truncated stream;
+- a pattern that is searched with the bounded engine, never `RegExp`, and a step limit that is never a match;
 - independent stdout and stderr metadata;
 - no raw synthetic secret in findings, errors, logs, snapshots, or JSON.

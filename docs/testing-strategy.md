@@ -51,9 +51,12 @@ Required properties include:
 - normalization leaves redaction markers and normalization tokens unchanged;
 - record-time and replay-time spellings of the same project location normalize to the same text;
 - a normalized expectation value is serialized canonically and round-trips for every rule subset and mode;
-- exact matching agrees with string equality, and the evaluation order of independent expectations does not change their evidence meaning.
+- exact matching agrees with string equality, and the evaluation order of independent expectations does not change their evidence meaning;
+- every pattern the bounded regular-expression engine accepts is valid for V8 with flags `mu`, and for generated patterns the engine agrees with V8 on every generated text (a sticky V8 match at each code point boundary, because a plain V8 search also tries a pattern that starts with an assertion inside a surrogate pair);
+- the compiled program has exactly the size computed before emitting, and the same input gives the same status and step count on every run;
+- the matcher agrees with `RegExp` for generated patterns and streams, and an unsupported pattern never reaches replay.
 
-Property tests read `PROOFISSUE_PROPERTY_RUNS` (default 1000) for the number of generated cases. Before a change to a normalization rule or a path context is proposed, run the suites at scale, for example `PROOFISSUE_PROPERTY_RUNS=200000 npx vitest run packages/output-rules packages/matcher packages/artifact-schema/src/output-expectations.test.ts`, more than once so the random seeds differ, and pin every distinct counterexample as a permanent regression case.
+Property tests read `PROOFISSUE_PROPERTY_RUNS` (default 1000) for the number of generated cases. Before a change to a normalization rule or a path context is proposed, run the suites at scale, for example `PROOFISSUE_PROPERTY_RUNS=200000 npx vitest run packages/output-rules packages/matcher packages/artifact-schema/src/output-expectations.test.ts packages/artifact-schema/src/regex-expectations.test.ts`, more than once so the random seeds differ, and pin every distinct counterexample as a permanent regression case.
 
 Every property failure records its minimized input as a permanent regression case when it represents a distinct bug.
 
@@ -70,6 +73,8 @@ Initial targets:
 - process-read chunk joining and whole-buffer redaction equivalence;
 - UTF-8 decoding across arbitrary retained-byte chunk boundaries;
 - output normalization rules and path contexts over hostile text (time-budget tests on 1 MiB inputs);
+- the regular-expression engine over the classic catastrophic patterns and a dense automaton on 1 MiB inputs, with a deterministic step count and a calibration that the full step limit stays well under two seconds;
+- pattern grammar, rejections with offsets, limits, and the rejection of patterns that match without consuming output;
 - control-character escaping and human presentation;
 - structured error formatting.
 

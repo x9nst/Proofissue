@@ -384,7 +384,7 @@ describe('output-mode compatibility fixtures', () => {
     for (const old of ['minimal', 'canonical', 'with-dependencies']) {
       expect(await legacyAccepts(`valid/${old}.proofissue`), old).toBe(true);
     }
-    for (const added of ['exact-output', 'normalized-output']) {
+    for (const added of ['exact-output', 'normalized-output', 'regex-output']) {
       expect(await legacyAccepts(`valid/${added}.proofissue`), added).toBe(false);
     }
   });

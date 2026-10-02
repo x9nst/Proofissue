@@ -46,13 +46,14 @@ Command output is untrusted data. It may contain credentials, huge streams, inva
 Output matching and normalization read untrusted output and untrusted artifact content on the host, so they are bounded the same way as redaction.
 
 - **Time.** Every normalization rule is linear in the length of its input: escape sequences use a hand-written scanner that never rescans bytes after a failed attempt, trailing whitespace uses a single pass, and the remaining rules use anchored patterns with no nested repetition. The test suite enforces a time budget against 1 MiB adversarial inputs for each rule.
+- **Patterns.** A regular-expression expectation never reaches the JavaScript `RegExp` engine, which backtracks and cannot be interrupted. The ProofIssue engine runs every live thread one code point at a time, so its cost is at most the program size times the output length however the pattern is written. The pattern language is a documented subset (no backreferences or lookaround), the pattern, the repetition counts, the group depth, and the compiled program size are limited, and a pattern that can match without consuming output is refused at validation. Every instruction visit counts as a step and a search stops after 20,000,000 steps with a result that is never a match, so the outcome does not depend on how fast the machine is. Tests run the classic catastrophic patterns against 1 MiB inputs, and differential property tests compare the engine with V8 for generated patterns.
 - **Determinism.** Normalization is a pure function of redacted text, the rule list, and a path context. Replay always uses the fixed directories `/workspace` and `/tmp`, so classification does not depend on the machine that runs ProofIssue.
 - **Order.** Normalization runs after redaction and never on raw bytes. A stored value is checked for secrets again after normalization, because removing escape sequences can join text that redaction did not see.
 - **Privacy.** The recorder replaces the exact project and temporary directories it knows, and refuses a stored value that still contains the project or home directory. Results, summaries, and Action outputs carry counts and positions, never expected values or output text.
 - **Visibility.** Each expectation lists its rules, and every result says which rules changed the replay output. The exit code is always compared exactly.
 - **Compatibility.** An artifact consumer that predates these fields rejects them as a schema violation instead of misreading them.
 
-Normalization hides differences by design. It is explicit, per expectation, and visible in the result, but a fix that only changes a normalized token is invisible to that expectation. See `output-matching.md`.
+A pattern can widen what counts as the same failure (`\d+` accepts any number), and a pattern in an artifact is not normalized. `regex_step_limit` and `insufficient_output` are results that could not be established and classify as `not_reproduced`. Normalization hides differences by design. It is explicit, per expectation, and visible in the result, but a fix that only changes a normalized token is invisible to that expectation. See `output-matching.md`.
 
 ## Static Safety Rules
 
@@ -83,7 +84,7 @@ The recorder:
 - captures stdout and stderr in bounded memory and writes none of it to the artifact except the expected literals the reporter supplies;
 - applies redaction before terminal display, logging, serialization, or snapshots;
 - shows a redaction and collection summary before confirmation;
-- derives exact and normalized expectation values from the recording, refuses a value that holds a likely secret after normalization or a path from this computer, and checks that the recording satisfies its own expectations before writing;
+- derives exact and normalized expectation values from the recording, validates every pattern before the command runs and checks it against the recording, refuses a value or pattern that holds a likely secret after normalization or a path from this computer, and checks that the recording satisfies its own expectations before writing;
 - writes a validated artifact atomically only after confirmation.
 
 The recorder cannot guarantee detection of every secret. Explicit minimal collection and user review remain required controls.
