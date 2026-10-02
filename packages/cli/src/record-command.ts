@@ -23,7 +23,7 @@ import { DEPENDENCY_WARNING, renderCommandHint } from './record-suggestions.js';
 import { usageError } from './usage.js';
 
 export const RECORD_HELP = `Usage:
-  proofissue record --reproduction <path> --subject <path>
+  proofissue record [--reproduction <path>] [--subject <path>]
     [--project <directory>] [--output <file>]
     [--image <repository@sha256:digest>]
     [--expect-stdout <literal>] [--expect-stderr <literal>]
