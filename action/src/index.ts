@@ -145,10 +145,14 @@ const baseEvidenceLabel = (kind: ReplayEvidence['kind']): string => {
       return 'expected stderr text was present';
     case 'stderr_exact':
       return 'stderr matched the expected output exactly';
+    case 'stderr_regex':
+      return 'stderr matched the expected pattern';
     case 'stdout_contains':
       return 'expected stdout text was present';
     case 'stdout_exact':
       return 'stdout matched the expected output exactly';
+    case 'stdout_regex':
+      return 'stdout matched the expected pattern';
   }
 };
 
@@ -158,14 +162,20 @@ const baseDifferenceLabel = (kind: ReplayDifference['kind']): string => {
       return 'exit code differed';
     case 'insufficient_output':
       return 'retained output was insufficient';
+    case 'regex_step_limit':
+      return 'a pattern exceeded its step limit';
     case 'stderr_differs':
       return 'stderr differed from the expected output';
     case 'stderr_missing':
       return 'expected stderr text was absent';
+    case 'stderr_no_match':
+      return 'stderr did not match the expected pattern';
     case 'stdout_differs':
       return 'stdout differed from the expected output';
     case 'stdout_missing':
       return 'expected stdout text was absent';
+    case 'stdout_no_match':
+      return 'stdout did not match the expected pattern';
   }
 };
 
