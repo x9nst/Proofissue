@@ -1,0 +1,931 @@
+{
+  "trial_result_version": 1,
+  "case": {
+    "id": "T1",
+    "title": "first filter returns nothing for numbers",
+    "repository": "https://github.com/twigjs/twig.js.git",
+    "links": ["https://github.com/twigjs/twig.js/pull/966"],
+    "pre_fix_commit": "392dc952fb5c85dec7c5063b054ced62d5a75102",
+    "fix_commit": "eb253e105926e6e934f6b58b654d0fef9875f18d",
+    "dependencies": true,
+    "reproduction_files": ["test/test.filters.js"],
+    "subject_files": [
+      "src/twig.js",
+      "src/twig.factory.js",
+      "src/twig.core.js",
+      "src/twig.compiler.js",
+      "src/twig.expression.js",
+      "src/twig.filters.js",
+      "src/twig.functions.js",
+      "src/twig.lib.js",
+      "src/twig.loader.ajax.js",
+      "src/twig.loader.fs.js",
+      "src/twig.logic.js",
+      "src/twig.parser.source.js",
+      "src/twig.parser.twig.js",
+      "src/twig.path.js",
+      "src/twig.tests.js",
+      "src/twig.async.js",
+      "src/twig.exports.js",
+      "src/twig.expression.operator.js"
+    ],
+    "command": [
+      "node",
+      "node_modules/mocha/bin/mocha.js",
+      "--require",
+      "should",
+      "--grep",
+      "should return the first digit of numbers",
+      "test/test.filters.js"
+    ],
+    "expected_exit_code": 1,
+    "expectations": [
+      {
+        "stream": "stdout",
+        "mode": "contains",
+        "value": "expected '' to be '1'"
+      },
+      {
+        "stream": "stdout",
+        "mode": "contains",
+        "value": "1 failing"
+      }
+    ],
+    "sets": ["pilot", "full"],
+    "upstream_license": "BSD-2-Clause"
+  },
+  "environment": {
+    "harness_commit": "3d947aefb4a1c1df407d7748880b62ce1579bb79",
+    "run_url": "https://github.com/x9nst/Proofissue/actions/runs/36974824425",
+    "runner_image": "ubuntu24/20260927.320.1",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel_release": "6.17.0-1022-azure",
+    "cpu_count": 4,
+    "cpu_model": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "memory_total_mb": 15989,
+    "host_node_version": "24.18.0",
+    "host_npm_version": "11.16.0",
+    "host_git_version": "2.55.0",
+    "docker_server_version": "28.0.4",
+    "approved_image": "node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6"
+  },
+  "stages": {
+    "fetch": {
+      "status": "ok",
+      "duration_ms": 822
+    },
+    "files": {
+      "status": "ok",
+      "files": [
+        {
+          "path": "test/test.filters.js",
+          "role": "reproduction",
+          "bytes": 42126,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "src/twig.js",
+          "role": "subject",
+          "bytes": 237,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.factory.js",
+          "role": "subject",
+          "bytes": 789,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.core.js",
+          "role": "subject",
+          "bytes": 51359,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.compiler.js",
+          "role": "subject",
+          "bytes": 1712,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.expression.js",
+          "role": "subject",
+          "bytes": 55501,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.filters.js",
+          "role": "subject",
+          "bytes": 27718,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.functions.js",
+          "role": "subject",
+          "bytes": 11806,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.lib.js",
+          "role": "subject",
+          "bytes": 2709,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.loader.ajax.js",
+          "role": "subject",
+          "bytes": 1780,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.loader.fs.js",
+          "role": "subject",
+          "bytes": 2438,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.logic.js",
+          "role": "subject",
+          "bytes": 55152,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.parser.source.js",
+          "role": "subject",
+          "bytes": 155,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.parser.twig.js",
+          "role": "subject",
+          "bytes": 161,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.path.js",
+          "role": "subject",
+          "bytes": 3921,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.tests.js",
+          "role": "subject",
+          "bytes": 2367,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.async.js",
+          "role": "subject",
+          "bytes": 10730,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.exports.js",
+          "role": "subject",
+          "bytes": 7433,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "src/twig.expression.operator.js",
+          "role": "subject",
+          "bytes": 10155,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "package.json",
+          "role": "dependency",
+          "bytes": 1522,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "package-lock.json",
+          "role": "dependency",
+          "bytes": 180955,
+          "matches_commit": true,
+          "carriage_returns": 0
+        }
+      ],
+      "unselected_config_files": []
+    },
+    "host_install": {
+      "status": "ok",
+      "duration_ms": 3719,
+      "exit_code": 0,
+      "timed_out": false,
+      "node_modules": {
+        "files": 10722,
+        "bytes": 59380822,
+        "page_rounded_bytes": 90300416
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "duration_ms": 148,
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "timed_out": false,
+      "expectations_observed": [true, true],
+      "stdout_bytes": 559,
+      "stderr_bytes": 0
+    },
+    "record": {
+      "status": "created",
+      "duration_ms": 595,
+      "cli_exit_code": 0,
+      "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+      "inspection": {
+        "runtime_version": "24",
+        "files": [
+          {
+            "path": "package-lock.json",
+            "role": "dependency",
+            "bytes": 180955,
+            "sha256": "58368c7faf92fd3713bcac40bb6663d8a2c0753a6be1e5cc37ea1174deb66298"
+          },
+          {
+            "path": "package.json",
+            "role": "dependency",
+            "bytes": 1522,
+            "sha256": "d2898dda8e9d084922c5c4b0b5370e86c185aeb3c2dc804f1805c1faecdd252d"
+          },
+          {
+            "path": "src/twig.async.js",
+            "role": "subject",
+            "bytes": 10730,
+            "sha256": "cdeeab78501ec8cee4c8bca56f68b7ed4fa1d58ed6b29fcce93cf818966e2534"
+          },
+          {
+            "path": "src/twig.compiler.js",
+            "role": "subject",
+            "bytes": 1712,
+            "sha256": "2fe94c19a22ccc061988137c9b46c212d5f9b306a69e97ddb3a90b7c6de8fd18"
+          },
+          {
+            "path": "src/twig.core.js",
+            "role": "subject",
+            "bytes": 51359,
+            "sha256": "2adac3e794756fe7fbefb28a79b129822c6827fb1004209bd4c3dce7caf034f4"
+          },
+          {
+            "path": "src/twig.exports.js",
+            "role": "subject",
+            "bytes": 7433,
+            "sha256": "f9b162ad3d737c7bcfaadbfc62d6e3e91b604b1590556a058feefb8bdd578d2b"
+          },
+          {
+            "path": "src/twig.expression.js",
+            "role": "subject",
+            "bytes": 55501,
+            "sha256": "af9f692cb56261963a5ff5a089ab44af06aed20dc26295462ffa54c437035922"
+          },
+          {
+            "path": "src/twig.expression.operator.js",
+            "role": "subject",
+            "bytes": 10155,
+            "sha256": "431a7573fa460810ff2c28c0f7d23c95c5a3f53dd16aeb5c62850cbf446064e7"
+          },
+          {
+            "path": "src/twig.factory.js",
+            "role": "subject",
+            "bytes": 789,
+            "sha256": "0f3a286db11c772d56a5593fc78132420f3d0b34b3a0e52891a2516921ed136c"
+          },
+          {
+            "path": "src/twig.filters.js",
+            "role": "subject",
+            "bytes": 27718,
+            "sha256": "84ce02d2e93d6e42f208582f685b31c7f6c7522f10e5d1a369e2bbba10309f32"
+          },
+          {
+            "path": "src/twig.functions.js",
+            "role": "subject",
+            "bytes": 11806,
+            "sha256": "064a9a59198fa61f96e610b4afd5be9db7c3fc4c7cb188b600cb0bab4e3801df"
+          },
+          {
+            "path": "src/twig.js",
+            "role": "subject",
+            "bytes": 237,
+            "sha256": "d2b710caf8ce97d1d77eafb6727b452b53f5b86a019d10563eb0589f3ea2b58f"
+          },
+          {
+            "path": "src/twig.lib.js",
+            "role": "subject",
+            "bytes": 2709,
+            "sha256": "2026ea49dc6d189f5ff210170ae2cf956e7f258434b9634c219ca57f0944983a"
+          },
+          {
+            "path": "src/twig.loader.ajax.js",
+            "role": "subject",
+            "bytes": 1780,
+            "sha256": "cec9f0369219e1b60ef51885e47215860434c38c1ec2a6f413b3c37c9b3f071b"
+          },
+          {
+            "path": "src/twig.loader.fs.js",
+            "role": "subject",
+            "bytes": 2438,
+            "sha256": "bfaca9334c8f3919eda1aa13a5ccdb26a7ccbf45c1ac5f04d1e8a30a6e478ec9"
+          },
+          {
+            "path": "src/twig.logic.js",
+            "role": "subject",
+            "bytes": 55152,
+            "sha256": "dc4abf7c0494026f70feaa960c1aada40b53ebab1bf20538a54ccf6a1cd82028"
+          },
+          {
+            "path": "src/twig.parser.source.js",
+            "role": "subject",
+            "bytes": 155,
+            "sha256": "5caa101e33b8b82a5b33f7673f294230fda0f5506969c47975726b6f335af8e8"
+          },
+          {
+            "path": "src/twig.parser.twig.js",
+            "role": "subject",
+            "bytes": 161,
+            "sha256": "6718d313228e3753a18e067bcb1c7fe63b7effce7248983cf6c5232eecbf1a6b"
+          },
+          {
+            "path": "src/twig.path.js",
+            "role": "subject",
+            "bytes": 3921,
+            "sha256": "ca49395f744466b1a5e0b2801619ed091ac8124d7968893cbfc674a70f6f67ec"
+          },
+          {
+            "path": "src/twig.tests.js",
+            "role": "subject",
+            "bytes": 2367,
+            "sha256": "1f72c00cd192f9122f3ce33bfd6db56faae20b46337f5fd2bcd87e36c8047788"
+          },
+          {
+            "path": "test/test.filters.js",
+            "role": "reproduction",
+            "bytes": 42126,
+            "sha256": "45e1d81afa1e4d78ba8a8ea25b22e6540a8f6f61536f8af46c3ad28cbe246bc2"
+          }
+        ],
+        "expectations": {
+          "exit_code": 1,
+          "stdout_count": 2,
+          "stderr_count": 0,
+          "stdout_expectations": [
+            {
+              "mode": "contains",
+              "normalize": []
+            },
+            {
+              "mode": "contains",
+              "normalize": []
+            }
+          ],
+          "stderr_expectations": []
+        },
+        "limits": {
+          "cpus": 1,
+          "memory_mb": 512,
+          "output_bytes_per_stream": 1048576,
+          "processes": 64,
+          "timeout_seconds": 60
+        },
+        "redaction": {
+          "finding_count": 0,
+          "findings": []
+        }
+      }
+    },
+    "prepare": {
+      "status": "ok",
+      "duration_ms": 3059,
+      "cli_exit_code": 0,
+      "preparation": {
+        "packages": 355,
+        "downloaded_tarballs": 352,
+        "downloaded_bytes": 11910485,
+        "reused_tarballs": 0,
+        "skipped_for_platform": 0,
+        "install_script_packages": 0
+      },
+      "errors": [],
+      "warning_codes": []
+    },
+    "install_baseline": {
+      "status": "ok",
+      "record_status": "created",
+      "artifact_digest": "51d0b53b38ad3f59017b2191807c5095dca1f2cda82e68d81d2f23b9698d5575",
+      "prepare_duration_ms": 310,
+      "reused_tarballs": 352,
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "51d0b53b38ad3f59017b2191807c5095dca1f2cda82e68d81d2f23b9698d5575",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5495,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 6098,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "51d0b53b38ad3f59017b2191807c5095dca1f2cda82e68d81d2f23b9698d5575",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5265,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 5748,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "51d0b53b38ad3f59017b2191807c5095dca1f2cda82e68d81d2f23b9698d5575",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5230,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 5696,
+          "limit": "none"
+        }
+      ]
+    },
+    "snapshot": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5430,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 559,
+              "total_bytes": 559,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 5900,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5411,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 559,
+              "total_bytes": 559,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 5883,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5450,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 559,
+              "total_bytes": 559,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 5928,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5495,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 559,
+              "total_bytes": 559,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 4,
+          "cli_exit_code": 0,
+          "wall_ms": 5968,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5409,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 559,
+              "total_bytes": 559,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 5,
+          "cli_exit_code": 0,
+          "wall_ms": 5916,
+          "limit": "none"
+        }
+      ],
+      "summary": {
+        "total": 5,
+        "reproduced": 5,
+        "not_reproduced": 0,
+        "execution_failed": 0,
+        "invalid_artifact": 0,
+        "unparseable": 0,
+        "consistent": true,
+        "duration_ms": {
+          "min": 5409,
+          "median": 5430,
+          "max": 5495
+        },
+        "limits": {
+          "none": 5,
+          "time": 0,
+          "memory_or_kill": 0,
+          "workspace_space": 0,
+          "install_failed": 0,
+          "output": 0
+        }
+      }
+    },
+    "pre_fix_checkout": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5394,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 560,
+              "total_bytes": 560,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [
+            "src/twig.async.js",
+            "src/twig.compiler.js",
+            "src/twig.core.js",
+            "src/twig.exports.js",
+            "src/twig.expression.js",
+            "src/twig.expression.operator.js",
+            "src/twig.factory.js",
+            "src/twig.filters.js",
+            "src/twig.functions.js",
+            "src/twig.js",
+            "src/twig.lib.js",
+            "src/twig.loader.ajax.js",
+            "src/twig.loader.fs.js",
+            "src/twig.logic.js",
+            "src/twig.parser.source.js",
+            "src/twig.parser.twig.js",
+            "src/twig.path.js",
+            "src/twig.tests.js"
+          ],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 5859,
+          "limit": "none"
+        }
+      ]
+    },
+    "fix_verification": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "not_reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "cf533567721ecccae3e5c4410cf380ea1f5fa24bec4eb3e44e94b226b910650c",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 5468,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 108,
+              "total_bytes": 108,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": [],
+          "difference_kinds": ["exit_code", "stdout_missing", "stdout_missing"],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [
+            "src/twig.async.js",
+            "src/twig.compiler.js",
+            "src/twig.core.js",
+            "src/twig.exports.js",
+            "src/twig.expression.js",
+            "src/twig.expression.operator.js",
+            "src/twig.factory.js",
+            "src/twig.filters.js",
+            "src/twig.functions.js",
+            "src/twig.js",
+            "src/twig.lib.js",
+            "src/twig.loader.ajax.js",
+            "src/twig.loader.fs.js",
+            "src/twig.logic.js",
+            "src/twig.parser.source.js",
+            "src/twig.parser.twig.js",
+            "src/twig.path.js",
+            "src/twig.tests.js"
+          ],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 5940,
+          "limit": "none"
+        }
+      ]
+    }
+  },
+  "outcome": {
+    "classification": "confirmed",
+    "stage": "fix_verification",
+    "code": "all_stages_passed",
+    "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+    "additional": []
+  }
+}

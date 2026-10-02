@@ -69,6 +69,34 @@ describe('the committed manifest', () => {
     expect(selected.ok ? selected.cases.map((item) => item.id) : []).toEqual(['N1', 'T1', 'M3']);
   });
 
+  it('selects the twelve primary cases as the full set, in three repositories', () => {
+    const manifest = parseCommitted();
+    const selected = selectCases(manifest, { kind: 'set', set: 'full' });
+    const cases = selected.ok ? selected.cases : [];
+
+    expect(cases.map((item) => item.id).sort()).toEqual(
+      ['M1', 'M2', 'M3', 'M4', 'N1', 'N2', 'N4', 'N5', 'T1', 'T2', 'T3', 'T4'].sort(),
+    );
+    expect(new Set(cases.map((item) => item.repository)).size).toBe(3);
+  });
+
+  it('keeps the reserves out of the full set', () => {
+    const manifest = parseCommitted();
+    const reserve = selectCases(manifest, { kind: 'set', set: 'reserve' });
+
+    expect(reserve.ok ? reserve.cases.map((item) => item.id) : []).toEqual(['N3', 'N6']);
+    const full = selectCases(manifest, { kind: 'set', set: 'full' });
+    expect(full.ok ? full.cases.map((item) => item.id) : []).not.toContain('N3');
+    expect(full.ok ? full.cases.map((item) => item.id) : []).not.toContain('N6');
+  });
+
+  it('gives every case distinct commits and a failing exit code', () => {
+    for (const item of parseCommitted().cases) {
+      expect(item.pre_fix_commit).not.toBe(item.fix_commit);
+      expect(item.expected_exit_code).toBeGreaterThan(0);
+    }
+  });
+
   it('uses the image the runner approves', () => {
     expect(parseCommitted().image).toBe(APPROVED_NODE_IMAGE);
   });

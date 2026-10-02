@@ -2,7 +2,7 @@
 
 ## Status
 
-The pilot (three cases, one hosted run) has run once and every case was confirmed; see Results. This is not a Milestone 7 completion claim, and nothing here ticks a Milestone 7 acceptance criterion. Three cases from three repositories are a smoke test of the harness and of the replay budget, not ten failures, and they say nothing yet about the 90% target.
+The pilot (three cases) was confirmed in its first hosted run and again in a rerun on `main`. The full set (twelve cases from three repositories) then ran twice on hosted CI; the second run confirmed all twelve. See Results. The numeric thresholds in the first two Milestone 7 acceptance criteria are met by this evidence, with the caveats listed under "Full set, caveats". This document is not a Milestone 7 completion claim, and nothing here ticks an acceptance box: the maintainer decides, and the other criteria (security suite, documentation, compatibility) are tracked elsewhere.
 
 The harness and the hosted workflow exist (see `../benchmarks/real-projects/README.md` and `../.github/workflows/real-project-trials.yml`). This document describes the method and the pilot so that results can be read against stated rules rather than after the fact. Numbers are added only from a recorded run.
 
@@ -15,9 +15,9 @@ The completion criteria it feeds are the Milestone 7 criteria in `../IMPLEMENTAT
 - at least ten real Node.js failures are tested across three external repositories;
 - at least 90% of supported artifacts replay consistently across repeated runs.
 
-Gate D in `product-validation.md` adds a process rule: interim results are reviewed after every two external failures, so unsupported assumptions are corrected early. The pilot has three cases; the maintainer reviews it before the full set runs.
+Gate D in `product-validation.md` adds a process rule: interim results are reviewed after every two external failures, so unsupported assumptions are corrected early. The pilot has three cases; the maintainer reviewed it before the full set ran.
 
-The pilot is a smoke test of the harness and of the budget. It does not by itself support a claim about the 90% target.
+The pilot is a smoke test of the harness and of the budget. It does not by itself support a claim about the 90% target; the full set does (see "Full set, run 2").
 
 ## Method
 
@@ -178,7 +178,103 @@ Harness observation: `proofissue record` has no `--json` output, so the harness 
 - nodemailer and mailauth share a maintainer, and all three cases are pure-JavaScript libraries with small test files.
 - Install size was far inside the budget. Where the budget starts to bind is not yet known.
 
-Next step: the maintainer reviews this pilot before the full set runs, as Gate D asks.
+The maintainer reviewed the pilot, as Gate D asks, before the full set ran.
+
+### Pilot rerun on `main`
+
+- Run: [36973634809](https://github.com/x9nst/Proofissue/actions/runs/36973634809), 2026-10-02, manual dispatch of the `pilot` set on `main` (harness commit `92b3e63`), whose product tree includes the change that sets `HOME` for the replayed command.
+- Result: all three cases confirmed, 5 of 5 snapshot replays each, the pre-fix checkout reproduced, and the fix verified. Replay medians were 3.5 s (M3), 4.2 s (N1) and 6.3 s (T1); headroom was 94%, 93% and 89%. No limit was reached.
+- Setting `HOME` therefore did not change any pilot outcome.
+
+## Full Set Cases
+
+The `full` set is the three pilot cases plus nine more: N1, N2, N4, N5 (nodemailer), T1, T2, T3, T4 (twig.js) and M1, M2, M3, M4 (mailauth). The two reserve cases N3 and N6 are in a separate `reserve` set and were not run, because twelve cases ended valid. Every commit SHA, file, and test name was checked against the repositories with the GitHub API before the case was added; the expected literals for the nine new cases were assumptions about test output until the first hosted run tested them.
+
+| ID | Link | PRE | FIX | Literal(s) |
+| --- | --- | --- | --- | --- |
+| N2 | [GHSA-mm7p-fcc7-pg87](https://github.com/advisories/GHSA-mm7p-fcc7-pg87), [commit](https://github.com/nodemailer/nodemailer/commit/1150d99fba77280df2cfb1885c43df23109a8626) | `3b8982c` | `1150d99` | `false !== true` |
+| N4 | [mailparser issue 375](https://github.com/nodemailer/mailparser/issues/375), [commit](https://github.com/nodemailer/nodemailer/commit/fe27f7fd57f7587d897274438da2f628ad0ad7d9) | `1dd8eeb` | `fe27f7f` | `Expected values to be strictly deep-equal` |
+| N5 | [commit](https://github.com/nodemailer/nodemailer/commit/8f8a77c67f0ba94ddf4e16c68f604a5920fb5d26) | `ce120a3` | `8f8a77c` | `Expected values to be strictly deep-equal` |
+| T2 | [issue 901](https://github.com/twigjs/twig.js/issues/901), [PR 977](https://github.com/twigjs/twig.js/pull/977) | `5f7a325` | `e545910` | `1 failing` |
+| T3 | [issue 896](https://github.com/twigjs/twig.js/issues/896), [PR 968](https://github.com/twigjs/twig.js/pull/968) | `eb253e1` | `04d87f1` | `to throw exception`, `1 failing` |
+| T4 | [PR 914](https://github.com/twigjs/twig.js/pull/914) | `29addef` | `b2e717b` | `expected '' to be 'text 2'` |
+| M1 | [commit](https://github.com/postalsys/mailauth/commit/734db62d09376c631e548f6c8b44a56ba38659c5) | `d2616c6` | `734db62` | `expected [ 'from' ] to deeply equal`, `1 failing` |
+| M2 | [commit](https://github.com/postalsys/mailauth/commit/68dfb4262fdae1bedb17019ab8c3c59bc2f4cf8d) | `734db62` | `68dfb42` | the full expected hash, `1 failing` |
+| M4 | [commit](https://github.com/postalsys/mailauth/commit/2007ab41cccc41b531f3e5ec65899264b6e3441d) | `a359299` | `2007ab4` | `1 failing` |
+
+N1, T1 and M3 are unchanged from the pilot. The commands, selected files, and notes are in `../benchmarks/real-projects/cases.json`.
+
+## Full Set Results
+
+### Full set, run 1
+
+- Run: [36974395767](https://github.com/x9nst/Proofissue/actions/runs/36974395767), 2026-10-02 (harness commit `ce6efe7`).
+- 11 of 12 cases were confirmed. M2 was `setup_failed` with `preflight_expectation_missing`: its literal was one of the assumptions, and it did not appear in the host output. Chai shortens the strings in its one-line message (`expected 'VSura...' to equal '2+0N6T...'`), and prints the full expected hash only in the diff.
+- Class: setup. A reporter would put the same literal that the test prints into the expectation; changing the literal does not change what a reporter would reasonably do, and no ProofIssue boundary was involved. The M2 expectation was replaced with the full expected hash (and `1 failing`), taken from the observed preflight output, and the case notes say so. No other case, literal, or harness behavior changed.
+
+### Full set, run 2
+
+- Run: [36974824425](https://github.com/x9nst/Proofissue/actions/runs/36974824425), 2026-10-02, about 2 minutes 47 seconds end to end with the twelve case jobs in parallel.
+- Harness commit `3d947ae` on `agent/full-trial`, based on `main` commit `92b3e63` (product tree includes `HOME` for the replayed command). No product code was changed.
+- Environment: runner image `ubuntu24/20260927.320.1`, Docker Engine 28.0.4, host Node.js 24.18.0, npm 11.16.0, git 2.55.0, the approved image digest, 4 CPUs and about 15.6 GiB per runner (AMD EPYC and Intel Xeon models varied by case).
+- Settings: 5 snapshot replays, 3 install-only baseline replays, 1 pre-fix checkout replay, and 1 fix-verification replay per case.
+- Committed evidence: `../benchmarks/real-projects/results/2026-10-02-full-run36974824425/` (twelve `<ID>.result.json` files and `summary.json`).
+
+| Case | Outcome | Prepare: packages / MiB downloaded / s | Snapshot reproduced | Replay s (min / median / max) | Install baseline s (median) | Headroom | Host node_modules (est. MiB) | Pre-fix checkout | Fix verified |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| N1 | confirmed | 270 / 6.4 / 2.5 | 5/5 | 4.0 / 4.0 / 4.1 | 4.0 | 93% | 49.0 | reproduced | yes |
+| N2 | confirmed | 274 / 6.7 / 2.1 | 5/5 | 4.6 / 4.6 / 4.7 | 4.7 | 92% | 52.3 | reproduced | yes |
+| N4 | confirmed | 263 / 8.6 / 1.7 | 5/5 | 4.2 / 4.3 / 4.3 | 4.1 | 93% | 58.5 | reproduced | yes |
+| N5 | confirmed | 268 / 8.8 / 2.4 | 5/5 | 3.2 / 3.3 / 3.3 | 3.2 | 95% | 58.7 | reproduced | yes |
+| T1 | confirmed | 355 / 11.4 / 3.1 | 5/5 | 5.4 / 5.4 / 5.5 | 5.3 | 91% | 86.1 | reproduced | yes |
+| T2 | confirmed | 355 / 11.4 / 2.9 | 5/5 | 3.5 / 3.5 / 3.5 | 3.4 | 94% | 86.2 | reproduced | yes |
+| T3 | confirmed | 355 / 11.4 / 2.1 | 5/5 | 6.1 / 6.2 / 6.2 | 6.2 | 90% | 86.1 | reproduced | yes |
+| T4 | confirmed | 355 / 11.4 / 2.5 | 5/5 | 5.9 / 6.0 / 6.1 | 5.9 | 90% | 86.1 | reproduced | yes |
+| M1 | confirmed | 254 / 11.9 / 1.5 | 5/5 | 3.5 / 3.5 / 3.6 | 3.3 | 94% | 58.1 | reproduced | yes |
+| M2 | confirmed | 254 / 11.9 / 1.5 | 5/5 | 3.3 / 3.3 / 3.3 | 3.2 | 95% | 58.1 | reproduced | yes |
+| M3 | confirmed | 254 / 11.9 / 1.5 | 5/5 | 3.4 / 3.5 / 3.5 | 3.3 | 94% | 58.1 | reproduced | yes |
+| M4 | confirmed | 247 / 10.3 / 1.6 | 5/5 | 3.4 / 3.4 / 3.5 | 3.2 | 94% | 51.9 | reproduced | yes |
+
+Headroom is one minus the slowest replay over the 60-second limit.
+
+### Consistency
+
+Computed as defined under Consistency: a series is consistent when all N snapshot runs reproduced with the same sorted evidence kinds.
+
+- 12 of 12 artifacts replayed consistently (100%); 60 of 60 snapshot replays reproduced.
+- Run 1 gave the same result for the 11 cases that reached replay (55 of 55 snapshot replays). Each run records and replays on fresh virtual machines, so this is two separate hosted recordings and replay series, not one.
+- All twelve pre-fix checkout replays reproduced, and all twelve fixed checkouts gave `not_reproduced`.
+
+### Milestone 7 numeric criteria
+
+| Criterion | Evidence | Met by this evidence |
+| --- | --- | --- |
+| At least ten real Node.js failures across three external repositories | 12 confirmed failures in 3 repositories | yes, numerically, with the independence caveat below |
+| At least 90% of supported artifacts replay consistently across repeated runs | 12 of 12 (100%), 5 replays each, in two hosted runs | yes |
+
+The other Milestone 7 criteria (credential leakage, the security suite, command documentation, fixture compatibility) are not addressed by this evidence, and no box is ticked here.
+
+### What the full set found
+
+In plain words:
+
+- **No ProofIssue finding.** No case was refused at record or prepare, hit a limit, or failed an install, and all twelve were confirmed. All 60 snapshot replays reproduced, all 12 pre-fix checkouts reproduced, and all 12 fixed checkouts did not.
+- **The one setup failure was a manifest assumption.** The M2 literal was guessed from the test's expected value and never appeared, because chai shortens the strings in its message. It was corrected from observed preflight output and recorded in the case notes. It is not a product problem.
+- **The budget was not the binding constraint.** Replay time was 3.2 to 6.2 seconds against a 60-second limit (headroom of at least 90%), and the offline install of up to 355 packages was almost all of it: the estimated command time is 0.3 s or less in every case. Host estimates of `node_modules` size were 49 to 86 MiB against the 256 MiB workspace. Peak memory and the process count are still not observable through the result contract, so "fits" means that no replay was terminated for a limit.
+- **Recording was clean everywhere.** There were zero redaction findings in all twelve artifacts (4 to 21 files each), no lockfile rejection, and no refusal. This was true because the cases were chosen from commits whose files the redactor does not rewrite. Candidate screening found real boundaries that excluded other candidates before any run: nodemailer from 2026-03-18 onward has a `package.json` script whose `$PWD:` fragment matches the redactor's password rule, so recording with dependencies is refused; mailauth's signing and ARC code and key fixtures are rewritten by the redactor; and many projects fail the lockfile, native-binding, or footprint rules (see Candidate Screening). Those are evidence about the support boundary, not results of these twelve cases.
+- **Install-script warnings do not matter.** Packages that declare install scripts are reported by prepare, and replay never runs them.
+- **Same-lockfile cases differ in time.** The four twig.js cases use the same 355-package lockfile, yet their medians range from 3.5 to 6.2 s, and the install-only baselines vary the same way (3.4 to 6.2 s). The variation tracks the baseline, so it is install and runner variance, not the tests. Time was not a constraint at either end of the range.
+
+### Full set, caveats
+
+- **Independence.** nodemailer and mailauth share a maintainer (postalsys). Two of the three repositories are therefore not fully independent projects; a count of "three external repositories" is met numerically but the diversity is weaker than the number suggests. twig.js is independent.
+- **Concentration.** Four of the twelve cases (N1, N2, N4, N5) fall in one nodemailer module (`addressparser`) and share a test file. The four twig.js cases share a lockfile and the same 18 subject files.
+- **Breadth.** All three are pure-JavaScript libraries whose tests run in process, with no native addon, build step, network access, or `os.homedir()` use on the path. Jest-based projects, TypeScript sources, heavier installs, and other ecosystems were not evaluated.
+- **Selection.** The cases were chosen by static screening for replayability, which favors success. The 100% figure describes artifacts from projects already screened as plausible, not typical Node.js projects. Candidate Screening lists the many projects that were excluded for support-boundary reasons.
+- **Redaction was not exercised on these cases.** Zero findings means these twelve were chosen to avoid the redaction boundary; it is not evidence that redaction is harmless for real projects.
+- **Duration and environment.** Consistency rests on five replays per case, in two hosted runs on one day, on one runner image and Docker version.
+- **Reserves.** N3 (stack overflow in the same module, memory-dependent) and N6 (a 14-file subject closure with redaction findings in comments) were not run, because the full set produced twelve valid cases (more than the ten needed). They stay in the `reserve` set.
+- **Harness cosmetic.** The summary's "Set" line lists the union of the selected cases' sets (`full, pilot`) rather than the selected set only. It does not affect results.
 
 ## Security of the Trial Workflow
 
