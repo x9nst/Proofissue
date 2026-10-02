@@ -7,11 +7,17 @@ import type {
   NormalizationSummary,
   OutputNormalizationRule,
 } from '@proofissue/contracts';
-import { OUTPUT_NORMALIZATION_RULES, normalizeOutput } from '@proofissue/output-rules';
-import type { OutputPathContext } from '@proofissue/output-rules';
+import {
+  BOUNDED_REGEX_LIMITS,
+  OUTPUT_NORMALIZATION_RULES,
+  compileBoundedRegex,
+  normalizeOutput,
+  searchBoundedRegex,
+} from '@proofissue/output-rules';
+import type { BoundedRegexProgram, OutputPathContext } from '@proofissue/output-rules';
 
 /** How an output expectation compares its value with a stream. */
-export type OutputMatchMode = 'contains' | 'exact';
+export type OutputMatchMode = 'contains' | 'exact' | 'regex';
 
 export interface OutputExpectation {
   readonly mode: OutputMatchMode;
@@ -20,6 +26,10 @@ export interface OutputExpectation {
    * comparison, and `value` is already normalized. Absent means the raw redacted stream.
    */
   readonly normalize?: readonly OutputNormalizationRule[];
+  /**
+   * The text to find (`contains`), the whole text (`exact`), or a pattern in the bounded
+   * regular-expression language (`regex`), which is searched for anywhere in the stream.
+   */
   readonly value: string;
 }
 
@@ -150,6 +160,18 @@ const insufficientExact = (
     summary,
   );
 
+const insufficientRegex = (
+  stream: StreamName,
+  summary: NormalizationSummary | undefined,
+): Difference =>
+  withNormalization<Difference>(
+    {
+      kind: 'insufficient_output',
+      message: `Retained ${stream} was truncated before the expected pattern could be established.`,
+    },
+    summary,
+  );
+
 type Outcome = { readonly evidence: MatchEvidence } | { readonly difference: Difference };
 
 const matchContains = (
@@ -176,6 +198,68 @@ const matchContains = (
       {
         kind: stream === 'stderr' ? 'stderr_missing' : 'stdout_missing',
         message: `Expected ${stream} text was not present${normalized ? ' after normalization' : ''}${suffixFor(prepared.summary)}.`,
+      },
+      prepared.summary,
+    ),
+  };
+};
+
+/** Compiles each distinct pattern at most once. A validated artifact never holds a bad pattern. */
+class PatternCache {
+  private readonly programs = new Map<string, BoundedRegexProgram>();
+
+  program(pattern: string): BoundedRegexProgram {
+    const cached = this.programs.get(pattern);
+    if (cached !== undefined) return cached;
+    const compiled = compileBoundedRegex(pattern);
+    if (!compiled.ok) {
+      // Validation rejects such a pattern before replay, so reaching this is a defect upstream.
+      throw new Error(
+        `An output pattern that validation should have rejected was not compiled: ${compiled.error.message}`,
+      );
+    }
+    this.programs.set(pattern, compiled.program);
+    return compiled.program;
+  }
+}
+
+const matchRegex = (
+  stream: StreamName,
+  prepared: PreparedStream,
+  capture: BoundedStreamCapture,
+  program: BoundedRegexProgram,
+): Outcome => {
+  const normalized = prepared.summary !== undefined;
+  const search = searchBoundedRegex(program, prepared.text);
+  if (search.status === 'step_limit_exceeded') {
+    return {
+      difference: withNormalization<Difference>(
+        {
+          kind: 'regex_step_limit',
+          message: `The ${stream} pattern could not be evaluated within the deterministic limit of ${String(BOUNDED_REGEX_LIMITS.steps)} steps.`,
+        },
+        prepared.summary,
+      ),
+    };
+  }
+  const subject = `${normalized ? 'Normalized replay' : 'Replay'} ${stream}`;
+  if (search.status === 'matched') {
+    return {
+      evidence: withNormalization<MatchEvidence>(
+        {
+          kind: `${stream}_regex`,
+          message: `${subject} matched the expected pattern${suffixFor(prepared.summary)}.`,
+        },
+        prepared.summary,
+      ),
+    };
+  }
+  if (capture.truncated) return { difference: insufficientRegex(stream, prepared.summary) };
+  return {
+    difference: withNormalization<Difference>(
+      {
+        kind: stream === 'stderr' ? 'stderr_no_match' : 'stdout_no_match',
+        message: `${subject} did not match the expected pattern${suffixFor(prepared.summary)}.`,
       },
       prepared.summary,
     ),
@@ -260,7 +344,25 @@ const matchExact = (
   };
 };
 
+const matchOne = (
+  stream: StreamName,
+  prepared: PreparedStream,
+  capture: BoundedStreamCapture,
+  item: OutputExpectation,
+  patterns: PatternCache,
+): Outcome => {
+  switch (item.mode) {
+    case 'exact':
+      return matchExact(stream, prepared, capture, item.value);
+    case 'regex':
+      return matchRegex(stream, prepared, capture, patterns.program(item.value));
+    case 'contains':
+      return matchContains(stream, prepared, capture, item.value);
+  }
+};
+
 export const matchExecution = (input: MatchInput): MatchResult => {
+  const patterns = new PatternCache();
   const evidence: MatchEvidence[] = [];
   const differences: Difference[] = [];
   const { execution, expectation } = input;
@@ -286,10 +388,7 @@ export const matchExecution = (input: MatchInput): MatchResult => {
     const preparer = new StreamPreparer(capture, input.path_context);
     for (const item of expectations) {
       const prepared = preparer.prepare(item.normalize);
-      const outcome =
-        item.mode === 'exact'
-          ? matchExact(stream, prepared, capture, item.value)
-          : matchContains(stream, prepared, capture, item.value);
+      const outcome = matchOne(stream, prepared, capture, item, patterns);
       if ('evidence' in outcome) evidence.push(outcome.evidence);
       else differences.push(outcome.difference);
     }
