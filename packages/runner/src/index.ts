@@ -538,7 +538,7 @@ export const buildDockerCreateArguments = (spec: ContainerCreateSpec): readonly 
   return dockerCreateArguments(spec);
 };
 
-interface DockerCommandResult {
+export interface DockerCommandResult {
   readonly exit_code: number;
   readonly stderr: string;
   readonly stdout: string;
@@ -585,60 +585,189 @@ const parseJson = (value: string, message: string): unknown => {
   }
 };
 
-export const createDockerEngine = (): ContainerEngine => ({
+/** Runs one Docker CLI call. Replay and diagnosis share it so tests can inject a fake. */
+export type DockerRun = (arguments_: readonly string[]) => Promise<DockerCommandResult>;
+
+export interface EngineHost {
+  readonly arch: string;
+  readonly platform: string;
+}
+
+export type EngineCheckName =
+  'docker_cli' | 'docker_context' | 'docker_engine' | 'docker_seccomp' | 'host' | 'replay_image';
+
+export interface EngineCheck {
+  /** Set only on a failure: the code replay reports for the same problem. */
+  readonly code?: RunnerErrorCode;
+  readonly name: EngineCheckName;
+  /** A fixed command that fixes a failure, when there is one. */
+  readonly remedy?: string;
+  readonly status: 'fail' | 'ok' | 'skipped';
+  /** What was found; for a failure, the exact message replay raises. */
+  readonly summary: string;
+}
+
+export interface EngineDiagnosis {
+  readonly checks: readonly EngineCheck[];
+  readonly ready: boolean;
+}
+
+const SKIPPED_SUMMARY = 'Not checked because an earlier check failed.';
+const SAFE_VERSION = /^[0-9A-Za-z.+~_-]{1,40}$/u;
+const IMAGE_UNAVAILABLE_MESSAGE =
+  'The approved replay image is not available locally; replay never pulls images automatically.';
+
+interface EngineStep {
+  readonly name: EngineCheckName;
+  readonly remedy?: string;
+  /** Returns what was found, or throws the RunnerError replay would raise. */
+  readonly check: () => Promise<string>;
+}
+
+/**
+ * Checks the replay prerequisites in a fixed order using only read-only Docker CLI calls
+ * (`context inspect`, `version`, `info`, and `image inspect` when an image is given). It never
+ * pulls an image or creates a container. After the first failure the remaining checks are
+ * reported as skipped. `assertCapabilities` raises the first failure, so replay and diagnosis
+ * cannot disagree about a code or a message.
+ */
+export const diagnoseDockerEngine = async (
+  run: DockerRun = runDocker,
+  host: EngineHost = { platform: process.platform, arch: process.arch },
+  options: { readonly image?: string } = {},
+): Promise<EngineDiagnosis> => {
+  let context: DockerCommandResult | undefined;
+  const steps: EngineStep[] = [
+    {
+      name: 'host',
+      check: () => {
+        if (host.platform !== 'linux' || host.arch !== 'x64') {
+          throw new RunnerError(
+            'engine_capability_unavailable',
+            'Replay currently requires a local x86-64 Linux host with Docker Engine.',
+          );
+        }
+        return Promise.resolve('Linux x86-64.');
+      },
+    },
+    {
+      name: 'docker_cli',
+      check: async () => {
+        context = await run(['context', 'inspect', '--format', '{{json .Endpoints.docker.Host}}']);
+        return 'The docker command runs.';
+      },
+    },
+    {
+      name: 'docker_context',
+      check: () => {
+        if (context === undefined || context.exit_code !== 0) {
+          throw new RunnerError(
+            'engine_unavailable',
+            'The local Docker context could not be inspected.',
+          );
+        }
+        const endpoint = parseJson(context.stdout.trim(), 'Docker returned an invalid context.');
+        if (typeof endpoint !== 'string' || !endpoint.startsWith('unix://')) {
+          throw new RunnerError(
+            'engine_capability_unavailable',
+            'Remote Docker contexts are not supported for replay.',
+          );
+        }
+        return Promise.resolve('The Docker context is a local unix socket.');
+      },
+    },
+    {
+      name: 'docker_engine',
+      check: async () => {
+        const version = await run(['version', '--format', '{{json .Server}}']);
+        if (version.exit_code !== 0 || version.stdout.trim() === 'null') {
+          throw new RunnerError('engine_unavailable', 'The Docker Engine is not running.');
+        }
+        const server = parseJson(
+          version.stdout.trim(),
+          'Docker returned invalid server information.',
+        ) as { Arch?: string; Os?: string; Version?: string };
+        const major = Number.parseInt(server.Version?.split('.')[0] ?? '', 10);
+        if (
+          server.Os !== 'linux' ||
+          server.Arch !== 'amd64' ||
+          !Number.isInteger(major) ||
+          major < 27
+        ) {
+          throw new RunnerError(
+            'engine_capability_unavailable',
+            'Replay requires Docker Engine 27 or newer running Linux amd64 containers.',
+          );
+        }
+        // The version is shown only when it looks like one, never as arbitrary engine text.
+        return server.Version !== undefined && SAFE_VERSION.test(server.Version)
+          ? `Docker Engine ${server.Version}, linux/amd64.`
+          : 'Docker Engine 27 or newer, linux/amd64.';
+      },
+    },
+    {
+      name: 'docker_seccomp',
+      check: async () => {
+        const info = await run(['info', '--format', '{{json .SecurityOptions}}']);
+        if (info.exit_code !== 0 || !info.stdout.includes('seccomp')) {
+          throw new RunnerError(
+            'engine_capability_unavailable',
+            'Docker must provide its default seccomp security profile.',
+          );
+        }
+        return 'The default seccomp profile is available.';
+      },
+    },
+  ];
+  const image = options.image;
+  if (image !== undefined) {
+    steps.push({
+      name: 'replay_image',
+      remedy: `docker pull ${image}`,
+      check: async () => {
+        const result = await run(['image', 'inspect', '--format', '{{json .RepoDigests}}', image]);
+        if (result.exit_code !== 0) {
+          throw new RunnerError('image_unavailable', IMAGE_UNAVAILABLE_MESSAGE);
+        }
+        return 'The approved replay image is present locally.';
+      },
+    });
+  }
+
+  const checks: EngineCheck[] = [];
+  let failed = false;
+  for (const step of steps) {
+    if (failed) {
+      checks.push({ name: step.name, status: 'skipped', summary: SKIPPED_SUMMARY });
+      continue;
+    }
+    try {
+      checks.push({ name: step.name, status: 'ok', summary: await step.check() });
+    } catch (error: unknown) {
+      if (!(error instanceof RunnerError)) throw error;
+      failed = true;
+      checks.push({
+        name: step.name,
+        status: 'fail',
+        summary: error.message,
+        code: error.code,
+        ...(step.remedy === undefined ? {} : { remedy: step.remedy }),
+      });
+    }
+  }
+  return { checks, ready: !failed };
+};
+
+export interface DockerEngineOptions {
+  readonly host?: EngineHost;
+  readonly run?: DockerRun;
+}
+
+export const createDockerEngine = (options: DockerEngineOptions = {}): ContainerEngine => ({
   assertCapabilities: async () => {
-    if (process.platform !== 'linux' || process.arch !== 'x64') {
-      throw new RunnerError(
-        'engine_capability_unavailable',
-        'Replay currently requires a local x86-64 Linux host with Docker Engine.',
-      );
-    }
-    const context = await runDocker([
-      'context',
-      'inspect',
-      '--format',
-      '{{json .Endpoints.docker.Host}}',
-    ]);
-    if (context.exit_code !== 0) {
-      throw new RunnerError(
-        'engine_unavailable',
-        'The local Docker context could not be inspected.',
-      );
-    }
-    const endpoint = parseJson(context.stdout.trim(), 'Docker returned an invalid context.');
-    if (typeof endpoint !== 'string' || !endpoint.startsWith('unix://')) {
-      throw new RunnerError(
-        'engine_capability_unavailable',
-        'Remote Docker contexts are not supported for replay.',
-      );
-    }
-    const version = await runDocker(['version', '--format', '{{json .Server}}']);
-    if (version.exit_code !== 0 || version.stdout.trim() === 'null') {
-      throw new RunnerError('engine_unavailable', 'The Docker Engine is not running.');
-    }
-    const server = parseJson(
-      version.stdout.trim(),
-      'Docker returned invalid server information.',
-    ) as { Arch?: string; Os?: string; Version?: string };
-    const major = Number.parseInt(server.Version?.split('.')[0] ?? '', 10);
-    if (
-      server.Os !== 'linux' ||
-      server.Arch !== 'amd64' ||
-      !Number.isInteger(major) ||
-      major < 27
-    ) {
-      throw new RunnerError(
-        'engine_capability_unavailable',
-        'Replay requires Docker Engine 27 or newer running Linux amd64 containers.',
-      );
-    }
-    const info = await runDocker(['info', '--format', '{{json .SecurityOptions}}']);
-    if (info.exit_code !== 0 || !info.stdout.includes('seccomp')) {
-      throw new RunnerError(
-        'engine_capability_unavailable',
-        'Docker must provide its default seccomp security profile.',
-      );
-    }
+    const diagnosis = await diagnoseDockerEngine(options.run, options.host);
+    const failure = diagnosis.checks.find((check) => check.status === 'fail');
+    if (failure?.code !== undefined) throw new RunnerError(failure.code, failure.summary);
   },
   imageExists: async (image) => {
     const result = await runDocker([
@@ -848,11 +977,10 @@ export const createDockerRunner = (options: DockerRunnerOptions = {}): Runner =>
       }
       await engine.assertCapabilities();
       if (!(await engine.imageExists(image))) {
-        throw new RunnerError(
-          'image_unavailable',
-          'The approved replay image is not available locally; replay never pulls images automatically.',
-          { effective_limits: effectiveLimits, events },
-        );
+        throw new RunnerError('image_unavailable', IMAGE_UNAVAILABLE_MESSAGE, {
+          effective_limits: effectiveLimits,
+          events,
+        });
       }
       event('policy_checked');
 
