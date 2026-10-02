@@ -8,7 +8,7 @@ Replay validates an artifact, reconstructs only its declared workspace, runs one
 
 `proofissue validate failure.proofissue` checks format, schema, paths, hashes, cross-field rules, and aggregate limits. It performs no execution and creates no replay workspace.
 
-`proofissue inspect failure.proofissue --json` performs the same validation and then returns a summary of the command, environment, file roles, expectations, limits, and redaction findings. It does not include full file content or raw captured output. Without `--json`, `inspect` prints only its status line; a human-readable rendering of the summary is not implemented yet. See `cli.md`.
+`proofissue inspect failure.proofissue --json` performs the same validation and then returns a summary of the command, environment, file roles, expectations, limits, and redaction findings. It does not include full file content or raw captured output. Without `--json`, `inspect` prints its status line and a readable summary of the same facts. See `cli.md`.
 
 ## Snapshot Replay
 

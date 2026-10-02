@@ -9,12 +9,10 @@ import {
 
 import { parseArtifactCommand, type ParsedArtifactCommand } from './arguments.js';
 import type { CliIo, CliRunResult } from './io.js';
+import { renderNextSteps } from './next-steps.js';
 import { renderPrepareResult } from './prepare-command.js';
 import { escapePresentationText } from './presentation.js';
 import { usageError } from './usage.js';
-
-const REPLAY_PREPARE_HINT =
-  'Hint: run proofissue prepare <artifact> --dependency-store <directory>, then pass the same --dependency-store to replay.';
 
 export const renderReplayResult = (
   result: Awaited<ReturnType<ApplicationServices['replay']>>,
@@ -98,11 +96,16 @@ export const runReplayCommand = async (
   io.write(
     parsed.json
       ? `${JSON.stringify(result)}\n`
-      : `${renderReplayResult(result)}${
-          result.errors.some((error) => error.code === 'dependencies_not_prepared')
-            ? `${REPLAY_PREPARE_HINT}\n`
-            : ''
-        }`,
+      : `${renderReplayResult(result)}${renderNextSteps(
+          result.errors.map((error) => error.code),
+          {
+            artifact_path: parsed.artifact_path,
+            ...(parsed.against_path === undefined ? {} : { against_path: parsed.against_path }),
+            ...(parsed.dependency_store === undefined
+              ? {}
+              : { dependency_store: parsed.dependency_store }),
+          },
+        )}`,
   );
   return {
     exit_code: evaluateReplayPolicy(result, parsed.required_status).success ? 0 : 1,

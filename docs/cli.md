@@ -260,13 +260,25 @@ proofissue inspect <artifact.proofissue> [--json]
 
 ### Options
 
-`--json` prints the summary. Without it, `inspect` prints only the status line, `inspected`, so use `--json` to see the contents.
+`--json` prints the versioned result with the full summary as one line. Without it, `inspect` prints the status line, `inspected`, and under it a readable summary: the runtime and image, the command's program and argument count, each file with its role and size, the expectation modes, the limits, the redaction count, and whether `--prepare` is needed before replay. The human summary never shows file contents, expected text, or argument values.
 
 ### Example
 
+This is real output from `node packages/cli/dist/bin.js inspect tests/fixtures/artifacts/v1/valid/minimal.proofissue`. The fixture's image is a placeholder, so the summary says replay would refuse it:
+
 ```text
-$ proofissue inspect failure.proofissue
+$ proofissue inspect minimal.proofissue
 inspected
+Runtime: Node.js 24 on Linux
+Image: node@sha256:1111111111111111111111111111111111111111111111111111111111111111 (not the approved replay image; replay refuses it)
+Command: node with 1 argument
+Files: 2 (reproduction 1, subject 1)
+  reproduction reproduction.mjs (146 bytes)
+  subject      calculate.mjs (56 bytes)
+Expectations: exit code 1; stdout none; stderr contains
+Limits: 60 s, 512 MB, 1 CPU, 64 processes, 1048576 bytes per output stream
+Redaction: enabled, 0 likely secrets replaced
+Prepare: not needed
 ```
 
 This is real output from `node packages/cli/dist/bin.js inspect tests/fixtures/artifacts/v1/valid/minimal.proofissue --json`, pretty-printed here (the command prints it on one line):
@@ -560,15 +572,25 @@ Exit `1` for `execution_failed`, `invalid_artifact`, or a status other than the 
 
 An `execution_failed` result carries one error code. None of them is evidence about the original failure. `result-contract.md` defines the full contract.
 
+For these codes the human-readable output ends with a `Next step:` line, built from fixed text and your own paths (escaped and quoted), never from the artifact or from Docker output. `--json` output is unchanged and carries no such line.
+
+| Code | `Next step:` line |
+| --- | --- |
+| `image_unavailable` | The exact `docker pull node@sha256:...` command for the approved image. |
+| `engine_unavailable`, `engine_capability_unavailable` | Run `proofissue doctor` to see which prerequisite is missing, or replay with the GitHub Action on a hosted Linux runner. |
+| `dependencies_not_prepared` | `proofissue replay <artifact> --prepare --dependency-store <store>`, filled in with your artifact path (and `--against` and store when you gave them). |
+| `dependency_install_failed` | The same command with a new, empty store (the store you gave with `-new` appended, or `.proofissue-store-new`). |
+| `timeout`, `resource_termination` | None: the limits are fixed in this release, and reaching one is a support boundary, not evidence about the original failure. |
+
 | Code | Meaning | What to do |
 | --- | --- | --- |
 | `engine_unavailable` | Docker is not installed, not running, or its context could not be inspected. | Start Docker Engine and run the replay again. |
 | `engine_capability_unavailable` | The host is not a local x86-64 Linux Docker Engine 27 or newer with the default seccomp profile, or the Docker context is remote. | Replay on a supported host, such as a GitHub-hosted Ubuntu runner. |
-| `image_unavailable` | The approved image is not present locally. Replay never pulls images. | Pull the approved digest yourself, then replay again. |
+| `image_unavailable` | The approved image is not present locally. Replay never pulls images. | Pull the approved digest yourself (the `Next step:` line prints the command), then replay again. |
 | `policy_rejection` | The request was refused before any container was created: an image that is not approved, a missing or unneeded `--against` directory, an unsafe workspace location, or a dependency artifact without a lockfile. | Fix the request. Nothing ran. |
 | `container_creation_failed` | The container could not be created or completed safely. | Check Docker's health and disk space, then replay again. |
 | `unsafe_checkout_file` | With `--against`, a declared subject path is missing, is not a regular file, is a symbolic link or reached through one, is too large, or is not valid UTF-8; or it names a reproduction file. The checkout itself must not be a symbolic link. | Correct the checkout or the artifact. Nothing ran. |
-| `dependencies_not_prepared` | The artifact has dependency files and the store is missing, unusable, or incomplete. The CLI suggests the next step. | Run `prepare` with the same `--dependency-store`, then replay. |
+| `dependencies_not_prepared` | The artifact has dependency files and the store is missing, unusable, or incomplete. The CLI prints the next step. | Run `replay --prepare --dependency-store <store>`, or `prepare` and then replay with the same store. |
 | `dependency_install_failed` | The offline install of the locked packages inside the sandbox did not complete. | Re-run `prepare` against a fresh store directory. The message may name one npm error code, such as `ENOSPC`. |
 | `timeout` | The replay reached its wall-clock limit, or you interrupted it with `Ctrl+C`. The container was stopped and removed. | Raise the artifact's `timeout_seconds` at record time, or investigate a hang. |
 | `resource_termination` | The command was ended by an enforced limit, such as memory, including an exit status of 137. | Treat the limit as part of the reproduction, or record again with an adequate limit. |

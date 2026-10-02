@@ -48,15 +48,21 @@ const capture = (): { io: CliIo; output: () => string } => {
 };
 
 describe('validate and inspect CLI', () => {
-  it.each([
-    ['validate', 'valid'],
-    ['inspect', 'inspected'],
-  ] as const)('%s prints the status and exits 0 for a valid artifact', async (command, status) => {
+  it('validate prints the status and exits 0 for a valid artifact', async () => {
     const { io, output } = capture();
 
-    const result = await runCli([command, validFixture], io);
+    const result = await runCli(['validate', validFixture], io);
 
-    expect(output()).toBe(`${status}\n`);
+    expect(output()).toBe('valid\n');
+    expect(result.exit_code).toBe(0);
+  });
+
+  it('inspect prints the status line first and exits 0 for a valid artifact', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['inspect', validFixture], io);
+
+    expect(output().startsWith('inspected\nRuntime: Node.js 24 on Linux\n')).toBe(true);
     expect(result.exit_code).toBe(0);
   });
 
@@ -636,8 +642,10 @@ describe('replay CLI dependency store', () => {
       replay: () => Promise.resolve(failing),
     });
 
-    expect(human.output()).toContain('Hint: run proofissue prepare');
-    expect(machine.output()).not.toContain('Hint:');
+    expect(human.output()).toContain(
+      'Next step: proofissue replay a.proofissue --prepare --dependency-store .proofissue-store\n',
+    );
+    expect(machine.output()).not.toContain('Next step:');
   });
 });
 
