@@ -24,9 +24,14 @@ import {
   type RunnerPolicy,
 } from './index.js';
 
-const symlinkOrSkip = async (context: TestContext, target: string, link: string): Promise<void> => {
+const symlinkOrSkip = async (
+  context: TestContext,
+  target: string,
+  link: string,
+  type: 'dir' | 'file' | 'junction' = 'file',
+): Promise<void> => {
   try {
-    await symlink(target, link, 'file');
+    await symlink(target, link, type);
   } catch (error: unknown) {
     const code =
       typeof error === 'object' && error !== null && 'code' in error ? error.code : undefined;
@@ -647,6 +652,62 @@ describe('runner lifecycle', () => {
     } finally {
       await rm(checkout, { force: true, recursive: true });
       await rm(outside, { force: true, recursive: true });
+    }
+  });
+
+  // Junctions need no privilege on Windows, so these two run on every host.
+  const directoryLinkType = process.platform === 'win32' ? 'junction' : 'dir';
+
+  it('rejects a declared subject reached through a symbolic-link directory', async (context) => {
+    const checkout = await mkdtemp(path.join(tmpdir(), 'proofissue-symlink-checkout-'));
+    const outside = await mkdtemp(path.join(tmpdir(), 'proofissue-symlink-outside-'));
+    await writeFile(path.join(outside, 'calculate.mjs'), 'export const escaped = true;\n');
+    try {
+      await symlinkOrSkip(context, outside, path.join(checkout, 'src'), directoryLinkType);
+      const engine = new FakeEngine();
+      const files = workspace();
+      const base = await artifact();
+      await expect(
+        createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+          artifact: {
+            ...base,
+            files: base.files.map((file) =>
+              file.role === 'subject' ? { ...file, path: 'src/calculate.mjs' } : file,
+            ),
+          },
+          mode: 'current_checkout',
+          against_path: checkout,
+        }),
+      ).rejects.toMatchObject({ code: 'unsafe_checkout_file' });
+      expect(engine.calls).toEqual(['capabilities', 'image']);
+      expect(files.calls).toEqual([]);
+    } finally {
+      await rm(checkout, { force: true, recursive: true });
+      await rm(outside, { force: true, recursive: true });
+    }
+  });
+
+  it('rejects a current checkout that is itself a symbolic link', async (context) => {
+    const real = await mkdtemp(path.join(tmpdir(), 'proofissue-real-checkout-'));
+    const parent = await mkdtemp(path.join(tmpdir(), 'proofissue-link-checkout-'));
+    const link = path.join(parent, 'checkout-link');
+    await writeFile(path.join(real, 'calculate.mjs'), 'export const value = 2;\n');
+    try {
+      await symlinkOrSkip(context, real, link, directoryLinkType);
+      const engine = new FakeEngine();
+      const files = workspace();
+      await expect(
+        createDockerRunner({ engine, policy: policy(), workspace: files }).run({
+          artifact: await artifact(),
+          mode: 'current_checkout',
+          against_path: link,
+        }),
+      ).rejects.toMatchObject({ code: 'unsafe_checkout_file' });
+      expect(engine.calls).toEqual(['capabilities', 'image']);
+      expect(files.calls).toEqual([]);
+    } finally {
+      await rm(parent, { force: true, recursive: true });
+      await rm(real, { force: true, recursive: true });
     }
   });
 
