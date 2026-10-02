@@ -73,6 +73,15 @@ export type {
   PrepareApplicationRequest,
   PrepareApplicationService,
 } from './prepare.js';
+export { createDoctorService } from './doctor.js';
+export type {
+  DoctorApplicationService,
+  DoctorCheck,
+  DoctorCheckId,
+  DoctorCheckStatus,
+  DoctorPorts,
+  DoctorReport,
+} from './doctor.js';
 import type { PackageFetcher } from '@proofissue/dependencies';
 
 export interface RecordApplicationRequest {
