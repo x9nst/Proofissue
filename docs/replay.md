@@ -19,6 +19,8 @@ proofissue prepare failure.proofissue --dependency-store .proofissue-store
 proofissue replay failure.proofissue --dependency-store .proofissue-store
 ```
 
+`proofissue replay failure.proofissue --prepare --dependency-store .proofissue-store` runs the same two steps in one command. It is an explicit opt-in to the network step: `prepare` runs first and prints its result, replay then runs offline against the same store, and a failed preparation ends the command without replaying. It requires `--dependency-store` and is not available with `--json`; replay without `--prepare` still never fetches anything.
+
 For an artifact without dependency files, no preparation is needed and `--dependency-store` is ignored:
 
 ```text
@@ -156,6 +158,8 @@ node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
 ```
 
 It is the Linux amd64 image digest published for the official `node:24.18.0-bookworm-slim` image. The runner checks that this exact digest is already present and never pulls it. Image preparation is an explicit administrator or CI step.
+
+`proofissue doctor` checks all of these prerequisites in the order replay does (Node.js, host platform, Docker CLI, local context, engine version and platform, seccomp, and the approved image) using only read-only Docker commands, and prints the exact `docker pull` command when the image is missing. A failed replay prints a `Next step:` line for the same problems. See `cli.md`.
 
 The runner exposes only a freshly created input directory as a read-only mount. Before the artifact command starts, a fixed trusted container bootstrap copies those declared files into a 64 MiB in-memory workspace and then replaces itself with the exact `node` argument vector. Artifact arguments are positional values and are never interpolated as shell text. The command's environment is exactly `PATH=/usr/local/bin:/usr/bin:/bin` and `HOME=/tmp`, with nothing inherited from the host, and it cannot write to the base filesystem. The container's one runner-owned init process is added outside the artifact's declared process budget so the effective artifact limit remains accurate.
 

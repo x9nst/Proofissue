@@ -635,6 +635,21 @@ Recording: ready. It runs on this host and needs no container.
 Replay: not ready. Fix the failed checks above, then run proofissue doctor again.
 ```
 
+On a ready host the output is the following, captured from the GitHub-hosted `ubuntu-24.04` runner of the foundation workflow's locked-down job (exit `0`):
+
+```text
+ok      Node.js: Node.js 24.21.0; replay uses the same major version.
+ok      Host: linux x64.
+ok      Docker CLI: The docker command runs.
+ok      Docker context: The Docker context is a local unix socket.
+ok      Docker Engine: Docker Engine 28.0.4, linux/amd64.
+ok      Seccomp: The default seccomp profile is available.
+ok      Replay image: The approved replay image is present locally.
+
+Recording: ready. It runs on this host and needs no container.
+Replay: ready.
+```
+
 Each line starts with `ok`, `warn`, `fail`, or `skipped`. A `warn` does not stop replay: a Node.js major other than 24 only means that a recording made here can behave differently from the replay, which always uses the Node.js 24 image. A missing image is reported with the exact command that fetches it, and `doctor` does not run it:
 
 ```text

@@ -111,6 +111,15 @@ fails the step, so a later step using `if: always()` can still inspect them.
 Invalid Action inputs fail before replay. If GitHub's output or summary files
 cannot be written, the Action fails rather than claiming a usable machine result.
 
+A failed replay on a runner is almost always a missing prerequisite. The Action
+reports the same error codes as the CLI (`image_unavailable`,
+`engine_unavailable`, `engine_capability_unavailable`); the fix for
+`image_unavailable` is the pull step shown in the example. The CLI's
+`proofissue doctor` diagnoses all of these prerequisites without pulling or running
+anything, and the repository's own locked-down job runs it after the pull and
+requires it to pass. Use it on a self-hosted machine to find what is missing; the
+Action itself neither runs `doctor` nor pulls images.
+
 ### Workflow summary
 
 The summary shows only:
