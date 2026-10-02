@@ -380,6 +380,64 @@ export const parseRecordArguments = (
   };
 };
 
+/** Where a prepared dependency store goes in the suggested commands. */
+const SUGGESTED_DEPENDENCY_STORE = '.proofissue-store';
+
+/**
+ * Quotes a path for the suggested commands. Plain paths stay plain; others are double-quoted,
+ * or single-quoted when they hold a character a shell would still interpret inside double
+ * quotes. The text is escaped first, so a control character never reaches the terminal.
+ */
+export const quotePathForCommand = (value: string): string => {
+  const escaped = escapePresentationText(value);
+  if (/^[A-Za-z0-9_./:@%+=\\-]+$/u.test(escaped)) return escaped;
+  if (!/["$`!]/u.test(escaped)) return `"${escaped}"`;
+  return `'${escaped.replaceAll("'", "'\\''")}'`;
+};
+
+export interface RecordSuccess {
+  /** Whether the artifact records package.json and package-lock.json. */
+  readonly has_dependencies: boolean;
+  /** The artifact's SHA-256, as the result reports it. */
+  readonly digest: string;
+  /** The path as the reporter gave it or the default chose it. */
+  readonly output_path: string;
+}
+
+/**
+ * What to do with a new artifact: where it is, how to attach it to a GitHub issue, and the
+ * exact commands to replay it. The first line stays `Artifact created.`.
+ */
+export const renderRecordSuccess = (success: RecordSuccess): string => {
+  const file = quotePathForCommand(success.output_path);
+  const attachable = /\.ya?ml$/iu.test(success.output_path);
+  const store = SUGGESTED_DEPENDENCY_STORE;
+  const replay = success.has_dependencies
+    ? [
+        `  proofissue prepare ${file} --dependency-store ${store}`,
+        `  proofissue replay ${file} --dependency-store ${store}`,
+      ]
+    : [`  proofissue replay ${file}`];
+  const check = success.has_dependencies
+    ? [
+        `  proofissue prepare ${file} --dependency-store ${store}`,
+        `  proofissue replay ${file} --dependency-store ${store} --require-status reproduced`,
+      ]
+    : [`  proofissue replay ${file} --require-status reproduced`];
+  return [
+    'Artifact created.',
+    `Saved: ${escapePresentationText(success.output_path)} (sha256 ${success.digest.slice(0, 12)})`,
+    attachable
+      ? 'To share it, drag the file into a GitHub issue comment: GitHub accepts the .yaml extension.'
+      : 'GitHub does not accept the .proofissue extension as an attachment. Copy the file to a name ending in .yaml before attaching it; the contents are the same.',
+    'A maintainer replays it on x86-64 Linux with Docker:',
+    ...replay,
+    'On x86-64 Linux with Docker you can check it yourself first:',
+    ...check,
+    '',
+  ].join('\n');
+};
+
 /** Every error, one per line, each starting with the same prefix. */
 export const renderRecordFailure = (errors: readonly { readonly message: string }[]): string =>
   (errors.length === 0 ? [{ message: 'unknown error' }] : errors)
@@ -409,7 +467,9 @@ export const runRecordCommand = async (
     return { exit_code: 2 };
   }
 
+  let hasDependencies = false;
   const confirm = async (preview: RecordPreview): Promise<RecordConfirmation> => {
+    hasDependencies = preview.dependencies !== undefined;
     // Under --json the single result line owns stdout, so the preview goes to stderr.
     (parsed.json ? io.writeError : io.write)?.(renderRecordPreview(preview));
     if (parsed.noninteractive_confirmation) {
@@ -443,7 +503,14 @@ export const runRecordCommand = async (
 
   const result = await createRecordApplicationService(confirm).record(parsed.request);
   if (parsed.json) io.write(`${JSON.stringify(result)}\n`);
-  else if (result.status === 'created') io.write('Artifact created.\n');
+  else if (result.status === 'created')
+    io.write(
+      renderRecordSuccess({
+        digest: result.artifact_digest ?? '',
+        has_dependencies: hasDependencies,
+        output_path: parsed.request.output_path,
+      }),
+    );
   else if (result.status === 'cancelled')
     io.write('Recording cancelled; no artifact was written.\n');
   else io.write(renderRecordFailure(result.errors));

@@ -18,7 +18,12 @@ import {
   runCli,
   type CliIo,
 } from './index.js';
-import { renderRecordFailure, toPortableProjectPath } from './record-command.js';
+import {
+  quotePathForCommand,
+  renderRecordFailure,
+  renderRecordSuccess,
+  toPortableProjectPath,
+} from './record-command.js';
 
 describe('CLI application boundary', () => {
   it('exports the adapter factory', () => {
@@ -1185,6 +1190,61 @@ describe('record CLI dependency capture', () => {
     } finally {
       await rm(root, { force: true, recursive: true });
     }
+  });
+
+  it('prints the path, digest prefix, attach guidance, and the replay command after creation', () => {
+    const rendered = renderRecordSuccess({
+      digest: 'abcdef0123456789'.repeat(4),
+      has_dependencies: false,
+      output_path: 'reproduction.proofissue.yaml',
+    });
+
+    expect(rendered.split('\n')).toEqual([
+      'Artifact created.',
+      'Saved: reproduction.proofissue.yaml (sha256 abcdef012345)',
+      'To share it, drag the file into a GitHub issue comment: GitHub accepts the .yaml extension.',
+      'A maintainer replays it on x86-64 Linux with Docker:',
+      '  proofissue replay reproduction.proofissue.yaml',
+      'On x86-64 Linux with Docker you can check it yourself first:',
+      '  proofissue replay reproduction.proofissue.yaml --require-status reproduced',
+      '',
+    ]);
+  });
+
+  it('prints the prepare and replay commands for an artifact with dependencies', () => {
+    const rendered = renderRecordSuccess({
+      digest: 'f'.repeat(64),
+      has_dependencies: true,
+      output_path: 'failure.proofissue.yaml',
+    });
+
+    expect(rendered).toContain(
+      '  proofissue prepare failure.proofissue.yaml --dependency-store .proofissue-store\n',
+    );
+    expect(rendered).toContain(
+      '  proofissue replay failure.proofissue.yaml --dependency-store .proofissue-store\n',
+    );
+    expect(rendered).toContain('--dependency-store .proofissue-store --require-status reproduced');
+  });
+
+  it('says how to attach a .proofissue file, which GitHub refuses', () => {
+    const rendered = renderRecordSuccess({
+      digest: '0'.repeat(64),
+      has_dependencies: false,
+      output_path: 'failure.proofissue',
+    });
+
+    expect(rendered).toContain('GitHub does not accept the .proofissue extension');
+    expect(rendered).toContain('ending in .yaml');
+  });
+
+  it.each([
+    ['plain/name.proofissue.yaml', 'plain/name.proofissue.yaml'],
+    ['my file.proofissue.yaml', '"my file.proofissue.yaml"'],
+    ["it's $HOME.yaml", "'it'\\''s $HOME.yaml'"],
+    ['a\u001bb.yaml', '"a\\u{001b}b.yaml"'],
+  ])('quotes %j for the suggested commands', (value, expected) => {
+    expect(quotePathForCommand(value)).toBe(expected);
   });
 
   it('prints every error, escaped, and not only the first', () => {

@@ -43,10 +43,11 @@ const command = ['--', 'node', 'test/a.mjs'];
 const parse = (...options: readonly string[]) =>
   parseRecordArguments([...required, ...options, ...command]).request;
 
-// The path the reporter chose for the artifact is echoed back as given; everything else must
+// The path the reporter chose for the artifact is echoed back as given, in the preview and in the
+// suggested commands; everything else must
 // stay free of host paths.
 const withoutOutputPath = (text: string): string =>
-  text.replace(/^(Artifact file|Saved): .*$/gmu, '');
+  text.replace(/^(?:(?:Artifact file|Saved): | {2}proofissue ).*$/gmu, '');
 
 const capture = (): { io: CliIo; output: () => string } => {
   let written = '';
