@@ -10,6 +10,7 @@ import {
 
 import type { CliIo, CliRunResult } from './io.js';
 import { escapePresentationText, quoteExpectation } from './presentation.js';
+import { usageError } from './usage.js';
 
 export const RECORD_HELP = `Usage:
   proofissue record --project <directory> --output <file.proofissue>
@@ -220,6 +221,11 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
       continue;
     }
     if (argument === undefined) continue;
+    if (!argument.startsWith('-')) {
+      throw new Error(
+        `Unexpected argument "${argument}": put the command after --, for example: -- node test/reproduction.mjs`,
+      );
+    }
     const value = takeValue(arguments_, index, argument);
     index += 1;
     switch (argument) {
@@ -293,7 +299,7 @@ export const runRecordCommand = async (
     parsed = parseRecordArguments(arguments_.slice(1));
   } catch (error: unknown) {
     io.write(
-      `${escapePresentationText(error instanceof Error ? error.message : 'Invalid record command.')}\n\n${RECORD_HELP}`,
+      usageError('record', error instanceof Error ? error.message : 'Invalid record command.'),
     );
     return { exit_code: 2 };
   }

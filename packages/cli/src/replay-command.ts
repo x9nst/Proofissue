@@ -7,9 +7,9 @@ import {
 } from '@proofissue/application';
 
 import { parseArtifactCommand, type ParsedArtifactCommand } from './arguments.js';
-import { CLI_HELP } from './help.js';
 import type { CliIo, CliRunResult } from './io.js';
 import { escapePresentationText } from './presentation.js';
+import { usageError } from './usage.js';
 
 const REPLAY_PREPARE_HINT =
   'Hint: run proofissue prepare <artifact> --dependency-store <directory>, then pass the same --dependency-store to replay.';
@@ -53,7 +53,7 @@ export const runReplayCommand = async (
     parsed = parseArtifactCommand(arguments_.slice(1), true);
   } catch (error: unknown) {
     io.write(
-      `${escapePresentationText(error instanceof Error ? error.message : 'Invalid replay command.')}\n\n${CLI_HELP}`,
+      usageError('replay', error instanceof Error ? error.message : 'Invalid replay command.'),
     );
     return { exit_code: 2 };
   }

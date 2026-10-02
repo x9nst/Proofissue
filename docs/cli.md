@@ -16,9 +16,9 @@ The examples below write `proofissue` for that invocation. They use the project 
 | --- | --- |
 | `0` | The command completed. For `replay`, a classification was reached and any `--require-status` was satisfied. For `record`, an artifact was created or you declined at the confirmation prompt. For `prepare`, the packages were prepared or the artifact needs none. |
 | `1` | The command ran but did not succeed: an invalid or missing artifact, a replay that could not complete, a required status that was not met, a preparation that failed, or a recording that failed. |
-| `2` | The arguments were malformed. The message and usage text are printed, and nothing is executed. |
+| `2` | The arguments were malformed. The error, a one-line synopsis, and a pointer to the command's help are printed, and nothing is executed. |
 
-Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. The same text is printed, with exit `2`, after an unknown command or malformed arguments.
+Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. `proofissue <command> --help` prints only that command's options and also exits `0` (a `-h` is recognized only as the first argument after the command name, and nothing after a `--` separator is read as a ProofIssue option). After an unknown command or malformed arguments, ProofIssue prints `Error: <what is wrong>`, a one-line synopsis, and `Run "proofissue <command> --help" for all options.`, and exits `2` without printing the full help.
 
 A replay that ends in `reproduced` or `not_reproduced` is a successful classification. Which of the two you want is a policy decision, expressed with `--require-status`.
 
@@ -305,7 +305,7 @@ The result carries an `inspection` object with the runtime and image, the comman
 
 ### Failure behavior
 
-- Malformed arguments (no artifact path, an unknown option) exit `2`, print the message and usage text, and execute nothing.
+- Malformed arguments (no artifact path, an unknown option) exit `2`, print the error with a one-line synopsis and a pointer to `--help`, and execute nothing.
 - An invalid, missing, or oversized artifact exits `1`. Under `--json` the problem is in the `errors` list and there is no `inspection` object:
 
 ```text

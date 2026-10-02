@@ -170,7 +170,7 @@ describe('record expectation options', () => {
 
     expect(result.exit_code).toBe(2);
     expect(output()).toContain(`At most one exact expectation is allowed for ${stream}`);
-    expect(output()).toContain('Usage:');
+    expect(output()).toContain('proofissue record --help');
   });
 
   it('still requires a value for the value options', () => {

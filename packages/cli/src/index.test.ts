@@ -155,7 +155,9 @@ describe('CLI argument errors', () => {
     expect(result.exit_code).toBe(2);
     expect(result.result).toBeUndefined();
     expect(output()).toContain(message);
-    expect(output()).toContain('Usage:');
+    expect(output()).toMatch(/^Error: /u);
+    expect(output()).toContain('--help');
+    expect(output()).not.toContain('File roles:');
   });
 
   it.each([[[]], [['--help']], [['-h']]])('%j prints usage and exits 0', async (arguments_) => {
@@ -165,6 +167,75 @@ describe('CLI argument errors', () => {
 
     expect(result.exit_code).toBe(0);
     expect(output()).toContain('Usage:');
+  });
+
+  it('prints record help and exits 0 for record --help', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['record', '--help'], io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toBe(RECORD_HELP);
+  });
+
+  it('prints replay help for replay -h', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['replay', '-h'], io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toContain('proofissue replay <artifact>');
+    expect(output()).toContain('--require-status');
+    expect(output()).not.toContain('--expect-stdout');
+  });
+
+  it.each(['validate', 'inspect', 'prepare'])('prints %s help for --help', async (command) => {
+    const { io, output } = capture();
+
+    const result = await runCli([command, 'a.proofissue', '--help'], io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toContain(`proofissue ${command} <artifact>`);
+  });
+
+  it('does not treat --help after -- as a request for help', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['record', '--', 'node', '--help'], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output()).toMatch(/^Error: /u);
+  });
+
+  it('prints the error and a help pointer, not the full help, for a malformed command', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['replay', 'a.proofissue', '--bogus'], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output().trimEnd().split('\n')).toEqual([
+      'Error: Unknown option: --bogus',
+      'Usage: proofissue replay <artifact> [options]',
+      'Run "proofissue replay --help" for all options.',
+    ]);
+  });
+
+  it('explains that the command goes after -- when a positional argument comes first', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['record', 'node', 'test/a.mjs'], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output()).toContain('put the command after --');
+    expect(output()).not.toContain('Unknown record option');
+  });
+
+  it('escapes terminal controls in an echoed argument', async () => {
+    const { io, output } = capture();
+
+    await runCli(['record', 'node\u001b[31m'], io);
+
+    expect(output()).not.toContain('\u001b');
   });
 
   it('never calls an application service when arguments are rejected', async () => {
