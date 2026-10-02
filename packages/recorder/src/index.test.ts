@@ -366,7 +366,7 @@ describe('captureRecording', () => {
       path.join(root, 'test', 'reproduction.mjs'),
       "process.stdout.write(process.argv[3] ?? ''); process.stderr.write('failure marker'); process.exitCode = 1;\n",
     );
-    const metacharacters = `& echo unsafe > ${sentinel}`;
+    const metacharacters = '& echo unsafe > shell-must-not-create.txt';
 
     const result = await captureRecording(
       request(root, { arguments: ['test/reproduction.mjs', '--', metacharacters] }),

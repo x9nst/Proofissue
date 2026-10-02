@@ -40,6 +40,9 @@ Defaults:
 File roles:
   --reproduction  A test, fixture, or input kept exactly as recorded during fix checks.
   --subject       Implementation code that may be replaced from the current checkout.
+  Paths are relative to the project. A leading ./ is removed, and on Windows backslashes are
+  converted to forward slashes. The command after -- must not contain the project or home
+  directory, or, on Windows, a backslash path to a project file: write test/a.mjs instead.
 
 Expected output (give at least one; the value options may be repeated):
   --expect-stdout, --expect-stderr
@@ -218,7 +221,21 @@ const isExactExpectation = (item: RecordOutputExpectation): boolean =>
 export interface RecordEnvironment {
   readonly cwd: string;
   readonly exists: (candidate: string) => boolean;
+  /** Which separators a path typed here may use. Defaults to this process's platform. */
+  readonly platform?: 'posix' | 'win32';
 }
+
+/**
+ * Spells a selected file the way the artifact stores it: with forward slashes and without a
+ * leading `./`. Backslashes are separators only on Windows; on other systems they are part of a
+ * name, so the path is left for the recorder to refuse. Nothing else is rewritten, so a path
+ * that is not portable still fails with its own message.
+ */
+export const toPortableProjectPath = (value: string, platform: 'posix' | 'win32'): string => {
+  let result = platform === 'win32' ? value.replaceAll('\\', '/') : value;
+  while (result.startsWith('./')) result = result.slice(2);
+  return result;
+};
 
 const nodeRecordEnvironment = (): RecordEnvironment => ({
   cwd: process.cwd(),
@@ -251,6 +268,7 @@ export const parseRecordArguments = (
   arguments_: readonly string[],
   environment: RecordEnvironment = nodeRecordEnvironment(),
 ): ParsedRecordCommand => {
+  const platform = environment.platform ?? (process.platform === 'win32' ? 'win32' : 'posix');
   let projectRoot: string | undefined;
   let outputPath: string | undefined;
   let image: string | undefined;
@@ -306,10 +324,10 @@ export const parseRecordArguments = (
         image = value;
         break;
       case '--reproduction':
-        reproductionPaths.push(value);
+        reproductionPaths.push(toPortableProjectPath(value, platform));
         break;
       case '--subject':
-        subjectPaths.push(value);
+        subjectPaths.push(toPortableProjectPath(value, platform));
         break;
       case '--expect-stdout':
         expectStdout.push(value);

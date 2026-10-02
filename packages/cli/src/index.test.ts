@@ -18,7 +18,7 @@ import {
   runCli,
   type CliIo,
 } from './index.js';
-import { renderRecordFailure } from './record-command.js';
+import { renderRecordFailure, toPortableProjectPath } from './record-command.js';
 
 describe('CLI application boundary', () => {
   it('exports the adapter factory', () => {
@@ -1109,6 +1109,82 @@ describe('record CLI dependency capture', () => {
 
     expect(rendered).toContain('Artifact file: a\\u{001b}[31mb.proofissue');
     expect(rendered).not.toContain('\u001b');
+  });
+
+  it('normalizes ./ and backslash selections before recording', () => {
+    const select = (platform: 'posix' | 'win32', reproduction: string, subject: string) =>
+      parseRecordArguments(
+        [
+          '--reproduction',
+          reproduction,
+          '--subject',
+          subject,
+          '--expect-stderr',
+          'x',
+          '--',
+          'node',
+          'test/a.mjs',
+        ],
+        { cwd: 'work', exists: () => false, platform },
+      ).request;
+
+    const windows = select('win32', '.\\test\\a.mjs', './src\\a.mjs');
+    expect(windows.reproduction_paths).toEqual(['test/a.mjs']);
+    expect(windows.subject_paths).toEqual(['src/a.mjs']);
+
+    const posix = select('posix', './test/a.mjs', '././src/a.mjs');
+    expect(posix.reproduction_paths).toEqual(['test/a.mjs']);
+    expect(posix.subject_paths).toEqual(['src/a.mjs']);
+    // A backslash is part of a name on posix, so it is left for the recorder to refuse.
+    expect(select('posix', 'test\\a.mjs', 'src/a.mjs').reproduction_paths).toEqual(['test\\a.mjs']);
+    expect(toPortableProjectPath('..\\x', 'win32')).toBe('../x');
+  });
+
+  it('refuses an argument holding the project path before running the command', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-arguments-'));
+    try {
+      await mkdir(path.join(root, 'test'));
+      await mkdir(path.join(root, 'src'));
+      await writeFile(
+        path.join(root, 'test', 'a.mjs'),
+        "import { writeFileSync } from 'node:fs'; writeFileSync('ran.txt', 'x'); console.error('failure'); process.exitCode = 1;\n",
+      );
+      await writeFile(path.join(root, 'src', 'a.mjs'), 'export {};\n');
+      const { io, output } = capture();
+
+      const result = await runCli(
+        [
+          'record',
+          '--project',
+          root,
+          '--output',
+          path.join(root, 'out.proofissue'),
+          '--reproduction',
+          './test/a.mjs',
+          '--subject',
+          'src/a.mjs',
+          '--expect-stderr',
+          'failure',
+          '--yes',
+          '--',
+          'node',
+          'test/a.mjs',
+          path.join(root, 'src', 'a.mjs'),
+        ],
+        io,
+      );
+
+      expect(result.exit_code).toBe(1);
+      expect(output()).toContain('Recording failed: Command argument 2 (after node) holds a path');
+      expect(output()).not.toContain('ProofIssue recording preview');
+      expect(output().replaceAll(root, '')).toBe(output());
+      await expect(stat(path.join(root, 'ran.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(stat(path.join(root, 'out.proofissue'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 
   it('prints every error, escaped, and not only the first', () => {
