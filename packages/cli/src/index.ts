@@ -18,6 +18,8 @@ import {
   type RecordPreviewExpectation,
 } from '@proofissue/application';
 
+import { PROOFISSUE_VERSION } from './version.js';
+
 export interface CliAdapter {
   readonly application: ApplicationServices;
 }
@@ -72,6 +74,7 @@ Use --yes only for explicit noninteractive approval after reviewing these select
 
 export const CLI_HELP = `Usage:
   proofissue record [options] -- node <arguments...>
+  proofissue --version
   proofissue validate <artifact.proofissue> [--json]
   proofissue inspect <artifact.proofissue> [--json]
   proofissue prepare <artifact.proofissue> --dependency-store <directory> [--json]
@@ -539,6 +542,11 @@ export const runCli = async (
 ): Promise<CliRunResult> => {
   if (arguments_.length === 0 || arguments_[0] === '--help' || arguments_[0] === '-h') {
     io.write(CLI_HELP);
+    return { exit_code: 0 };
+  }
+
+  if (arguments_[0] === '--version' && arguments_.length === 1) {
+    io.write(`${PROOFISSUE_VERSION}\n`);
     return { exit_code: 0 };
   }
 

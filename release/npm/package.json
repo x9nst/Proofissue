@@ -1,0 +1,39 @@
+{
+  "name": "proofissue",
+  "version": "0.1.0-dev.0",
+  "description": "Portable, inspectable, replayable bug reports for Node.js failures.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "proofissue": "dist/proofissue.js"
+  },
+  "files": [
+    "dist/proofissue.js",
+    "dist/third-party-licenses.txt",
+    "LICENSE",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/x9nst/Proofissue.git",
+    "directory": "release/npm"
+  },
+  "homepage": "https://github.com/x9nst/Proofissue#readme",
+  "bugs": {
+    "url": "https://github.com/x9nst/Proofissue/issues"
+  },
+  "keywords": [
+    "bug-report",
+    "reproduction",
+    "replay",
+    "regression",
+    "nodejs",
+    "docker"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
