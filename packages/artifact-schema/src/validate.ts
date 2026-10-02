@@ -1,5 +1,6 @@
 import {
   EMPTY_OUTPUT_PATH_CONTEXT,
+  compileBoundedRegex,
   isCanonicalNormalizationRuleList,
   normalizeOutput,
 } from '@proofissue/output-rules';
@@ -350,12 +351,27 @@ const semanticErrors = (artifact: ArtifactV1): readonly ArtifactValidationError[
           path: `/expect/${stream}/${String(index)}`,
         });
       }
-      if (expectation.value.includes('[REDACTED:')) {
+      // A pattern is checked for the marker text itself, so an escaped bracket cannot hide it.
+      const marker = expectation.mode === 'regex' ? 'REDACTED:' : '[REDACTED:';
+      if (expectation.value.includes(marker)) {
         errors.push({
           code: 'semantic_violation',
           message: 'Redaction replacements cannot be used as matching evidence.',
           path: `/expect/${stream}/${String(index)}`,
         });
+      }
+      if (expectation.mode === 'regex') {
+        const compiled = compileBoundedRegex(expectation.value);
+        if (!compiled.ok) {
+          errors.push({
+            code: 'semantic_violation',
+            message:
+              compiled.error.code === 'matches_empty'
+                ? `Regular expression is not supported: ${compiled.error.message}`
+                : `Regular expression is not supported: ${compiled.error.message} (offset ${String(compiled.error.offset)}).`,
+            path: `/expect/${stream}/${String(index)}`,
+          });
+        }
       }
       if (expectation.normalize !== undefined) {
         if (!isCanonicalNormalizationRuleList(expectation.normalize)) {
@@ -365,6 +381,7 @@ const semanticErrors = (artifact: ArtifactV1): readonly ArtifactValidationError[
             path: `/expect/${stream}/${String(index)}/normalize`,
           });
         } else if (
+          expectation.mode !== 'regex' &&
           normalizeOutput(expectation.value, expectation.normalize, EMPTY_OUTPUT_PATH_CONTEXT)
             .text !== expectation.value
         ) {

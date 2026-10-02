@@ -133,7 +133,7 @@
             "additionalProperties": false,
             "properties": {
               "mode": {
-                "enum": ["contains", "exact", "regex"]
+                "enum": ["contains", "exact"]
               },
               "normalize": {
                 "items": {
@@ -170,7 +170,7 @@
             "additionalProperties": false,
             "properties": {
               "mode": {
-                "enum": ["contains", "exact", "regex"]
+                "enum": ["contains", "exact"]
               },
               "normalize": {
                 "items": {
