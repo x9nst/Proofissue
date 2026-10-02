@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -22,7 +23,11 @@ import {
   type ContainerState,
 } from '@proofissue/runner';
 
-import { createRecordApplicationService, createReplayApplicationService } from './index.js';
+import {
+  createPrepareApplicationService,
+  createRecordApplicationService,
+  createReplayApplicationService,
+} from './index.js';
 
 const integration = describe.runIf(process.env.PROOFISSUE_RUN_CONTAINER_TESTS === '1');
 
@@ -528,4 +533,80 @@ integration('Replay output redaction in the locked-down container', () => {
   it('redacts a likely secret the replayed command prints and keeps it out of the result', async () => {
     await runSecretRedactionFixture(true);
   }, 90_000);
+});
+
+// Every committed version 1 artifact fixture, found by listing the directory so a fixture added
+// later is covered without editing this test. "Replay-compatible" means the fixture replays
+// unchanged except that its placeholder image is replaced by the currently approved digest.
+const COMPATIBILITY_DIRECTORY = 'tests/fixtures/artifacts/v1/valid';
+const compatibilityFixtures = readdirSync(COMPATIBILITY_DIRECTORY)
+  .filter((name) => name.endsWith('.proofissue'))
+  .sort();
+
+// A fetcher that fails every request, so preparing an artifact with an empty dependency set
+// proves the fixture needs no network.
+const refusingFetcher = {
+  fetch: (): Promise<never> => Promise.reject(new Error('The fixture replay must not fetch.')),
+};
+
+integration('Version 1 compatibility fixtures in the locked-down container', () => {
+  it('finds the committed fixtures', () => {
+    expect(compatibilityFixtures).toEqual(
+      expect.arrayContaining(['canonical.proofissue', 'minimal.proofissue']),
+    );
+  });
+
+  it.each(compatibilityFixtures)(
+    'replays %s, then not after the declared fix',
+    async (name) => {
+      const root = await mkdtemp(path.join(tmpdir(), 'proofissue-compatibility-'));
+      const checkout = path.join(root, 'checkout');
+      const artifactPath = path.join(root, 'fixture.proofissue');
+      await mkdir(checkout);
+      try {
+        const parsed = parseAndValidateArtifact(
+          await readFile(path.join(COMPATIBILITY_DIRECTORY, name)),
+        );
+        if (!parsed.ok) throw new Error(`${name} must be valid.`);
+        await writeFile(
+          artifactPath,
+          serializeArtifact({
+            ...parsed.artifact,
+            environment: { ...parsed.artifact.environment, image: APPROVED_NODE_IMAGE },
+          }),
+        );
+        await writeFile(path.join(checkout, 'calculate.mjs'), FIXED_SUBJECT_SOURCE);
+
+        let dependencyStore: string | undefined;
+        if (parsed.artifact.files.some((file) => file.role === 'dependency')) {
+          dependencyStore = path.join(root, 'store');
+          const prepared = await createPrepareApplicationService({
+            fetcher: refusingFetcher,
+          }).prepare({ artifact_path: artifactPath, dependency_store: dependencyStore });
+          expect(prepared.status).toBe('prepared');
+        }
+
+        const replay = createReplayApplicationService().replay;
+        const store = dependencyStore === undefined ? {} : { dependency_store: dependencyStore };
+        const snapshot = await replay({
+          artifact_path: artifactPath,
+          mode: 'snapshot',
+          ...store,
+        });
+        const corrected = await replay({
+          artifact_path: artifactPath,
+          mode: 'current_checkout',
+          against_path: checkout,
+          ...store,
+        });
+
+        expect(snapshot.status).toBe('reproduced');
+        expect(corrected.status).toBe('not_reproduced');
+        expect(corrected.substituted_paths).toEqual(['calculate.mjs']);
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+    180_000,
+  );
 });
