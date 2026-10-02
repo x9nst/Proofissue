@@ -18,7 +18,7 @@ The examples below write `proofissue` for that invocation. They use the project 
 | `1` | The command ran but did not succeed: an invalid or missing artifact, a replay that could not complete, a required status that was not met, a preparation that failed, or a recording that failed. |
 | `2` | The arguments were malformed. The message and usage text are printed, and nothing is executed. |
 
-Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. The same text is printed, with exit `2`, after an unknown command or malformed arguments.
+Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. `proofissue --version` prints the bare version, for example `0.1.0`, and exits `0`; quote it when you report a problem. The same text is printed, with exit `2`, after an unknown command or malformed arguments.
 
 A replay that ends in `reproduced` or `not_reproduced` is a successful classification. Which of the two you want is a policy decision, expressed with `--require-status`.
 

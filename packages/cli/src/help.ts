@@ -2,6 +2,7 @@ import { RECORD_HELP } from './record-command.js';
 
 export const CLI_HELP = `Usage:
   proofissue record [options] -- node <arguments...>
+  proofissue --version
   proofissue validate <artifact.proofissue> [--json]
   proofissue inspect <artifact.proofissue> [--json]
   proofissue prepare <artifact.proofissue> --dependency-store <directory> [--json]

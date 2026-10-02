@@ -15,8 +15,9 @@
     "action"
   ],
   "scripts": {
-    "build": "npm run build:types && npm run build:action",
+    "build": "npm run build:types && npm run build:action && npm run build:package",
     "build:action": "node scripts/build-action.mjs",
+    "build:package": "node scripts/build-cli-package.mjs",
     "build:types": "tsc -b --force --pretty false",
     "check": "npm run format:check && npm run lint && npm run deps:check && npm run typecheck && npm test && npm run build && npm run hygiene:check",
     "clean": "node scripts/clean.mjs",

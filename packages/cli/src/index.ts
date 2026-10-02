@@ -7,6 +7,7 @@ import { escapePresentationText } from './presentation.js';
 import { RECORD_HELP, runRecordCommand } from './record-command.js';
 import { runReplayCommand } from './replay-command.js';
 import { runStaticCommand } from './static-commands.js';
+import { PROOFISSUE_VERSION } from './version.js';
 
 export interface CliAdapter {
   readonly application: ApplicationServices;
@@ -32,6 +33,11 @@ export const runCli = async (
 ): Promise<CliRunResult> => {
   if (arguments_.length === 0 || arguments_[0] === '--help' || arguments_[0] === '-h') {
     io.write(CLI_HELP);
+    return { exit_code: 0 };
+  }
+
+  if (arguments_[0] === '--version' && arguments_.length === 1) {
+    io.write(`${PROOFISSUE_VERSION}\n`);
     return { exit_code: 0 };
   }
 
