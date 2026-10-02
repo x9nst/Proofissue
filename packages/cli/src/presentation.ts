@@ -17,6 +17,18 @@ export const quoteExpectation = (value: string): string =>
     })
     .join('');
 
+/**
+ * Quotes a path for the suggested commands. Plain paths stay plain; others are double-quoted,
+ * or single-quoted when they hold a character a shell would still interpret inside double
+ * quotes. The text is escaped first, so a control character never reaches the terminal.
+ */
+export const quotePathForCommand = (value: string): string => {
+  const escaped = escapePresentationText(value);
+  if (/^[A-Za-z0-9_./:@%+=\\-]+$/u.test(escaped)) return escaped;
+  if (!/["$`!]/u.test(escaped)) return `"${escaped}"`;
+  return `'${escaped.replaceAll("'", "'\\''")}'`;
+};
+
 export const escapePresentationText = (value: string): string =>
   Array.from(value)
     .map((character) => {

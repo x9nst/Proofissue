@@ -18,6 +18,8 @@ proofissue record \
 
 Three options have defaults. `--project` is the current directory. `--image` is the approved replay image. `--output` is named after the first reproduction file: `reproduction.proofissue.yaml` in the current directory here, with `-2` through `-99` added before the extension when the name is taken. The `.yaml` extension is deliberate: GitHub issues accept `.yaml` attachments and refuse `.proofissue`, and the artifact is YAML. A name you give with `--output` is used exactly as written, and both extensions are valid. The preview shows the file and image that will be used, and warns when the image is not the approved one or when you recorded with a Node.js major other than 24. The defaults are written out in the same command as `--project . --output reproduction.proofissue.yaml --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6`.
 
+In a terminal the command alone is enough: `proofissue record -- node test/reproduction.mjs` suggests the files (with a reason for each), asks you to confirm them, runs the command once, and lets you choose the expected line from what it printed. See "Suggested Files" below and `cli.md` for a complete session.
+
 After a successful recording the output says where the file is, the first 12 characters of its SHA-256, how to attach it to a GitHub issue, and the commands to replay it. `--json` (with `--yes`) prints one result line instead and sends the preview to stderr, for scripts.
 
 The explicit two-role behavior is fixed by this document. Future terminology changes require new maintainer evidence and normal compatibility review.
@@ -89,15 +91,29 @@ Misclassification changes the meaning of fix verification:
 - a test or fixture marked as `subject` may be replaced and stop serving as the frozen reproduction;
 - implementation code marked as `reproduction` stays frozen at its original broken contents and may make a real fix appear ineffective.
 
-ProofIssue may show examples and warnings but does not silently guess or change a role in version 1. The role names used in the CLI and preview passed the task-based maintainer gate as confirmed by the project owner on 2026-07-15.
+ProofIssue may show examples, warnings, and suggestions but does not silently guess or change a role in version 1: a suggestion is applied only after you confirm it (see "Suggested Files"). The role names used in the CLI and preview passed the task-based maintainer gate as confirmed by the project owner on 2026-07-15.
 
 Selections are project-relative paths with forward slashes. A leading `./` is removed, and on Windows backslashes are converted, so `.\test\a.mjs` is recorded as `test/a.mjs`; the preview shows the stored path.
 
 Version 1 accepts individual file paths only. Directory recursion and glob patterns are deferred because they make minimal collection and review harder.
 
+## Suggested Files
+
+Listing every file a failing test needs by hand is the largest chore in recording, so for a role you did not name, `record` can suggest files. This is a convenience that reads project files; it never decides for you.
+
+- **When.** Only in a terminal, without `--yes` or `--json`, and only for the roles you left empty. A role you named is never changed or extended. Under `--yes`, with `--json`, or without a terminal, nothing is applied: the recording fails with the usual message and the suggestions are printed as flags to copy.
+- **What is read.** The files the command names, and the project files they import through relative `./` and `../` specifiers, found by a small scanner that skips comments, strings, and template literals. It does not follow symbolic links, leave the project, enter `node_modules` or a dot-directory, or read more than 100 files, 4 MiB in total, or 1 MiB per file, and it says when it stopped early. It uses the same no-follow file checks as recording itself, so a file that could not be recorded is never suggested.
+- **What is shown.** Project-relative paths with the reason for each (`named in the command`, `imported by test/a.mjs`), grouped by the role the rules chose: a test, spec, fixture, or mock directory or name makes a reproduction file, and everything else a subject file. The contents of a file that was scanned but not confirmed are never shown, stored, or sent anywhere.
+- **Extras.** `package.json` is suggested as a reproduction file when it sets `"type"` and dependency files are not being recorded, because Node.js needs it to read `.js` files the same way during replay. Runner configuration at the project root that was not selected (`.mocharc.*`, `.babelrc`, `babel.config.*`, `.c8rc*`, `.nycrc*`, `jest.config.*`) is listed as not collected, so you can add it with `--reproduction` if your runner reads it; `.npmrc` and `.env*` are never listed. A command that uses vitest, tsx, or `--loader` gets a warning that it is outside the supported workflow.
+- **Confirming.** `Use these files? [y/N]`. Answering no asks for space-separated paths per empty role, where Enter keeps the suggestion. The chosen files are read before the command runs, and the preview groups them by role and asks the usual confirmations.
+
+## Commands That Do Not Start With `node`
+
+A recording runs `node <arguments>` directly. `mocha test/a.js`, `npx mocha test/a.js`, and `npm test` are refused with exit `2`, and nothing runs. If the project's `package-lock.json` names the package that provides the program, the error prints the equivalent `node node_modules/<package>/<script> <arguments>` command; for `npm`, `yarn`, and `pnpm` it says that package scripts are not run. The hint is advice only: nothing is rewritten, installed, or executed, and the lockfile is read within the same 1 MiB limit that dependency validation uses.
+
 ## Dependency Files
 
-Add `--dependencies` to also record the project's `package.json` and `package-lock.json`. They are recorded with the `dependency` role: exactly as they are on disk, never replaced during current-checkout replay, and never altered by redaction. Nothing about dependencies is collected unless the flag is given, even if the files exist.
+Add `--dependencies` to also record the project's `package.json` and `package-lock.json`. They are recorded with the `dependency` role: exactly as they are on disk, never replaced during current-checkout replay, and never altered by redaction. Nothing about dependencies is collected unless you say so, even if the files exist: with neither `--dependencies` nor `--no-dependencies`, a terminal session shows the package count and whether the lockfile is valid and asks `Record package.json and package-lock.json so replay can install the locked packages? [Y/n]` (default Yes only for a valid lockfile when `package.json` declares dependencies or devDependencies; for an invalid lockfile the first three reasons are shown and the default is No). Under `--yes`, with `--json`, or without a terminal the files are not recorded and the preview warns; `--no-dependencies` removes the question and the warning.
 
 Both files must be at the project root and must both exist. The lockfile is checked before the command runs, using the rules in `dependencies.md`: lockfile version 3, packages from the public npm registry only, and a SHA-512 hash on every entry. An unsupported lockfile stops the recording with the first few reasons, and the command is not run. `package.json` must be a JSON object.
 
@@ -178,6 +194,7 @@ Recording stops without writing an artifact when:
 - the command cannot start or has no representable exit result;
 - the recording command exceeds its wall-clock limit or cannot be terminated cleanly;
 - a command argument holds the project or home directory, or, on Windows, spells a project file with backslashes (refused before the command runs);
+- a command does not start with `node` (exit `2`, with a hint when the lockfile or the command allows one);
 - with `--dependencies`, either dependency file is missing, `package.json` is not a JSON object, the lockfile is unsupported, or redaction would alter either file;
 - an exact expectation is requested for a truncated, empty, oversized, or redacted stream, or twice for one stream;
 - a pattern is outside the bounded language, can match without consuming output, or does not match the recording;

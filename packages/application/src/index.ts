@@ -53,6 +53,25 @@ export {
 } from './record-defaults.js';
 export type { DefaultArtifactPathInput, DefaultArtifactPathResult } from './record-defaults.js';
 
+export {
+  explainRecordCommand,
+  MAX_PROBE_REASONS,
+  planSuggestedFiles,
+  probeRecordDependencies,
+  SUGGESTION_LIMITS,
+  suggestRecordFiles,
+} from './record-suggestions.js';
+export type {
+  CommandHint,
+  DependencyProbe,
+  FileSuggestions,
+  RecordFilePlan,
+  RecordFileSelection,
+  SuggestedFile,
+  SuggestionLimit,
+  SuggestRecordFilesRequest,
+} from './record-suggestions.js';
+
 export type {
   InspectOperationResult,
   OperationResult,

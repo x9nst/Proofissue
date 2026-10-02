@@ -15,7 +15,7 @@ This document describes how ProofIssue will handle a project's npm dependencies,
 
 ## Recording
 
-`proofissue record --dependencies` records `package.json` and `package-lock.json` from the project root with the `dependency` artifact role. It is opt-in, validates the lockfile before running the command, shows the reporter the file names and package counts, and refuses to record if redaction would alter either file. See `recording.md`.
+`proofissue record --dependencies` records `package.json` and `package-lock.json` from the project root with the `dependency` artifact role. It is opt-in: in a terminal, when both files exist and neither `--dependencies` nor `--no-dependencies` was given, `record` shows the package count and whether the lockfile validates, then asks whether to record them (default Yes only for a valid lockfile when `package.json` declares dependencies or devDependencies; for an invalid lockfile the first three reasons are shown and the default is No). Under `--yes`, with `--json`, or without a terminal they are not recorded and the preview warns; `--no-dependencies` removes the question and the warning. The question uses the same lockfile validation as recording and shows counts and fixed messages only. A command written as `npx <bin>` or `<bin>` is explained, never run, from the same lockfile: the hint names `node node_modules/<package>/<script>`, which still needs the dependency files recorded. Recording validates the lockfile before running the command, shows the reporter the file names and package counts, and refuses to record if redaction would alter either file. See `recording.md`.
 
 ## Lockfile validation
 

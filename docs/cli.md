@@ -31,7 +31,7 @@ Run one Node.js command that fails, and capture a minimal artifact that describe
 ### Syntax
 
 ```text
-proofissue record --reproduction <path> --subject <path>
+proofissue record [--reproduction <path>] [--subject <path>]
   [--project <directory>] [--output <file>]
   [--image <repository@sha256:digest>]
   [--expect-stdout <literal>] [--expect-stderr <literal>]
@@ -39,7 +39,7 @@ proofissue record --reproduction <path> --subject <path>
   [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
   [--expect-stdout-exact] [--expect-stderr-exact]
   [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
-  [--dependencies] [--yes] [--json] -- node <arguments...>
+  [--dependencies | --no-dependencies] [--yes] [--json] -- node <arguments...>
 ```
 
 ### Options
@@ -49,19 +49,62 @@ proofissue record --reproduction <path> --subject <path>
 | `--project <directory>` | no | The project root. Defaults to the current directory. Selected paths are resolved beneath it and symbolic links are refused. |
 | `--output <file>` | no | The new artifact. Defaults to `<name of the first --reproduction file>.proofissue.yaml` in the current directory, for example `reproduction.proofissue.yaml`; when that name is taken, `-2` through `-99` is added before the extension, and after that the command asks for `--output`. A name you give is used exactly as written, so `.proofissue` and `.proofissue.yaml` are both valid. An existing file is never overwritten. |
 | `--image <repo@sha256:digest>` | no | The replay image. Defaults to the approved Node.js 24 image, the only one replay accepts. Another image is recorded as given, and the preview warns that replay will refuse it. |
-| `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. A leading `./` is removed, and on Windows backslashes become forward slashes, so `.\test\a.mjs` is stored as `test/a.mjs`. |
-| `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. Spelled like `--reproduction`. |
+| `--reproduction <path>` | at least one, given or confirmed from suggestions | A test, fixture, or input kept exactly as recorded. Repeatable. A leading `./` is removed, and on Windows backslashes become forward slashes, so `.\test\a.mjs` is stored as `test/a.mjs`. |
+| `--subject <path>` | at least one, given or confirmed from suggestions | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. Spelled like `--reproduction`. |
 | `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall, unless you choose from the output in a terminal | A literal substring the failing output must contain, byte for byte. Repeatable. |
 | `--expect-stdout-normalized <text>`, `--expect-stderr-normalized <text>` | no | Text as it was printed on your machine. Replay compares after ignoring line endings, terminal escape sequences, trailing whitespace, the project and temporary directories, durations, process IDs, the Node.js version, and Node.js internal line numbers. Repeatable. |
 | `--expect-stdout-regex <pattern>`, `--expect-stderr-regex <pattern>` | no | A pattern that must match somewhere in the stream after the same normalization, written against the normalized text (for example `took <duration>` or `<project>/test/a\.mjs:\d+:\d+`). The language is a bounded subset of JavaScript regular expressions that always runs in linear time: no lookaround or backreferences, at most 1024 characters, and a pattern that can match nothing, such as `a*`, is refused. It is checked before the command runs and must match the recording. Repeatable. |
 | `--expect-stdout-exact`, `--expect-stderr-exact` | no | A flag, with no value. The whole stream must match exactly. At most one exact option per stream. |
 | `--expect-stdout-exact-normalized`, `--expect-stderr-exact-normalized` | no | A flag, with no value. The whole stream must match exactly after the same normalization. At most one exact option per stream, counting the raw one. |
 | `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Replay such an artifact only after `prepare`. See `dependencies.md`. |
+| `--no-dependencies` | no | Record no dependency files, and neither ask about them nor warn about them. Cannot be combined with `--dependencies`. Without either option, a project that has both `package.json` and `package-lock.json` is asked about in a terminal, and under `--yes` the preview warns that they are not recorded. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
 | `--json` | no | Needs `--yes`. Prints one `RecordOperationResult` line on stdout (`created`, `cancelled`, `invalid_input`, or `execution_failed`, with the artifact digest when created) and sends the preview to stderr. The result never contains output text. Without `--yes` it is a usage error, exit `2`. |
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. No argument may hold the project or home directory, and on Windows none may spell a project file with backslashes (write `test/a.mjs`); both are refused before anything runs. |
 
 The expected exit code is whatever the recorded command actually returned. The options that take no value derive the expectation from the recording itself, and the preview shows what will be stored. `output-matching.md` defines each normalization rule and the pattern language, and says how to choose between the options.
+
+#### Choosing the files from suggestions
+
+Name no `--reproduction` or no `--subject` path, in a terminal, without `--yes` or `--json`, and `record` suggests files for the role you left out. Roles you did name are never changed or extended. Nothing is applied until you answer `Use these files? [y/N]`, and the files are read, and shown again in the preview, before the command runs.
+
+The suggestions come from fixed rules, each shown with its reason:
+
+- **Seeds.** A command argument that, after removing `./` (and converting `\` to `/` on Windows), is a portable path to an existing regular file outside `node_modules/` is a reproduction file, with the reason `named in the command`. So are the relative values of `--require`, `-r`, and `--import` (`named by --import`). An argument that starts with `-` is never a path.
+- **Imports.** A small scanner reads each file for relative module specifiers (`./` and `../`) in `import ... from`, `export ... from`, bare `import '...'`, `import('...')`, and `require('...')`, skipping comments, strings, and template literals. It never reads `node_modules`, a dot-directory, a symbolic link, or anything outside the project, and a non-literal `import(name)` is ignored. Each specifier is tried as the exact path, then with `.js`, `.mjs`, `.cjs`, and `.json` added, then as a directory's `index.js`, `index.mjs`, or `index.cjs`. The walk is breadth-first, at most 100 files and 4 MiB in all, 1 MiB per file, and it says when it stopped early.
+- **Roles.** A reached file is a reproduction file when a directory in its path is `test`, `tests`, `__tests__`, `spec`, `specs`, `fixtures`, `__fixtures__`, or `__mocks__`, or its name is `*.test.*` or `*.spec.*`. Every other reached file is a subject file, with the reason `imported by <path>`.
+- **`package.json`.** For a project whose `package.json` sets `"type"` and where dependency files are not being recorded, it is suggested as a reproduction file, because Node.js needs it to read the files the same way at replay.
+- **Not collected.** Runner configuration that exists at the project root but is not selected (`.mocharc.*`, `.babelrc`, `babel.config.*`, `.c8rc*`, `.nycrc*`, `jest.config.*`) is listed with `Not collected (add with --reproduction <file> if your test runner reads it)`. `.npmrc` and `.env*` files are never listed, read, or suggested.
+- **Unsupported runners.** A script under `node_modules/vitest/` or `node_modules/tsx/`, `--import tsx`, and `--loader` get a warning that the failure may not replay.
+
+Answer `n` and you are asked for space-separated paths for each empty role; pressing Enter keeps that role's suggestion. Under `--yes`, with `--json`, or without a terminal nothing is suggested to the recorder: the recording fails as usual, and the suggestions are printed after the error as flags you can copy (to stderr under `--json`).
+
+The default artifact name follows the first reproduction file, including one you confirmed from the suggestions.
+
+#### Recording the dependency files
+
+When `package.json` and `package-lock.json` both exist at the project root and neither `--dependencies` nor `--no-dependencies` was given, a terminal session first shows what was found, then asks:
+
+```text
+package.json and package-lock.json found: 1 package locked, and the lockfile can be used for dependency replay.
+Record package.json and package-lock.json so replay can install the locked packages? [Y/n]
+```
+
+The default is Yes only when the lockfile can be used and `package.json` declares `dependencies` or `devDependencies`; otherwise it is No and the prompt reads `[y/N]`. When the lockfile cannot be used, the first three reasons are listed (with `and N more` after them) before the question. An answer other than yes or no is asked again, and three of them, or ending the input, cancel the recording with exit `0`. Nothing is collected by the question itself: it reads the two files only to count packages and validate the lockfile, and shows counts and fixed messages, never contents.
+
+Dependency capture is never switched on for you. Under `--yes`, with `--json`, or without a terminal the files are not recorded, and the preview warns that a lockfile exists and is not being recorded; `--no-dependencies` silences both the question and the warning.
+
+#### Commands that do not start with `node`
+
+A recording runs `node <arguments>` directly, so `-- mocha test/a.js`, `-- npx mocha test/a.js`, and `-- npm test` exit `2` like any command that does not start with `node`, and nothing runs. When the project's `package-lock.json` (at most 1 MiB) names the package that provides the program and its script exists as a regular file under `node_modules/`, the error adds the equivalent:
+
+```text
+Hint: the package mocha in package-lock.json provides this program. A recording runs node directly, so write it as:
+  -- node node_modules/mocha/bin/mocha.js test/a.test.js --bail
+Record package.json and package-lock.json with --dependencies so replay can install the packages. Nothing was run.
+```
+
+For `npm`, `yarn`, and `pnpm` the hint is a fixed message that package scripts are not run and that the direct `node` form is needed. The command is never rewritten or run, and no package is installed.
 
 #### Choosing the expected lines from the output
 
@@ -110,7 +153,44 @@ Under `--yes`, with `--json`, or when standard input or output is not a terminal
 
 ### Example
 
-The shortest form names the files, the expected text, and the command. The project is the current directory (here `--project` selects the example from the repository root), the image is the approved one, and the artifact is written to `reproduction.proofissue.yaml` in the current directory:
+In a terminal, from the project directory, the command alone is enough. `record` suggests the files, you confirm them, the command runs once, and you choose the expected line (pressing Enter takes the suggested one). This session was produced by running the built CLI on a copy of `examples/failing-node-test` through a test harness that answers every prompt with `y` or Enter, and the preview is shortened here; a test (`the headline example` in `packages/cli/src/record-suggestions.test.ts`) keeps it working:
+
+```text
+proofissue record -- node test/reproduction.mjs
+
+Suggested files (nothing is recorded until you confirm them; the files are read before the command runs):
+  Kept exactly as recorded during a fix check (reproduction):
+    test/reproduction.mjs  (named in the command)
+  May be replaced from the current checkout during a fix check (subject):
+    src/calculate.mjs  (imported by test/reproduction.mjs)
+Use these files? [y/N] y
+No expected output was given, so the command will run now (no shell) and you can choose the expected lines from what it prints.
+The command exited with code 1. What it printed, normalized and with secrets removed:
+
+stdout (0 lines):
+  (nothing printed)
+
+stderr (1 line):
+  e1  Expected 4 from calculate(2)
+Suggested: e1, a line that starts with "Expected".
+Enter line ids separated by spaces (e.g. e3 o12), or press Enter to use the suggested line e1: <Enter>
+ProofIssue recording preview
+
+Artifact file: reproduction.proofissue.yaml
+...
+Are the files kept exactly as recorded classified correctly? [y/N] y
+Are the files replaceable from the current checkout classified correctly? [y/N] y
+Create the new .proofissue artifact? [y/N] y
+Artifact created.
+Saved: reproduction.proofissue.yaml (sha256 e5cc43a45925)
+To share it, drag the file into a GitHub issue comment: GitHub accepts the .yaml extension.
+A maintainer replays it on x86-64 Linux with Docker:
+  proofissue replay reproduction.proofissue.yaml
+On x86-64 Linux with Docker you can check it yourself first:
+  proofissue replay reproduction.proofissue.yaml --require-status reproduced
+```
+
+The next form names the files, the expected text, and the command. The project is the current directory (here `--project` selects the example from the repository root), the image is the approved one, and the artifact is written to `reproduction.proofissue.yaml` in the current directory:
 
 ```text
 proofissue record \
@@ -226,6 +306,8 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 ### Failure behavior
 
 - Malformed arguments exit `2` and print the error, a one-line synopsis, and a pointer to `record --help`: an unknown option, a positional argument before `--` (the error says to put the command after `--`), a command that does not start with `node` and have an argument, `--json` without `--yes`, an exact option given twice for the same stream (a raw and a normalized exact option for one stream count as twice), or a default artifact name whose `-2` through `-99` variants all exist.
+- A command that does not start with `node` exits `2`, nothing runs, and a hint says how to write it for `node` when the lockfile or the command (`npm`, `yarn`, `pnpm`) allows one. Combining `--dependencies` with `--no-dependencies` exits `2`.
+- Declining the suggested files and giving no paths, or ending the input at the file or dependency question, exits `0` and writes nothing; the command has not run. Under `--yes`, with `--json`, or without a terminal, a role left empty fails as below and the suggested flags are printed after the error.
 - A request with no `--reproduction` path, no `--subject` path, or no expectation exits `1` and writes no artifact. With no `--expect-*` option under `--yes`, with `--json`, or without a terminal, the command does not run and the error explains both ways forward: `Recording failed: A failing recording needs an expected stdout or stderr literal. Run record in a terminal without --expect options to choose a line from the command's output, or pass --expect-stderr-normalized "<text>" (or another --expect option).`
 - In guided selection, declining a command that exited `0`, three unusable answers, or ended input exit `0` and write nothing; a command whose output has no line that can be chosen exits `1`.
 - When a literal you gave was not printed and the message cannot say where the text does appear, it suggests running `record` without `--expect` options in a terminal to choose a line.
@@ -246,6 +328,8 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 Recording is not sandboxed. The command runs on your machine with your user's files, processes, and network access; only its wall-clock time and the output ProofIssue retains are bounded, and the whole process tree is ended when the time limit is reached. Record only commands you would run in that shell anyway, and replay the artifact later in the locked-down container. Expected values and patterns are checked for likely secrets, and a value that holds one is refused without being repeated.
 
 You are authorizing the recorder to run the command on your machine, so read the preview before confirming. Secrets are redacted before the artifact is written, but redaction is rule-based and not a guarantee; see `security-model.md`. Only the files you select are collected. Command output reaches the artifact only through your expected literals, which redaction does not check for user names or paths, so leave absolute paths out of them. See `recording.md` for the full sequence.
+
+File suggestions read more of your project than the files you named, so they are bounded and shown before anything else happens. The scan reads only regular files reached without a symbolic link, beneath the project, outside `node_modules` and dot-directories, as strict UTF-8, within 100 files, 4 MiB in all, and 1 MiB each. What it shows is project-relative paths (escaped) and fixed reasons; the contents of a file that was scanned but not confirmed are never shown, stored, or sent anywhere, and only the files you confirm are recorded, after being read again before the command runs. Under `--yes`, with `--json`, or without a terminal a suggestion is never applied.
 
 Guided selection prints what the command printed, so that text is untrusted: a command can print terminal control sequences, bidirectional text controls, or text shaped like another listed line or a prompt. Every listed line is escaped and cut before it reaches the terminal, the output shown is already redacted, and a line that holds a redaction marker, a path from this computer, or a likely secret cannot be chosen. The output is never placed in a result, a log, or the artifact, except for the lines you choose, which the preview shows in full before you confirm.
 
