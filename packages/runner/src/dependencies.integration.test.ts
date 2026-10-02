@@ -214,6 +214,25 @@ integration('replay with prepared dependencies in the real container', () => {
     expect(result.cleanup.completed).toBe(true);
   }, 120_000);
 
+  it('exposes only PATH and HOME to the command after the offline install', async () => {
+    const { artifact, store } = await project(
+      `const keys = Object.keys(process.env).sort().join(',');
+       const fixed = keys === 'HOME,PATH' && process.env.HOME === '/tmp';
+       process.stderr.write(fixed ? 'proofissue-marker' : 'environment-leak:' + keys);
+       process.exitCode = 1;`,
+      [{ name: 'dep' }],
+    );
+
+    const result = await createDockerRunner().run({
+      artifact,
+      dependency_store: store,
+      mode: 'snapshot',
+    });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+    expect(result.cleanup.completed).toBe(true);
+  }, 120_000);
+
   it('installs scoped and nested packages from the store', async () => {
     const { artifact, store } = await project(
       `import a from 'a';
