@@ -840,6 +840,28 @@ describe('record CLI', () => {
       await rm(root, { force: true, recursive: true });
     }
   });
+
+  it('escapes control characters in an unknown command name', async () => {
+    const escape = String.fromCharCode(27);
+    const { io, output } = capture();
+
+    const result = await runCli([`${escape}]0;spoofed title`], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output()).toContain('Unknown command: ');
+    expect(output()).not.toContain(escape);
+  });
+
+  it('escapes control characters in an unknown option name', async () => {
+    const escape = String.fromCharCode(27);
+    const { io, output } = capture();
+
+    const result = await runCli(['validate', validFixture, `--${escape}[31mred`], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output()).toContain('Unknown option: ');
+    expect(output()).not.toContain(escape);
+  });
 });
 
 describe('record CLI dependency capture', () => {

@@ -547,7 +547,9 @@ export const runCli = async (
     try {
       parsed = parseArtifactCommand(arguments_.slice(1), false);
     } catch (error: unknown) {
-      io.write(`${error instanceof Error ? error.message : 'Invalid command.'}\n\n${CLI_HELP}`);
+      io.write(
+        `${escapePresentationText(error instanceof Error ? error.message : 'Invalid command.')}\n\n${CLI_HELP}`,
+      );
       return { exit_code: 2 };
     }
     const staticServices = createStaticArtifactApplicationServices();
@@ -576,7 +578,7 @@ export const runCli = async (
       parsed = parsePrepareArguments(arguments_.slice(1));
     } catch (error: unknown) {
       io.write(
-        `${error instanceof Error ? error.message : 'Invalid prepare command.'}\n\n${CLI_HELP}`,
+        `${escapePresentationText(error instanceof Error ? error.message : 'Invalid prepare command.')}\n\n${CLI_HELP}`,
       );
       return { exit_code: 2 };
     }
@@ -611,7 +613,7 @@ export const runCli = async (
       parsed = parseArtifactCommand(arguments_.slice(1), true);
     } catch (error: unknown) {
       io.write(
-        `${error instanceof Error ? error.message : 'Invalid replay command.'}\n\n${CLI_HELP}`,
+        `${escapePresentationText(error instanceof Error ? error.message : 'Invalid replay command.')}\n\n${CLI_HELP}`,
       );
       return { exit_code: 2 };
     }
@@ -653,7 +655,7 @@ export const runCli = async (
   }
 
   if (arguments_[0] !== 'record') {
-    io.write(`Unknown command: ${arguments_[0] ?? ''}\n\n${CLI_HELP}`);
+    io.write(`Unknown command: ${escapePresentationText(arguments_[0] ?? '')}\n\n${CLI_HELP}`);
     return { exit_code: 2 };
   }
 
@@ -662,7 +664,7 @@ export const runCli = async (
     parsed = parseRecordArguments(arguments_.slice(1));
   } catch (error: unknown) {
     io.write(
-      `${error instanceof Error ? error.message : 'Invalid record command.'}\n\n${RECORD_HELP}`,
+      `${escapePresentationText(error instanceof Error ? error.message : 'Invalid record command.')}\n\n${RECORD_HELP}`,
     );
     return { exit_code: 2 };
   }
@@ -702,7 +704,10 @@ export const runCli = async (
   if (result.status === 'created') io.write('Artifact created.\n');
   else if (result.status === 'cancelled')
     io.write('Recording cancelled; no artifact was written.\n');
-  else io.write(`Recording failed: ${result.errors[0]?.message ?? 'unknown error'}\n`);
+  else
+    io.write(
+      `Recording failed: ${escapePresentationText(result.errors[0]?.message ?? 'unknown error')}\n`,
+    );
   return {
     exit_code: result.status === 'created' || result.status === 'cancelled' ? 0 : 1,
     result,
