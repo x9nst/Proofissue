@@ -4,7 +4,7 @@
   "cases": [
     {
       "id": "N1",
-      "sets": ["pilot"],
+      "sets": ["pilot", "full"],
       "title": "addressparser joins a quoted local part to the domain",
       "repository": "https://github.com/nodemailer/nodemailer.git",
       "links": [
@@ -33,7 +33,7 @@
     },
     {
       "id": "T1",
-      "sets": ["pilot"],
+      "sets": ["pilot", "full"],
       "title": "first filter returns nothing for numbers",
       "repository": "https://github.com/twigjs/twig.js.git",
       "links": ["https://github.com/twigjs/twig.js/pull/966"],
@@ -72,14 +72,22 @@
       ],
       "expected_exit_code": 1,
       "expectations": [
-        { "stream": "stdout", "mode": "contains", "value": "expected '' to be '1'" },
-        { "stream": "stdout", "mode": "contains", "value": "1 failing" }
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "expected '' to be '1'"
+        },
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "1 failing"
+        }
       ],
       "notes": "FIX is the merge commit of PR #966. require('..') resolves src/twig.js through package.json, which --dependencies records. All 18 src files are subjects because twig.js loads them together. 355 locked packages: the heaviest pilot install."
     },
     {
       "id": "M3",
-      "sets": ["pilot"],
+      "sets": ["pilot", "full"],
       "title": "SPF %{d} macro expands to the sender domain instead of the evaluated domain",
       "repository": "https://github.com/postalsys/mailauth.git",
       "links": [
@@ -107,6 +115,422 @@
         }
       ],
       "notes": "The fix also changed lib/spf/spf-verify.js, which this test does not load."
+    },
+    {
+      "id": "N2",
+      "sets": ["full"],
+      "title": "addressparser extracts an address from a quoted local part (GHSA-mm7p-fcc7-pg87)",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "links": [
+        "https://github.com/advisories/GHSA-mm7p-fcc7-pg87",
+        "https://github.com/nodemailer/nodemailer/commit/1150d99fba77280df2cfb1885c43df23109a8626"
+      ],
+      "pre_fix_commit": "3b8982c1f24508089a8757b74039000a4498b158",
+      "fix_commit": "1150d99fba77280df2cfb1885c43df23109a8626",
+      "reproduction_files": ["test/addressparser/addressparser-test.js"],
+      "subject_files": ["lib/addressparser/index.js"],
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=should not extract email from quoted local-part",
+        "test/addressparser/addressparser-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "false !== true"
+        }
+      ],
+      "notes": "Published advisory, fixed in 7.0.7. Pre-fix, the parser extracts an address from inside the quoted local part, so .includes() is false. The name pattern has no parentheses because it is a regular expression.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "N4",
+      "sets": ["full"],
+      "title": "addressparser splits unquoted display names that contain commas",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "links": [
+        "https://github.com/nodemailer/mailparser/issues/375",
+        "https://github.com/nodemailer/nodemailer/commit/fe27f7fd57f7587d897274438da2f628ad0ad7d9"
+      ],
+      "pre_fix_commit": "1dd8eeb5f7ebd4030858de8894a502014035ac36",
+      "fix_commit": "fe27f7fd57f7587d897274438da2f628ad0ad7d9",
+      "reproduction_files": ["test/addressparser/addressparser-test.js"],
+      "subject_files": ["lib/addressparser/index.js"],
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=should merge comma-separated name parts with angle-bracket address",
+        "test/addressparser/addressparser-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "Expected values to be strictly deep-equal"
+        }
+      ],
+      "notes": "The name pattern also skips the timing-sensitive deep-nesting tests that live in the same file.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "N5",
+      "sets": ["full"],
+      "title": "addressparser does not flatten nested groups",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "links": [
+        "https://github.com/nodemailer/nodemailer/commit/8f8a77c67f0ba94ddf4e16c68f604a5920fb5d26"
+      ],
+      "pre_fix_commit": "ce120a31be1edd2e3fa46352754373a645bb895a",
+      "fix_commit": "8f8a77c67f0ba94ddf4e16c68f604a5920fb5d26",
+      "reproduction_files": ["test/addressparser/addressparser-test.js"],
+      "subject_files": ["lib/addressparser/index.js"],
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=should handle particularily bad input, unescaped colon correctly",
+        "test/addressparser/addressparser-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "Expected values to be strictly deep-equal"
+        }
+      ],
+      "notes": "The fix changed the expected value of an existing test. \"particularily\" is the upstream spelling.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "T2",
+      "sets": ["full"],
+      "title": "computed object key that evaluates to 0 is dropped on re-render",
+      "repository": "https://github.com/twigjs/twig.js.git",
+      "links": [
+        "https://github.com/twigjs/twig.js/issues/901",
+        "https://github.com/twigjs/twig.js/pull/977"
+      ],
+      "pre_fix_commit": "5f7a32524a9dc4a8675675d4571936a4a63768e7",
+      "fix_commit": "e5459107f8fd1fa17eabc97d1d87bb3a3fbd1b24",
+      "reproduction_files": ["test/test.core.js"],
+      "subject_files": [
+        "src/twig.js",
+        "src/twig.factory.js",
+        "src/twig.core.js",
+        "src/twig.compiler.js",
+        "src/twig.expression.js",
+        "src/twig.filters.js",
+        "src/twig.functions.js",
+        "src/twig.lib.js",
+        "src/twig.loader.ajax.js",
+        "src/twig.loader.fs.js",
+        "src/twig.logic.js",
+        "src/twig.parser.source.js",
+        "src/twig.parser.twig.js",
+        "src/twig.path.js",
+        "src/twig.tests.js",
+        "src/twig.async.js",
+        "src/twig.exports.js",
+        "src/twig.expression.operator.js"
+      ],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--require",
+        "should",
+        "--grep",
+        "should keep a computed object key that evaluates to 0 on re-render",
+        "test/test.core.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "1 failing"
+        }
+      ],
+      "notes": "FIX is the merge commit of PR #977. The literal is the failure count only; the thrown message text and stream were not known before the run. Other tests in test.core.js read test/templates files, which the --grep skips.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "T3",
+      "sets": ["full"],
+      "title": "unclosed brace renders [object Object] instead of a syntax error",
+      "repository": "https://github.com/twigjs/twig.js.git",
+      "links": [
+        "https://github.com/twigjs/twig.js/issues/896",
+        "https://github.com/twigjs/twig.js/pull/968"
+      ],
+      "pre_fix_commit": "eb253e105926e6e934f6b58b654d0fef9875f18d",
+      "fix_commit": "04d87f1d1320320518fb2abe6cf4b803fa78c352",
+      "reproduction_files": ["test/test.regression.js"],
+      "subject_files": [
+        "src/twig.js",
+        "src/twig.factory.js",
+        "src/twig.core.js",
+        "src/twig.compiler.js",
+        "src/twig.expression.js",
+        "src/twig.filters.js",
+        "src/twig.functions.js",
+        "src/twig.lib.js",
+        "src/twig.loader.ajax.js",
+        "src/twig.loader.fs.js",
+        "src/twig.logic.js",
+        "src/twig.parser.source.js",
+        "src/twig.parser.twig.js",
+        "src/twig.path.js",
+        "src/twig.tests.js",
+        "src/twig.async.js",
+        "src/twig.exports.js",
+        "src/twig.expression.operator.js"
+      ],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--require",
+        "should",
+        "--grep",
+        "#896 should report a syntax error for an unclosed brace",
+        "test/test.regression.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "to throw exception"
+        },
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "1 failing"
+        }
+      ],
+      "notes": "FIX is the merge commit of PR #968. Pre-fix, render does not throw.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "T4",
+      "sets": ["full"],
+      "title": "extended ternary with an undefined condition variable renders nothing",
+      "repository": "https://github.com/twigjs/twig.js.git",
+      "links": ["https://github.com/twigjs/twig.js/pull/914"],
+      "pre_fix_commit": "29addeffb1260d4dbdf998564329e6fa0acf18b3",
+      "fix_commit": "b2e717b1f81af7ac645bd54b12a4290029654dd4",
+      "reproduction_files": ["test/test.expressions.operators.js"],
+      "subject_files": [
+        "src/twig.js",
+        "src/twig.factory.js",
+        "src/twig.core.js",
+        "src/twig.compiler.js",
+        "src/twig.expression.js",
+        "src/twig.filters.js",
+        "src/twig.functions.js",
+        "src/twig.lib.js",
+        "src/twig.loader.ajax.js",
+        "src/twig.loader.fs.js",
+        "src/twig.logic.js",
+        "src/twig.parser.source.js",
+        "src/twig.parser.twig.js",
+        "src/twig.path.js",
+        "src/twig.tests.js",
+        "src/twig.async.js",
+        "src/twig.exports.js",
+        "src/twig.expression.operator.js"
+      ],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--require",
+        "should",
+        "--grep",
+        "should support the extended ternary operator for undefined arguments",
+        "test/test.expressions.operators.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "expected '' to be 'text 2'"
+        }
+      ],
+      "notes": "FIX is the merge commit of PR #914.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "M1",
+      "sets": ["full"],
+      "title": "DKIM header parsing treats the byte 0xA0 as whitespace",
+      "repository": "https://github.com/postalsys/mailauth.git",
+      "links": [
+        "https://github.com/postalsys/mailauth/commit/734db62d09376c631e548f6c8b44a56ba38659c5"
+      ],
+      "pre_fix_commit": "d2616c6bee77cf0cf77fe6ea6743b856696f081e",
+      "fix_commit": "734db62d09376c631e548f6c8b44a56ba38659c5",
+      "reproduction_files": ["test/tools/tools-test.js"],
+      "subject_files": ["lib/tools.js", "lib/parse-dkim-headers.js", "lib/safe-keys.js"],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--grep",
+        "Should start a new header on a line that begins with another whitespace byte",
+        "test/tools/tools-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "expected [ 'from' ] to deeply equal"
+        },
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "1 failing"
+        }
+      ],
+      "notes": "Only the ASCII prefix of the chai message is used, because its tail contains a no-break space.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "M2",
+      "sets": ["full"],
+      "title": "relaxed body canonicalization mishandles a bare carriage return",
+      "repository": "https://github.com/postalsys/mailauth.git",
+      "links": [
+        "https://github.com/postalsys/mailauth/commit/68dfb4262fdae1bedb17019ab8c3c59bc2f4cf8d"
+      ],
+      "pre_fix_commit": "734db62d09376c631e548f6c8b44a56ba38659c5",
+      "fix_commit": "68dfb4262fdae1bedb17019ab8c3c59bc2f4cf8d",
+      "reproduction_files": ["test/dkim/body/relaxed-test.js"],
+      "subject_files": ["lib/dkim/body/relaxed.js", "lib/dkim/mime-structure-start-finder.js"],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--grep",
+        "Should handle a CR at the end of the body as content",
+        "test/dkim/body/relaxed-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "to equal '2+0N6TGjliQoFdJdtrrT2L+rW8/fHATw1dk9Wxv6Tcc='"
+        }
+      ],
+      "notes": "The literal is the expected SHA-256 hash (base64) of the canonicalized body, taken from the test. Fixture reads happen only in other tests that the --grep skips.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "M4",
+      "sets": ["full"],
+      "title": "getAlignment treats a legacy {strict: false} options object as strict",
+      "repository": "https://github.com/postalsys/mailauth.git",
+      "links": [
+        "https://github.com/postalsys/mailauth/commit/2007ab41cccc41b531f3e5ec65899264b6e3441d"
+      ],
+      "pre_fix_commit": "a35929947e154fbdff74d928b10f513f965f9d9b",
+      "fix_commit": "2007ab41cccc41b531f3e5ec65899264b6e3441d",
+      "reproduction_files": ["test/tools/tools-test.js"],
+      "subject_files": ["lib/tools.js", "lib/parse-dkim-headers.js", "lib/safe-keys.js"],
+      "command": [
+        "node",
+        "node_modules/mocha/bin/mocha.js",
+        "--grep",
+        "Should honor the legacy options object instead of treating it as truthy",
+        "test/tools/tools-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "1 failing"
+        }
+      ],
+      "notes": "The literal is the failure count only; the chai message wording was not known before the run.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "N3",
+      "sets": ["reserve"],
+      "title": "addressparser stack overflow on deeply nested groups (GHSA-rcmh-qjqh-p98v)",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "links": [
+        "https://github.com/advisories/GHSA-rcmh-qjqh-p98v",
+        "https://github.com/nodemailer/nodemailer/commit/b61b9c0cfd682b6f647754ca338373b68336a150"
+      ],
+      "pre_fix_commit": "4175e4baf92ffc4e20791a11fc0886025228a2ac",
+      "fix_commit": "b61b9c0cfd682b6f647754ca338373b68336a150",
+      "reproduction_files": ["test/addressparser/addressparser-test.js"],
+      "subject_files": ["lib/addressparser/index.js"],
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=should not crash with extreme nesting depth",
+        "test/addressparser/addressparser-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "Maximum call stack size exceeded"
+        }
+      ],
+      "notes": "Reserve. Pre-fix, each recursion level keeps its token list alive, so the process might exhaust the 512 MB limit before throwing RangeError.",
+      "dependencies": true,
+      "expected_exit_code": 1
+    },
+    {
+      "id": "N6",
+      "sets": ["reserve"],
+      "title": "message/rfc822 attachments use 7bit instead of 8bit transfer encoding",
+      "repository": "https://github.com/nodemailer/nodemailer.git",
+      "links": [
+        "https://github.com/nodemailer/nodemailer/commit/adf86113217b23ff3cd1191af5cd1d360fcc313b"
+      ],
+      "pre_fix_commit": "3d17dbec49ab3e3f0e13e62871e5534be5b99994",
+      "fix_commit": "adf86113217b23ff3cd1191af5cd1d360fcc313b",
+      "reproduction_files": ["test/mail-composer/mail-composer-test.js"],
+      "subject_files": [
+        "lib/mail-composer/index.js",
+        "lib/mime-node/index.js",
+        "lib/mime-node/last-newline.js",
+        "lib/mime-node/le-windows.js",
+        "lib/mime-node/le-unix.js",
+        "lib/mime-funcs/index.js",
+        "lib/mime-funcs/mime-types.js",
+        "lib/shared/index.js",
+        "lib/punycode/index.js",
+        "lib/qp/index.js",
+        "lib/base64/index.js",
+        "lib/addressparser/index.js",
+        "lib/fetch/index.js",
+        "lib/fetch/cookies.js"
+      ],
+      "command": [
+        "node",
+        "--test",
+        "--test-name-pattern=should use 8bit transfer encoding for message",
+        "test/mail-composer/mail-composer-test.js"
+      ],
+      "expectations": [
+        {
+          "stream": "stdout",
+          "mode": "contains",
+          "value": "Expected values to be strictly equal"
+        }
+      ],
+      "notes": "Reserve. lib/fetch/cookies.js is expected to produce redaction findings in comments.",
+      "dependencies": true,
+      "expected_exit_code": 1
     }
   ]
 }
