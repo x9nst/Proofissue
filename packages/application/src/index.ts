@@ -420,6 +420,17 @@ const guidedCapture = async (
     subject_paths: request.subject_paths,
   });
   const view = recorder.list(observation);
+  if (![...view.stdout.lines, ...view.stderr.lines].some((line) => line.selectable)) {
+    return {
+      kind: 'ended',
+      result: recordFailure(
+        new RecorderError(
+          'invalid_request',
+          'The command printed no line that can be recorded as expected output: every listed line was empty, held a redaction marker or a local path, looked like a secret, or was too long. Give an expectation with an --expect option instead.',
+        ),
+      ),
+    };
+  }
   const choice = await select(view);
   if (choice.status === 'cancelled' || choice.line_ids.length === 0) {
     return { kind: 'ended', result: cancelledResult() };

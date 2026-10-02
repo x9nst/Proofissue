@@ -87,7 +87,7 @@ export const validateExpectationRequest = (
   if (stdout.length + stderr.length === 0) {
     throw new RecorderError(
       'invalid_request',
-      'A failing recording needs an expected stdout or stderr literal.',
+      'A failing recording needs an expected stdout or stderr literal. Run record in a terminal without --expect options to choose a line from the command\'s output, or pass --expect-stderr-normalized "<text>" (or another --expect option).',
     );
   }
   if (
@@ -352,7 +352,7 @@ const missingLiteralHint = (
     const stdout = stream.name === 'stdout' ? stream : other;
     const stderr = stream.name === 'stderr' ? stream : other;
     parts.push(
-      `The command printed ${plural(lineCount(stdout.text), 'stdout line')} and ${plural(lineCount(stderr.text), 'stderr line')}; run the command yourself and copy part of its output.`,
+      `The command printed ${plural(lineCount(stdout.text), 'stdout line')} and ${plural(lineCount(stderr.text), 'stderr line')}; run record without --expect options in a terminal to choose one.`,
     );
   }
   if (stream.truncated) {

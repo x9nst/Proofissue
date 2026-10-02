@@ -14,6 +14,7 @@ import {
   type RecordPreviewExpectation,
 } from '@proofissue/application';
 
+import { createLineSelector } from './guided-record.js';
 import type { CliIo, CliRunResult } from './io.js';
 import { escapePresentationText, quoteExpectation } from './presentation.js';
 import { usageError } from './usage.js';
@@ -44,7 +45,11 @@ File roles:
   converted to forward slashes. The command after -- must not contain the project or home
   directory, or, on Windows, a backslash path to a project file: write test/a.mjs instead.
 
-Expected output (give at least one; the value options may be repeated):
+Expected output (the value options may be repeated):
+  Without any of these options, in a terminal and without --yes or --json, the command runs
+  once and you choose the expected lines from a numbered listing of what it printed; pressing
+  Enter takes the suggested line. Under --yes, with --json, or without a terminal, give at
+  least one:
   --expect-stdout, --expect-stderr
       Text that must appear, byte for byte, in the stream.
   --expect-stdout-normalized, --expect-stderr-normalized
@@ -65,7 +70,7 @@ Expected output (give at least one; the value options may be repeated):
       The whole stream must match exactly after the same normalization. Take no value;
       an exact option of either kind is allowed at most once per stream.
 
-At least one path in each role and one expected output are required.
+At least one path in each role is required, and one expected output, given or chosen.
 --dependencies also records package.json and package-lock.json from the project root so the
 locked npm packages can be installed later. The lockfile must use lockfile version 3 and the
 public npm registry. Before replaying such an artifact, run proofissue prepare to download and
@@ -501,7 +506,30 @@ export const runRecordCommand = async (
     };
   };
 
-  const result = await createRecordApplicationService(confirm).record(parsed.request);
+  // Guided selection needs a person at a terminal and no request for machine-readable or
+  // unattended behavior. Under --yes, --json, or without a terminal nothing is ever suggested
+  // or applied: the recorder then asks for an expectation option.
+  const ask = io.ask;
+  const select =
+    parsed.request.expect_stdout.length + parsed.request.expect_stderr.length === 0 &&
+    !parsed.noninteractive_confirmation &&
+    !parsed.json &&
+    io.interactive === true &&
+    ask !== undefined
+      ? createLineSelector({ ask, confirm: io.confirm, write: io.write })
+      : undefined;
+  if (select !== undefined) {
+    io.write(
+      'No expected output was given, so the command will run now (no shell) and you can choose the expected lines from what it prints.\n',
+    );
+  }
+
+  const result = await createRecordApplicationService(
+    confirm,
+    undefined,
+    undefined,
+    select === undefined ? {} : { select_expectations: select },
+  ).record(parsed.request);
   if (parsed.json) io.write(`${JSON.stringify(result)}\n`);
   else if (result.status === 'created')
     io.write(

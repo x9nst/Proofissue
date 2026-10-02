@@ -230,6 +230,27 @@ describe('guided recording', () => {
     expect(select).not.toHaveBeenCalled();
   });
 
+  it('fails with an explanation when the command printed no usable line', async () => {
+    const { output, request, root } = await fixture();
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      'process.stderr.write("\\n\\n");\nprocess.exitCode = 1;\n',
+    );
+    const select = vi.fn(() => Promise.resolve<ExpectationChoice>({ status: 'cancelled' }));
+
+    const result = await createRecordApplicationService(
+      () => Promise.resolve(confirmed),
+      undefined,
+      undefined,
+      { select_expectations: select },
+    ).record(request);
+
+    expect(result.status).toBe('invalid_input');
+    expect(result.errors[0]?.message).toContain('printed no line that can be recorded');
+    expect(select).not.toHaveBeenCalled();
+    expect(await exists(output)).toBe(false);
+  });
+
   it('asks for expectations as before when no selector is given', async () => {
     const { request } = await fixture();
 
