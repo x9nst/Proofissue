@@ -1,0 +1,628 @@
+{
+  "trial_result_version": 1,
+  "case": {
+    "id": "M3",
+    "title": "SPF %{d} macro expands to the sender domain instead of the evaluated domain",
+    "repository": "https://github.com/postalsys/mailauth.git",
+    "links": [
+      "https://github.com/postalsys/mailauth/issues/125",
+      "https://github.com/postalsys/mailauth/pull/126"
+    ],
+    "pre_fix_commit": "dd6bdc22e5ce9e940132d385198f67bf25a5cb66",
+    "fix_commit": "53c45220a1af41febb5b901c251ed4cc66de511e",
+    "dependencies": true,
+    "reproduction_files": ["test/spf/macro-test.js"],
+    "subject_files": ["lib/spf/macro.js"],
+    "command": [
+      "node",
+      "node_modules/mocha/bin/mocha.js",
+      "--grep",
+      "using the currently evaluated domain",
+      "test/spf/macro-test.js"
+    ],
+    "expected_exit_code": 1,
+    "expectations": [
+      {
+        "stream": "stdout",
+        "mode": "contains",
+        "value": "expected 'email.example.com' to equal 'included.example.net'"
+      }
+    ],
+    "sets": ["pilot", "full"],
+    "upstream_license": "MIT"
+  },
+  "environment": {
+    "harness_commit": "3d947aefb4a1c1df407d7748880b62ce1579bb79",
+    "run_url": "https://github.com/x9nst/Proofissue/actions/runs/36974824425",
+    "runner_image": "ubuntu24/20260927.320.1",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel_release": "6.17.0-1022-azure",
+    "cpu_count": 4,
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "memory_total_mb": 15990,
+    "host_node_version": "24.18.0",
+    "host_npm_version": "11.16.0",
+    "host_git_version": "2.55.0",
+    "docker_server_version": "28.0.4",
+    "approved_image": "node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6"
+  },
+  "stages": {
+    "fetch": {
+      "status": "ok",
+      "duration_ms": 493
+    },
+    "files": {
+      "status": "ok",
+      "files": [
+        {
+          "path": "test/spf/macro-test.js",
+          "role": "reproduction",
+          "bytes": 3228,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "lib/spf/macro.js",
+          "role": "subject",
+          "bytes": 4791,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "package.json",
+          "role": "dependency",
+          "bytes": 2525,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "package-lock.json",
+          "role": "dependency",
+          "bytes": 132759,
+          "matches_commit": true,
+          "carriage_returns": 0
+        }
+      ],
+      "unselected_config_files": [".npmrc"]
+    },
+    "host_install": {
+      "status": "ok",
+      "duration_ms": 2546,
+      "exit_code": 0,
+      "timed_out": false,
+      "node_modules": {
+        "files": 4335,
+        "bytes": 49447138,
+        "page_rounded_bytes": 60923904
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "duration_ms": 158,
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "timed_out": false,
+      "expectations_observed": [true],
+      "stdout_bytes": 711,
+      "stderr_bytes": 0
+    },
+    "record": {
+      "status": "created",
+      "duration_ms": 572,
+      "cli_exit_code": 0,
+      "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+      "inspection": {
+        "runtime_version": "24",
+        "files": [
+          {
+            "path": "lib/spf/macro.js",
+            "role": "subject",
+            "bytes": 4791,
+            "sha256": "a3ea325081b880046789d6ae0ec68cd80492f0a7560997ffda7f28957d551e07"
+          },
+          {
+            "path": "package-lock.json",
+            "role": "dependency",
+            "bytes": 132759,
+            "sha256": "63833a218eb2025bea33f9d7a7ac69a8f423348a5500ab4fd6177efc09793394"
+          },
+          {
+            "path": "package.json",
+            "role": "dependency",
+            "bytes": 2525,
+            "sha256": "6acfe608eb8e45cae9474f9e69f3e5feeac56ce7477c29e9adcc966b88c0e998"
+          },
+          {
+            "path": "test/spf/macro-test.js",
+            "role": "reproduction",
+            "bytes": 3228,
+            "sha256": "cc449ed8da6b08e4b405c03c14924cff694de811031c774be02772e7d7b88d10"
+          }
+        ],
+        "expectations": {
+          "exit_code": 1,
+          "stdout_count": 1,
+          "stderr_count": 0,
+          "stdout_expectations": [
+            {
+              "mode": "contains",
+              "normalize": []
+            }
+          ],
+          "stderr_expectations": []
+        },
+        "limits": {
+          "cpus": 1,
+          "memory_mb": 512,
+          "output_bytes_per_stream": 1048576,
+          "processes": 64,
+          "timeout_seconds": 60
+        },
+        "redaction": {
+          "finding_count": 0,
+          "findings": []
+        }
+      }
+    },
+    "prepare": {
+      "status": "ok",
+      "duration_ms": 1504,
+      "cli_exit_code": 0,
+      "preparation": {
+        "packages": 254,
+        "downloaded_tarballs": 234,
+        "downloaded_bytes": 12480169,
+        "reused_tarballs": 0,
+        "skipped_for_platform": 0,
+        "install_script_packages": 0
+      },
+      "errors": [],
+      "warning_codes": []
+    },
+    "install_baseline": {
+      "status": "ok",
+      "record_status": "created",
+      "artifact_digest": "fb637505debcb5d5b4f4018fdb325396d7467b1c17b5899c56e9de88f2a28379",
+      "prepare_duration_ms": 299,
+      "reused_tarballs": 234,
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "fb637505debcb5d5b4f4018fdb325396d7467b1c17b5899c56e9de88f2a28379",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3397,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 4115,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "fb637505debcb5d5b4f4018fdb325396d7467b1c17b5899c56e9de88f2a28379",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3314,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 3791,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "fb637505debcb5d5b4f4018fdb325396d7467b1c17b5899c56e9de88f2a28379",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3280,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 3755,
+          "limit": "none"
+        }
+      ]
+    },
+    "snapshot": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3410,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 712,
+              "total_bytes": 712,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3885,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3475,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 711,
+              "total_bytes": 711,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 3942,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3477,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 711,
+              "total_bytes": 711,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 3949,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3498,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 711,
+              "total_bytes": 711,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 4,
+          "cli_exit_code": 0,
+          "wall_ms": 3965,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3493,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 711,
+              "total_bytes": 711,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 5,
+          "cli_exit_code": 0,
+          "wall_ms": 3998,
+          "limit": "none"
+        }
+      ],
+      "summary": {
+        "total": 5,
+        "reproduced": 5,
+        "not_reproduced": 0,
+        "execution_failed": 0,
+        "invalid_artifact": 0,
+        "unparseable": 0,
+        "consistent": true,
+        "duration_ms": {
+          "min": 3410,
+          "median": 3477,
+          "max": 3498
+        },
+        "limits": {
+          "none": 5,
+          "time": 0,
+          "memory_or_kill": 0,
+          "workspace_space": 0,
+          "install_failed": 0,
+          "output": 0
+        }
+      }
+    },
+    "pre_fix_checkout": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3437,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 711,
+              "total_bytes": 711,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": ["lib/spf/macro.js"],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3904,
+          "limit": "none"
+        }
+      ]
+    },
+    "fix_verification": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "not_reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "162ad4b0d87c7da8b44e66b82998c5f94579f9811bbbf7e9c4d5013715127921",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3469,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 129,
+              "total_bytes": 129,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": [],
+          "difference_kinds": ["exit_code", "stdout_missing"],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": ["lib/spf/macro.js"],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3945,
+          "limit": "none"
+        }
+      ]
+    }
+  },
+  "outcome": {
+    "classification": "confirmed",
+    "stage": "fix_verification",
+    "code": "all_stages_passed",
+    "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+    "additional": []
+  }
+}

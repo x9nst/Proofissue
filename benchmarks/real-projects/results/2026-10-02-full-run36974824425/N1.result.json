@@ -1,0 +1,626 @@
+{
+  "trial_result_version": 1,
+  "case": {
+    "id": "N1",
+    "title": "addressparser joins a quoted local part to the domain",
+    "repository": "https://github.com/nodemailer/nodemailer.git",
+    "links": [
+      "https://github.com/nodemailer/nodemailer/commit/f2096c51b92a69ecfbcc15884c28cb2c2f00b826"
+    ],
+    "pre_fix_commit": "81de9ebaeb84d5dd87a16707fd236d2671cb6cc6",
+    "fix_commit": "f2096c51b92a69ecfbcc15884c28cb2c2f00b826",
+    "dependencies": true,
+    "reproduction_files": ["test/addressparser/addressparser-test.js"],
+    "subject_files": ["lib/addressparser/index.js"],
+    "command": [
+      "node",
+      "--test",
+      "--test-name-pattern=should handle quoted usernames",
+      "test/addressparser/addressparser-test.js"
+    ],
+    "expected_exit_code": 1,
+    "expectations": [
+      {
+        "stream": "stdout",
+        "mode": "contains",
+        "value": "Expected values to be strictly deep-equal"
+      }
+    ],
+    "sets": ["pilot", "full"],
+    "upstream_license": "MIT-0"
+  },
+  "environment": {
+    "harness_commit": "3d947aefb4a1c1df407d7748880b62ce1579bb79",
+    "run_url": "https://github.com/x9nst/Proofissue/actions/runs/36974824425",
+    "runner_image": "ubuntu24/20260927.320.1",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel_release": "6.17.0-1022-azure",
+    "cpu_count": 4,
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "memory_total_mb": 15990,
+    "host_node_version": "24.18.0",
+    "host_npm_version": "11.16.0",
+    "host_git_version": "2.55.0",
+    "docker_server_version": "28.0.4",
+    "approved_image": "node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6"
+  },
+  "stages": {
+    "fetch": {
+      "status": "ok",
+      "duration_ms": 562
+    },
+    "files": {
+      "status": "ok",
+      "files": [
+        {
+          "path": "test/addressparser/addressparser-test.js",
+          "role": "reproduction",
+          "bytes": 9349,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "lib/addressparser/index.js",
+          "role": "subject",
+          "bytes": 9059,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "package.json",
+          "role": "dependency",
+          "bytes": 1348,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "package-lock.json",
+          "role": "dependency",
+          "bytes": 151552,
+          "matches_commit": true,
+          "carriage_returns": 0
+        }
+      ],
+      "unselected_config_files": [".c8rc.json"]
+    },
+    "host_install": {
+      "status": "ok",
+      "duration_ms": 2922,
+      "exit_code": 0,
+      "timed_out": false,
+      "node_modules": {
+        "files": 6863,
+        "bytes": 31012639,
+        "page_rounded_bytes": 51396608
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "duration_ms": 99,
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "timed_out": false,
+      "expectations_observed": [true],
+      "stdout_bytes": 1465,
+      "stderr_bytes": 0
+    },
+    "record": {
+      "status": "created",
+      "duration_ms": 512,
+      "cli_exit_code": 0,
+      "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+      "inspection": {
+        "runtime_version": "24",
+        "files": [
+          {
+            "path": "lib/addressparser/index.js",
+            "role": "subject",
+            "bytes": 9059,
+            "sha256": "501db32c58bb758078b7669b31becea440473f365863f0f9f1390ee3b76d5cc6"
+          },
+          {
+            "path": "package-lock.json",
+            "role": "dependency",
+            "bytes": 151552,
+            "sha256": "d06a40a54e7428ce3ffdc31fb96a2b6c4cfca7cec617ad24a4d1c95bf22c9393"
+          },
+          {
+            "path": "package.json",
+            "role": "dependency",
+            "bytes": 1348,
+            "sha256": "4ac3febfdf5abc5258f23fc032e4496c311bae0c6e2a345384ebbe6b4beab0ac"
+          },
+          {
+            "path": "test/addressparser/addressparser-test.js",
+            "role": "reproduction",
+            "bytes": 9349,
+            "sha256": "7e477fecb6bb72e4372e58e26a55f1fa4ba9cf416a82506d37f79629ead644a7"
+          }
+        ],
+        "expectations": {
+          "exit_code": 1,
+          "stdout_count": 1,
+          "stderr_count": 0,
+          "stdout_expectations": [
+            {
+              "mode": "contains",
+              "normalize": []
+            }
+          ],
+          "stderr_expectations": []
+        },
+        "limits": {
+          "cpus": 1,
+          "memory_mb": 512,
+          "output_bytes_per_stream": 1048576,
+          "processes": 64,
+          "timeout_seconds": 60
+        },
+        "redaction": {
+          "finding_count": 0,
+          "findings": []
+        }
+      }
+    },
+    "prepare": {
+      "status": "ok",
+      "duration_ms": 2493,
+      "cli_exit_code": 0,
+      "preparation": {
+        "packages": 270,
+        "downloaded_tarballs": 264,
+        "downloaded_bytes": 6694148,
+        "reused_tarballs": 0,
+        "skipped_for_platform": 0,
+        "install_script_packages": 1
+      },
+      "errors": [],
+      "warning_codes": ["install_scripts_not_run"]
+    },
+    "install_baseline": {
+      "status": "ok",
+      "record_status": "created",
+      "artifact_digest": "5833f39a1ab4df62cef419586e1027da7efc2657d2512a331f1116421e850afb",
+      "prepare_duration_ms": 290,
+      "reused_tarballs": 264,
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "5833f39a1ab4df62cef419586e1027da7efc2657d2512a331f1116421e850afb",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 4076,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 4647,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "5833f39a1ab4df62cef419586e1027da7efc2657d2512a331f1116421e850afb",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3954,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 4397,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "5833f39a1ab4df62cef419586e1027da7efc2657d2512a331f1116421e850afb",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3946,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 4397,
+          "limit": "none"
+        }
+      ]
+    },
+    "snapshot": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 4101,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 1432,
+              "total_bytes": 1432,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 4574,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 4020,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 1433,
+              "total_bytes": 1433,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 4488,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 4067,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 1432,
+              "total_bytes": 1432,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 4532,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3975,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 1433,
+              "total_bytes": 1433,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 4,
+          "cli_exit_code": 0,
+          "wall_ms": 4414,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3985,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 1433,
+              "total_bytes": 1433,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 5,
+          "cli_exit_code": 0,
+          "wall_ms": 4431,
+          "limit": "none"
+        }
+      ],
+      "summary": {
+        "total": 5,
+        "reproduced": 5,
+        "not_reproduced": 0,
+        "execution_failed": 0,
+        "invalid_artifact": 0,
+        "unparseable": 0,
+        "consistent": true,
+        "duration_ms": {
+          "min": 3975,
+          "median": 4020,
+          "max": 4101
+        },
+        "limits": {
+          "none": 5,
+          "time": 0,
+          "memory_or_kill": 0,
+          "workspace_space": 0,
+          "install_failed": 0,
+          "output": 0
+        }
+      }
+    },
+    "pre_fix_checkout": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3977,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 1433,
+              "total_bytes": 1433,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": ["lib/addressparser/index.js"],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 4415,
+          "limit": "none"
+        }
+      ]
+    },
+    "fix_verification": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "not_reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "45ec5fcf98981af75bfb9ae01df1464726f28196f0958eac31ee70d69568dc2e",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3991,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 215,
+              "total_bytes": 215,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": [],
+          "difference_kinds": ["exit_code", "stdout_missing"],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": ["lib/addressparser/index.js"],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 4440,
+          "limit": "none"
+        }
+      ]
+    }
+  },
+  "outcome": {
+    "classification": "confirmed",
+    "stage": "fix_verification",
+    "code": "all_stages_passed",
+    "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+    "additional": []
+  }
+}
