@@ -34,6 +34,8 @@ import {
   validateExpectationRequest,
 } from './expectations.js';
 import type { RecordOutputExpectation, RecordPathContexts } from './expectations.js';
+import { listObservation } from './observation.js';
+import type { ObservationListing } from './observation.js';
 
 export { findNonPortableArgument } from './arguments.js';
 export type { NonPortableArgument, NonPortableArgumentOptions } from './arguments.js';
@@ -44,6 +46,7 @@ export {
   LISTING_LIMITS,
   listObservation,
   lineId,
+  MAX_GUIDED_SELECTIONS,
   MAX_SELECTABLE_LINE_BYTES,
   parseLineId,
   SUGGESTION_RULES,
@@ -144,6 +147,8 @@ export interface Recorder {
 /** A recorder that can also split a recording, which guided selection needs. */
 export interface GuidedRecorder extends Recorder {
   finalize(observation: RecordObservation, expectations: ExpectationRequest): RecordCapture;
+  /** The normalized lines of the observed output and the suggested line. */
+  list(observation: RecordObservation): ObservationListing;
   observe(request: ObserveRequest): Promise<RecordObservation>;
 }
 
@@ -784,5 +789,6 @@ export const captureRecording = async (
 export const createRecorder = (redactor: Redactor = createRedactor()): GuidedRecorder => ({
   capture: async (request) => await captureRecording(request, redactor),
   finalize: (observation, expectations) => finalizeRecording(observation, expectations, redactor),
+  list: (observation) => listObservation(observation, redactor),
   observe: async (request) => await observeRecording(request, redactor),
 });

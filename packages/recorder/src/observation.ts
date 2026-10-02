@@ -23,6 +23,9 @@ export type ObservedStreamName = 'stderr' | 'stdout';
 /** The most bytes a selectable line may have: the artifact's limit for one expected value. */
 export const MAX_SELECTABLE_LINE_BYTES = 8192;
 
+/** The most lines a reporter may choose in one guided recording, across both streams. */
+export const MAX_GUIDED_SELECTIONS = 16;
+
 /** How many lines of one stream are listed, and which of them when there are more. */
 export const LISTING_LIMITS = Object.freeze({
   first_lines: 50,
