@@ -1,6 +1,6 @@
 # Decision 0002: Dependency Strategy for the Initial Supported Node.js Workflow
 
-**Status:** Accepted on 2026-10-01: option B, with lifecycle scripts out of scope. The items marked *assumed* below were not asked of the maintainer and should be confirmed or changed in review.  
+**Status:** Accepted on 2026-10-01: option B, with lifecycle scripts out of scope. The items marked *assumed* below were confirmed by the maintainer on 2026-10-02, when Milestone 7 was signed off.  
 **Date:** 2026-10-01
 
 ## Context

@@ -34,7 +34,7 @@ Completing the technical prototype does not complete the initial supported workf
 | 4. Locked-down replay and matching | Complete | Milestones 2-3 | Local quality gates and hosted Linux container validation pass; see `docs/milestone-4-evidence.md` |
 | 5. Fix verification | Complete | Milestone 4 | Original and corrected-source end-to-end fixture; see `docs/milestone-5-evidence.md` |
 | 6. GitHub Actions integration | Complete | Milestone 5 | Action, stable outputs, and the Linux fixture workflow pass on a hosted runner; dependency advisory resolved; see `docs/milestone-6-evidence.md` |
-| 7. Initial supported Node.js workflow | In Progress | Milestone 6 | Progressive real-project trials, compatibility suite, and security suite |
+| 7. Initial supported Node.js workflow | Complete | Milestone 6 | Twelve real failures from three repositories confirmed on hosted CI; security, credential-leakage, documentation, and compatibility evidence; signed off by the maintainer on 2026-10-02; see `docs/real-project-evaluation.md` and `docs/milestone-7-evidence.md` |
 | Early maintainer validation track | In Progress | Runs alongside Milestones 1-7 | Task-based artifact, role, replay, and demand research in `docs/product-validation.md` |
 
 ## Early Maintainer Validation Track
@@ -337,9 +337,9 @@ Linux run are recorded in `docs/milestone-6-evidence.md`.
 
 ## Milestone 7 — Initial Supported Node.js Workflow
 
-**Status:** In Progress
+**Status:** Complete
 
-**Current evidence:** decision 0002 steps 1-6 implemented: dependency capture, lockfile validation, prepare (CLI and prepare Action), offline replay; real-project trials (step 7) run, see below. Exact, normalized, and bounded regular-expression output matching implemented (decision 0003, defaults awaiting maintainer sign-off). Real-project trial harness and hosted workflow added; the pilot (N1, T1, M3) was confirmed on hosted CI, and the full set of twelve cases from three repositories (nodemailer, twig.js, mailauth) ran in hosted run 36974824425 with all twelve confirmed and 60 of 60 snapshot replays consistent (see `docs/real-project-evaluation.md`). The numeric thresholds of the first two acceptance criteria are met by that evidence, with caveats listed there; no acceptance box is ticked, because the maintainer decides and the other criteria are tracked separately. The security, credential-leakage, documentation, and fixture-compatibility audit is recorded in `docs/milestone-7-evidence.md`; its container-backed tests passed in hosted run 36980876258 (`Foundation checks`, job `Locked-down replay (Linux)`), with the decisions that audit took by default listed there for the maintainer to confirm.
+**Current evidence:** decision 0002 steps 1-6 implemented: dependency capture, lockfile validation, prepare (CLI and prepare Action), offline replay; real-project trials (step 7) run, see below. Exact, normalized, and bounded regular-expression output matching implemented (decision 0003, accepted 2026-10-02). Real-project trial harness and hosted workflow added; the pilot (N1, T1, M3) was confirmed on hosted CI, and the full set of twelve cases from three repositories (nodemailer, twig.js, mailauth) ran in hosted run 36974824425 with all twelve confirmed and 60 of 60 snapshot replays consistent (see `docs/real-project-evaluation.md`). The numeric thresholds of the first two acceptance criteria are met by that evidence, with caveats listed there. The security, credential-leakage, documentation, and fixture-compatibility audit is recorded in `docs/milestone-7-evidence.md`; its container-backed tests passed in hosted run 36980876258 (`Foundation checks`, job `Locked-down replay (Linux)`), with the decisions that audit took by default listed there. The maintainer reviewed this evidence and signed off Milestone 7 on 2026-10-02, accepting decision 0003 and audit decisions A–F. This completes the initial supported Node.js workflow; it does not complete roadmap Phase 1 (see `MILESTONES.md`), and the early maintainer validation track remains open.
 
 **Target outcome:**
 
@@ -358,12 +358,12 @@ The first documented Node.js workflow is reliable enough to support within its s
 
 **Acceptance criteria:**
 
-- [ ] At least ten real Node.js failures are tested across three external repositories.
-- [ ] At least 90% of supported artifacts replay consistently across repeated runs.
-- [ ] No known credential leakage exists in fixtures or logs.
-- [ ] Path traversal, symbolic-link escape, environment leakage, command injection, oversized input, process exhaustion, timeout, and network tests pass.
-- [ ] Every command documents purpose, syntax, examples, failures, and relevant security behavior.
-- [ ] All supported version 1 fixtures remain compatible.
+- [x] At least ten real Node.js failures are tested across three external repositories.
+- [x] At least 90% of supported artifacts replay consistently across repeated runs.
+- [x] No known credential leakage exists in fixtures or logs.
+- [x] Path traversal, symbolic-link escape, environment leakage, command injection, oversized input, process exhaustion, timeout, and network tests pass.
+- [x] Every command documents purpose, syntax, examples, failures, and relevant security behavior.
+- [x] All supported version 1 fixtures remain compatible.
 
 ## Dependency Order
 
