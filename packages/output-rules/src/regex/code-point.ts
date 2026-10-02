@@ -2,10 +2,11 @@
  * The code point that starts at a UTF-16 index, which must be inside the text. A surrogate pair is
  * one code point; a lone surrogate is its own code point.
  *
- * This is written out instead of calling `String.prototype.codePointAt` because the search is the
- * hot loop of the engine and must give one answer for one input: a development run of this engine
- * on Node.js 24.15 saw `codePointAt` return a wrong lone surrogate for a string it had just read
- * correctly, which no code of ours can cause.
+ * This is written out over `charCodeAt` so the engine's decoding of surrogates is explicit and
+ * tested here, rather than relying on `String.prototype.codePointAt`. During development one
+ * differential-test run on Node.js 24.15 appeared to get a wrong lone surrogate from `codePointAt`;
+ * a standalone loop of two million reads on the same string did not reproduce it, so the cause is
+ * unconfirmed and may have been in the test setup. Either reader gives the same results.
  */
 export const codePointAtIndex = (text: string, index: number): number => {
   const high = text.charCodeAt(index);
