@@ -40,6 +40,23 @@ export type { NonPortableArgument, NonPortableArgumentOptions } from './argument
 export { RecorderError } from './errors.js';
 export type { RecorderErrorCode } from './errors.js';
 export type { RecordOutputExpectation, RecordPathContexts } from './expectations.js';
+export {
+  LISTING_LIMITS,
+  listObservation,
+  lineId,
+  MAX_SELECTABLE_LINE_BYTES,
+  parseLineId,
+  SUGGESTION_RULES,
+} from './observation.js';
+export type {
+  LineSuggestion,
+  ObservationListing,
+  ObservedLine,
+  ObservedStreamName,
+  StreamListing,
+  SuggestionRule,
+  UnselectableReason,
+} from './observation.js';
 
 export const DEFAULT_RECORD_LIMITS: ArtifactLimitsV1 = Object.freeze({
   timeout_seconds: 60,

@@ -18,6 +18,8 @@ import type { OutputPathContext, OutputPathPlatform } from '@proofissue/output-r
 import type { Redactor } from '@proofissue/redactor';
 
 import { RecorderError } from './errors.js';
+import { lineProblem, normalizedLinesOf } from './observation.js';
+import type { UnselectableReason } from './observation.js';
 
 /**
  * One output expectation a reporter asks for.
@@ -30,12 +32,17 @@ import { RecorderError } from './errors.js';
  * - `exact`: the whole stream (redacted, and normalized when `normalized` is true).
  * - `regex`: a pattern in the bounded regular-expression language, which must match the
  *   recording (normalized when `normalized` is true) and is stored as typed.
+ * - `line`: one line of the normalized stream, chosen from a listing of the observed output
+ *   by its 1-based number. It is stored as a normalized `contains` value, taken directly from
+ *   the normalized stream, and refused when the line is empty, long, a redaction marker, a host
+ *   path, or a likely secret.
  */
 export type RecordOutputExpectation =
   | string
   | { readonly mode: 'contains'; readonly normalized: boolean; readonly value: string }
   | { readonly mode: 'exact'; readonly normalized: boolean }
-  | { readonly mode: 'regex'; readonly normalized: boolean; readonly pattern: string };
+  | { readonly mode: 'regex'; readonly normalized: boolean; readonly pattern: string }
+  | { readonly mode: 'line'; readonly line: number };
 
 export const MAX_OUTPUT_VALUE_BYTES = 8192;
 
@@ -94,6 +101,9 @@ export const validateExpectationRequest = (
     throw new RecorderError('invalid_request', 'Expected output literals exceed artifact limits.');
   }
   for (const item of [...stdout, ...stderr]) {
+    if (typeof item !== 'string' && item.mode === 'line' && !Number.isSafeInteger(item.line)) {
+      throw new RecorderError('invalid_request', 'A selected output line number is invalid.');
+    }
     const pattern = patternOf(item);
     const problem = pattern === undefined ? undefined : patternProblem(pattern);
     if (problem !== undefined) {
@@ -268,6 +278,46 @@ const deriveRegex = (
   };
 };
 
+const UNSELECTABLE_MESSAGES: Readonly<Record<UnselectableReason, string>> = {
+  empty: 'it is empty',
+  local_path: 'it contains a local path from this computer',
+  likely_secret: 'it contains a likely secret',
+  redaction_marker: 'it contains redaction marker text, which cannot be matching evidence',
+  too_long: `it is longer than ${String(MAX_OUTPUT_VALUE_BYTES)} bytes`,
+  unchecked: 'it could not be checked for secrets',
+};
+
+/**
+ * Resolves a chosen line number against the normalized stream. The stored value is the
+ * normalized line without its leading whitespace, taken directly from the normalized stream
+ * (it is not normalized again), after the same checks the listing used to mark lines
+ * unselectable. The message never repeats the line.
+ */
+const deriveLine = (
+  stream: RecordedStream,
+  line: number,
+  contexts: RecordPathContexts,
+  redactor: Redactor,
+): ArtifactOutputExpectationV1 => {
+  const lines = normalizedLinesOf(stream.text, contexts);
+  const raw = lines[line - 1];
+  if (raw === undefined) {
+    throw new RecorderError(
+      'invalid_request',
+      `The ${stream.name} has no line ${String(line)} to expect; it printed ${String(lines.length)} lines.`,
+    );
+  }
+  const value = raw.trimStart();
+  const problem = lineProblem(value, contexts, redactor);
+  if (problem !== undefined) {
+    throw new RecorderError(
+      problem === 'likely_secret' ? 'redaction_failed' : 'invalid_request',
+      `${stream.name} line ${String(line)} cannot be expected: ${UNSELECTABLE_MESSAGES[problem]}.`,
+    );
+  }
+  return { mode: 'contains', normalize: [...DEFAULT_OUTPUT_NORMALIZATION], value };
+};
+
 const lineCount = (text: string): number =>
   text === '' ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
 
@@ -385,6 +435,10 @@ export const deriveOutputExpectations = (
         );
       }
       entries.push({ mode: 'contains', value: item });
+      continue;
+    }
+    if (item.mode === 'line') {
+      entries.push(deriveLine(stream, item.line, contexts, redactor));
       continue;
     }
     const normalized = item.normalized;
