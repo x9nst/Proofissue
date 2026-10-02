@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 
@@ -33,6 +33,7 @@ const defaultLimits: ArtifactLimitsV1 = {
 const artifact = (
   source: string,
   limits: ArtifactLimitsV1 = defaultLimits,
+  extraArguments: readonly string[] = [],
 ): ValidatedArtifactV1 => {
   const reproduction = 'reproduction.mjs';
   const subject = 'subject.mjs';
@@ -50,7 +51,11 @@ const artifact = (
       host_architecture: 'x64',
       node_version: '24.18.0',
     },
-    command: { program: 'node', arguments: [reproduction], working_directory: '.' },
+    command: {
+      program: 'node',
+      arguments: [reproduction, ...extraArguments],
+      working_directory: '.',
+    },
     files: [
       {
         path: reproduction,
@@ -343,4 +348,148 @@ integration('real locked-down Docker replay', () => {
     });
     expect(memory.execution.stderr.decoded_text).toBe('proofissue-marker');
   }, 60_000);
+
+  it('passes shell metacharacters in command arguments to node literally', async () => {
+    const hostile = [
+      '$(touch /tmp/pwned-subst)',
+      '`touch /tmp/pwned-tick`',
+      '; touch /tmp/pwned-semi',
+      '&& touch /tmp/pwned-and',
+      '| touch /tmp/pwned-pipe',
+      '${HOME}',
+      '*',
+      '\'"',
+      '--',
+    ];
+    const source = `
+        import * as fs from 'node:fs';
+        const expected = ${JSON.stringify(JSON.stringify(hostile))};
+        const exact = JSON.stringify(process.argv.slice(2)) === expected;
+        const created = fs.readdirSync('/tmp').concat(fs.readdirSync('/workspace'))
+          .filter((name) => name.startsWith('pwned-'));
+        process.stderr.write(exact && created.length === 0 ? 'proofissue-marker' : 'injection:' + exact + ':' + created.join(','));
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({
+      artifact: artifact(source, defaultLimits, hostile),
+      mode: 'snapshot',
+    });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+    expect(result.cleanup.completed).toBe(true);
+  }, 60_000);
+
+  it('keeps the input mount read-only and confines symbolic links the command creates', async () => {
+    const hostRoot = await mkdtemp(path.join(tmpdir(), 'proofissue-host-sentinel-'));
+    const sentinel = path.join(hostRoot, 'secret.txt');
+    await writeFile(sentinel, 'host-only');
+    const source = `
+        import * as fs from 'node:fs';
+        const survived = [];
+        const attempt = (name, action) => {
+          try { action(); survived.push(name); } catch {}
+        };
+        attempt('input-write', () => fs.writeFileSync('/proofissue-input/x', 'x'));
+        fs.symlinkSync('/proofissue-input', '/workspace/in-link');
+        attempt('input-link-write', () => fs.writeFileSync('/workspace/in-link/y', 'y'));
+        fs.symlinkSync(${JSON.stringify(sentinel)}, '/workspace/host-link');
+        attempt('host-link-read', () => fs.readFileSync('/workspace/host-link', 'utf8'));
+        fs.symlinkSync('/etc/passwd', '/workspace/passwd-link');
+        attempt('passwd-append', () => fs.appendFileSync('/workspace/passwd-link', 'x'));
+        process.stderr.write(survived.length === 0 ? 'proofissue-marker' : 'escaped:' + survived.join(','));
+        process.exitCode = 1;
+      `;
+    try {
+      const result = await createDockerRunner().run({
+        artifact: artifact(source),
+        mode: 'snapshot',
+      });
+      expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+      expect(result.cleanup).toMatchObject({ completed: true, residual_resources: [] });
+      expect(await readFile(sentinel, 'utf8')).toBe('host-only');
+      expect(await readdir(hostRoot)).toEqual(['secret.txt']);
+    } finally {
+      await rm(hostRoot, { force: true, recursive: true });
+    }
+  }, 60_000);
+
+  it('bounds the in-memory /tmp at 16 MiB', async () => {
+    const source = `
+        import * as fs from 'node:fs';
+        try { fs.writeFileSync('/tmp/fill', Buffer.alloc(32 * 1024 * 1024)); process.stderr.write('limit-failed'); }
+        catch (error) { process.stderr.write(error.code === 'ENOSPC' ? 'proofissue-marker' : 'unexpected:' + error.code); }
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({ artifact: artifact(source), mode: 'snapshot' });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+  }, 60_000);
+
+  it('blocks the link-local metadata address and the bridge gateway', async () => {
+    const source = `
+        import * as net from 'node:net';
+        const connected = [];
+        const probe = (host) => new Promise((resolve) => {
+          const socket = net.connect({ host, port: 80 });
+          socket.once('connect', () => { connected.push(host); socket.destroy(); resolve(); });
+          socket.once('error', () => { resolve(); });
+          setTimeout(() => { socket.destroy(); resolve(); }, 2000).unref();
+        });
+        await Promise.all([probe('169.254.169.254'), probe('172.17.0.1')]);
+        process.stderr.write(connected.length === 0 ? 'proofissue-marker' : 'connected:' + connected.join(','));
+        process.exitCode = 1;
+      `;
+    const result = await createDockerRunner().run({ artifact: artifact(source), mode: 'snapshot' });
+
+    expect(result.execution.stderr.decoded_text).toBe('proofissue-marker');
+    expect(result.cleanup.completed).toBe(true);
+  }, 60_000);
+
+  it('escalates to a kill when the command ignores SIGTERM at the time limit', async () => {
+    const source = "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);\n";
+    const started = performance.now();
+    let failure: RunnerError | undefined;
+    try {
+      await createDockerRunner().run({
+        artifact: artifact(source, { ...defaultLimits, timeout_seconds: 2 }),
+        mode: 'snapshot',
+      });
+    } catch (error: unknown) {
+      if (error instanceof RunnerError) failure = error;
+    }
+
+    expect(failure).toMatchObject({
+      code: 'timeout',
+      cleanup: { completed: true, residual_resources: [] },
+    });
+    expect(performance.now() - started).toBeLessThan(45_000);
+  }, 120_000);
+
+  it('stops and cleans a replay interrupted through its abort signal', async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, 2000);
+    let failure: RunnerError | undefined;
+    try {
+      await createDockerRunner().run({
+        artifact: artifact('setInterval(() => {}, 1000);\n', {
+          ...defaultLimits,
+          timeout_seconds: 30,
+        }),
+        mode: 'snapshot',
+        signal: controller.signal,
+      });
+    } catch (error: unknown) {
+      if (error instanceof RunnerError) failure = error;
+    } finally {
+      clearTimeout(timer);
+    }
+
+    expect(failure).toMatchObject({
+      code: 'timeout',
+      message: 'Replay was interrupted before it completed.',
+      cleanup: { completed: true, residual_resources: [] },
+    });
+  }, 120_000);
 });
