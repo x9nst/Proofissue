@@ -17,6 +17,8 @@ The workflow `.github/workflows/real-project-trials.yml` has two triggers, both 
 - **Push a branch named `trials/<set>/<label>`**, for example `trials/pilot/run-1`. The set comes from the branch name.
 - **Run it manually** (`workflow_dispatch`) with a set, a comma-separated list of case IDs (which overrides the set), and a snapshot run count.
 
+The manifest defines three sets: `pilot` (N1, T1, M3), `full` (the twelve primary cases, including the pilot cases), and `reserve` (N3, N6, run only if fewer than ten cases of `full` end up valid).
+
 It runs one virtual machine per case, then a summary job. Download the results with the GitHub CLI:
 
 ```bash

@@ -1,0 +1,664 @@
+{
+  "trial_result_version": 1,
+  "case": {
+    "id": "M1",
+    "title": "DKIM header parsing treats the byte 0xA0 as whitespace",
+    "repository": "https://github.com/postalsys/mailauth.git",
+    "links": [
+      "https://github.com/postalsys/mailauth/commit/734db62d09376c631e548f6c8b44a56ba38659c5"
+    ],
+    "pre_fix_commit": "d2616c6bee77cf0cf77fe6ea6743b856696f081e",
+    "fix_commit": "734db62d09376c631e548f6c8b44a56ba38659c5",
+    "dependencies": true,
+    "reproduction_files": ["test/tools/tools-test.js"],
+    "subject_files": ["lib/tools.js", "lib/parse-dkim-headers.js", "lib/safe-keys.js"],
+    "command": [
+      "node",
+      "node_modules/mocha/bin/mocha.js",
+      "--grep",
+      "Should start a new header on a line that begins with another whitespace byte",
+      "test/tools/tools-test.js"
+    ],
+    "expected_exit_code": 1,
+    "expectations": [
+      {
+        "stream": "stdout",
+        "mode": "contains",
+        "value": "expected [ 'from' ] to deeply equal"
+      },
+      {
+        "stream": "stdout",
+        "mode": "contains",
+        "value": "1 failing"
+      }
+    ],
+    "sets": ["full"],
+    "upstream_license": "MIT"
+  },
+  "environment": {
+    "harness_commit": "3d947aefb4a1c1df407d7748880b62ce1579bb79",
+    "run_url": "https://github.com/x9nst/Proofissue/actions/runs/36974824425",
+    "runner_image": "ubuntu24/20260927.320.1",
+    "platform": "linux",
+    "arch": "x64",
+    "kernel_release": "6.17.0-1022-azure",
+    "cpu_count": 4,
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "memory_total_mb": 15990,
+    "host_node_version": "24.18.0",
+    "host_npm_version": "11.16.0",
+    "host_git_version": "2.55.0",
+    "docker_server_version": "28.0.4",
+    "approved_image": "node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6"
+  },
+  "stages": {
+    "fetch": {
+      "status": "ok",
+      "duration_ms": 495
+    },
+    "files": {
+      "status": "ok",
+      "files": [
+        {
+          "path": "test/tools/tools-test.js",
+          "role": "reproduction",
+          "bytes": 24795,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "lib/tools.js",
+          "role": "subject",
+          "bytes": 24378,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "lib/parse-dkim-headers.js",
+          "role": "subject",
+          "bytes": 9563,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "lib/safe-keys.js",
+          "role": "subject",
+          "bytes": 600,
+          "matches_commit": true,
+          "carriage_returns": 0,
+          "missing_at_fix": false
+        },
+        {
+          "path": "package.json",
+          "role": "dependency",
+          "bytes": 2525,
+          "matches_commit": true,
+          "carriage_returns": 0
+        },
+        {
+          "path": "package-lock.json",
+          "role": "dependency",
+          "bytes": 132759,
+          "matches_commit": true,
+          "carriage_returns": 0
+        }
+      ],
+      "unselected_config_files": [".npmrc"]
+    },
+    "host_install": {
+      "status": "ok",
+      "duration_ms": 2492,
+      "exit_code": 0,
+      "timed_out": false,
+      "node_modules": {
+        "files": 4335,
+        "bytes": 49447138,
+        "page_rounded_bytes": 60923904
+      }
+    },
+    "preflight": {
+      "status": "ok",
+      "duration_ms": 228,
+      "exit_code": 1,
+      "expected_exit_code": 1,
+      "timed_out": false,
+      "expectations_observed": [true, true],
+      "stdout_bytes": 925,
+      "stderr_bytes": 0
+    },
+    "record": {
+      "status": "created",
+      "duration_ms": 651,
+      "cli_exit_code": 0,
+      "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+      "inspection": {
+        "runtime_version": "24",
+        "files": [
+          {
+            "path": "lib/parse-dkim-headers.js",
+            "role": "subject",
+            "bytes": 9563,
+            "sha256": "d27307a4d816b8eab638a86c7777a59a2a6696501bc83ece91667f65a095cf0e"
+          },
+          {
+            "path": "lib/safe-keys.js",
+            "role": "subject",
+            "bytes": 600,
+            "sha256": "6020b319335ba27f5fb2cab065247101761807c74d577fd31fb303d8a25f44b9"
+          },
+          {
+            "path": "lib/tools.js",
+            "role": "subject",
+            "bytes": 24378,
+            "sha256": "ffa785efa6f1ccbff67cc2c06232b46e2205a77b5f44b84b59072701c8bc6029"
+          },
+          {
+            "path": "package-lock.json",
+            "role": "dependency",
+            "bytes": 132759,
+            "sha256": "90b4c72d130fd9116727a6b87ceb098bf53de33529303b2760d5940e72bcefc8"
+          },
+          {
+            "path": "package.json",
+            "role": "dependency",
+            "bytes": 2525,
+            "sha256": "bce7013bb7876bf1519365b4c567987ee1b514390a2d15fbba7021ae9052f93b"
+          },
+          {
+            "path": "test/tools/tools-test.js",
+            "role": "reproduction",
+            "bytes": 24795,
+            "sha256": "7753379b9b3cb7d517c9c495a40cea5f6e7191c06d5b921a901356cc2d234d70"
+          }
+        ],
+        "expectations": {
+          "exit_code": 1,
+          "stdout_count": 2,
+          "stderr_count": 0,
+          "stdout_expectations": [
+            {
+              "mode": "contains",
+              "normalize": []
+            },
+            {
+              "mode": "contains",
+              "normalize": []
+            }
+          ],
+          "stderr_expectations": []
+        },
+        "limits": {
+          "cpus": 1,
+          "memory_mb": 512,
+          "output_bytes_per_stream": 1048576,
+          "processes": 64,
+          "timeout_seconds": 60
+        },
+        "redaction": {
+          "finding_count": 0,
+          "findings": []
+        }
+      }
+    },
+    "prepare": {
+      "status": "ok",
+      "duration_ms": 1496,
+      "cli_exit_code": 0,
+      "preparation": {
+        "packages": 254,
+        "downloaded_tarballs": 234,
+        "downloaded_bytes": 12480169,
+        "reused_tarballs": 0,
+        "skipped_for_platform": 0,
+        "install_script_packages": 0
+      },
+      "errors": [],
+      "warning_codes": []
+    },
+    "install_baseline": {
+      "status": "ok",
+      "record_status": "created",
+      "artifact_digest": "2eaf096612ea296c1e1f0403ae34f738bc1623fc1a8b247a7fef61b863a794a1",
+      "prepare_duration_ms": 295,
+      "reused_tarballs": 234,
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "2eaf096612ea296c1e1f0403ae34f738bc1623fc1a8b247a7fef61b863a794a1",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3358,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3966,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "2eaf096612ea296c1e1f0403ae34f738bc1623fc1a8b247a7fef61b863a794a1",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3266,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 3738,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "2eaf096612ea296c1e1f0403ae34f738bc1623fc1a8b247a7fef61b863a794a1",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3286,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 27,
+              "total_bytes": 27,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 3749,
+          "limit": "none"
+        }
+      ]
+    },
+    "snapshot": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3492,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 924,
+              "total_bytes": 924,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3944,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3560,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 924,
+              "total_bytes": 924,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 2,
+          "cli_exit_code": 0,
+          "wall_ms": 4019,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3478,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 924,
+              "total_bytes": 924,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 3,
+          "cli_exit_code": 0,
+          "wall_ms": 3948,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3614,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 924,
+              "total_bytes": 924,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 4,
+          "cli_exit_code": 0,
+          "wall_ms": 4119,
+          "limit": "none"
+        },
+        {
+          "status": "reproduced",
+          "mode": "snapshot",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3536,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 924,
+              "total_bytes": 924,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": [],
+          "cleanup_completed": true,
+          "index": 5,
+          "cli_exit_code": 0,
+          "wall_ms": 3997,
+          "limit": "none"
+        }
+      ],
+      "summary": {
+        "total": 5,
+        "reproduced": 5,
+        "not_reproduced": 0,
+        "execution_failed": 0,
+        "invalid_artifact": 0,
+        "unparseable": 0,
+        "consistent": true,
+        "duration_ms": {
+          "min": 3478,
+          "median": 3536,
+          "max": 3614
+        },
+        "limits": {
+          "none": 5,
+          "time": 0,
+          "memory_or_kill": 0,
+          "workspace_space": 0,
+          "install_failed": 0,
+          "output": 0
+        }
+      }
+    },
+    "pre_fix_checkout": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3519,
+            "exit_code": 1,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 924,
+              "total_bytes": 924,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": ["exit_code", "stdout_contains", "stdout_contains"],
+          "difference_kinds": [],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": ["lib/parse-dkim-headers.js", "lib/safe-keys.js", "lib/tools.js"],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3977,
+          "limit": "none"
+        }
+      ]
+    },
+    "fix_verification": {
+      "status": "ok",
+      "runs": [
+        {
+          "status": "not_reproduced",
+          "mode": "current_checkout",
+          "artifact_digest": "f7a09b0c13a5026c7d71d26c171b5b01f95bfac07586db68c386bd120bd3064f",
+          "image_digest": "sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6",
+          "effective_limits": {
+            "cpus": 1,
+            "memory_mb": 512,
+            "output_bytes_per_stream": 1048576,
+            "processes": 64,
+            "timeout_seconds": 60,
+            "writable_workspace_mb": 256
+          },
+          "execution": {
+            "duration_ms": 3497,
+            "exit_code": 0,
+            "termination_reason": "exited",
+            "stdout": {
+              "retained_bytes": 149,
+              "total_bytes": 149,
+              "truncated": false
+            },
+            "stderr": {
+              "retained_bytes": 0,
+              "total_bytes": 0,
+              "truncated": false
+            }
+          },
+          "evidence_kinds": [],
+          "difference_kinds": ["exit_code", "stdout_missing", "stdout_missing"],
+          "errors": [],
+          "warning_codes": [],
+          "substituted_paths": ["lib/parse-dkim-headers.js", "lib/safe-keys.js", "lib/tools.js"],
+          "cleanup_completed": true,
+          "index": 1,
+          "cli_exit_code": 0,
+          "wall_ms": 3957,
+          "limit": "none"
+        }
+      ]
+    }
+  },
+  "outcome": {
+    "classification": "confirmed",
+    "stage": "fix_verification",
+    "code": "all_stages_passed",
+    "detail": "5 of 5 snapshot runs reproduced the failure consistently; the pre-fix checkout reproduced it and the fixed checkout did not.",
+    "additional": []
+  }
+}
