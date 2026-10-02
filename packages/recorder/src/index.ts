@@ -56,6 +56,8 @@ export type {
   UnselectableReason,
 } from './observation.js';
 
+export { MAX_PROBE_REASONS, probeDependencyFiles } from './dependency-probe.js';
+export type { DependencyProbe } from './dependency-probe.js';
 export { hintForCommand } from './bin-hint.js';
 export type { CommandHint, CommandHintRequest } from './bin-hint.js';
 export { roleOfPath, SUGGESTION_LIMITS, suggestFiles } from './suggest.js';

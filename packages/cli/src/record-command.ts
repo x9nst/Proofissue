@@ -5,6 +5,7 @@ import {
   APPROVED_REPLAY_IMAGE,
   createRecordApplicationService,
   defaultArtifactPath,
+  explainRecordCommand,
   REPLAY_NODE_MAJOR,
   type OutputNormalizationRule,
   type RecordApplicationRequest,
@@ -14,9 +15,11 @@ import {
   type RecordPreviewExpectation,
 } from '@proofissue/application';
 
-import { createLineSelector } from './guided-record.js';
+import { createLineSelector, type GuidedIo } from './guided-record.js';
 import type { CliIo, CliRunResult } from './io.js';
-import { escapePresentationText, quoteExpectation } from './presentation.js';
+import { escapePresentationText, quoteExpectation, quotePathForCommand } from './presentation.js';
+import { prepareRecordRequest } from './record-preparation.js';
+import { DEPENDENCY_WARNING, renderCommandHint } from './record-suggestions.js';
 import { usageError } from './usage.js';
 
 export const RECORD_HELP = `Usage:
@@ -28,7 +31,7 @@ export const RECORD_HELP = `Usage:
     [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
     [--expect-stdout-exact] [--expect-stderr-exact]
     [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
-    [--dependencies] [--yes] [--json] -- node <arguments...>
+    [--dependencies | --no-dependencies] [--yes] [--json] -- node <arguments...>
 
 Defaults:
   --project  The current directory.
@@ -44,6 +47,11 @@ File roles:
   Paths are relative to the project. A leading ./ is removed, and on Windows backslashes are
   converted to forward slashes. The command after -- must not contain the project or home
   directory, or, on Windows, a backslash path to a project file: write test/a.mjs instead.
+  When a role is not given, in a terminal and without --yes or --json, the files the command
+  names and the project files they import (relative ./ and ../ imports only, never node_modules
+  or dot-directories) are shown with the reason for each, and you confirm them or type your own.
+  Under --yes, with --json, or without a terminal, nothing is chosen for you: the suggestions
+  are printed as flags to copy.
 
 Expected output (the value options may be repeated):
   Without any of these options, in a terminal and without --yes or --json, the command runs
@@ -74,7 +82,10 @@ At least one path in each role is required, and one expected output, given or ch
 --dependencies also records package.json and package-lock.json from the project root so the
 locked npm packages can be installed later. The lockfile must use lockfile version 3 and the
 public npm registry. Before replaying such an artifact, run proofissue prepare to download and
-verify the locked packages.
+verify the locked packages. In a terminal, when both files exist and neither --dependencies nor
+--no-dependencies is given, you are asked whether to record them, after seeing the package count
+and whether the lockfile is valid. Under --yes the files are not recorded and the preview warns;
+--no-dependencies records nothing and suppresses both the question and the warning.
 The command runs directly as Node.js arguments; shell syntax is not interpreted.
 Use --yes only for explicit noninteractive approval after reviewing these selections.
 --json (which needs --yes) prints one result line on stdout and the preview on stderr.
@@ -156,7 +167,15 @@ const renderImageSection = (preview: RecordPreview): readonly string[] => [
       ]),
 ];
 
-export const renderRecordPreview = (preview: RecordPreview): string => {
+export interface RecordPreviewOptions {
+  /** A lockfile exists but is not being recorded and the reporter did not decide that. */
+  readonly dependency_warning?: boolean;
+}
+
+export const renderRecordPreview = (
+  preview: RecordPreview,
+  options: RecordPreviewOptions = {},
+): string => {
   const lines = [
     'ProofIssue recording preview',
     '',
@@ -175,6 +194,7 @@ export const renderRecordPreview = (preview: RecordPreview): string => {
     '  Implementation code placed in the first group stays frozen and may hide a real fix.',
     '',
     ...renderDependencySection(preview),
+    ...(options.dependency_warning === true ? [DEPENDENCY_WARNING, ''] : []),
     'Expected failure:',
     `  exit code: ${String(preview.expectations.exit_code)}`,
     ...preview.expectations.stdout.map((item) => describeExpectation('stdout', item)),
@@ -200,8 +220,28 @@ export const renderRecordPreview = (preview: RecordPreview): string => {
 
 export interface ParsedRecordCommand {
   readonly json: boolean;
+  /** `--no-dependencies`: record no dependency files and neither ask nor warn about them. */
+  readonly no_dependencies: boolean;
   readonly noninteractive_confirmation: boolean;
+  /** True when `--output` was not given, so the name may be derived once the files are known. */
+  readonly output_path_defaulted: boolean;
   readonly request: RecordApplicationRequest;
+}
+
+/**
+ * The command after `--` does not start with `node`. It carries the command so the caller can
+ * look for a hint; its message is the usual usage message.
+ */
+export class NonNodeCommandError extends Error {
+  readonly command: readonly string[];
+  readonly project_root: string;
+
+  constructor(command: readonly string[], projectRoot: string) {
+    super('The command after -- must start with node and include at least one argument.');
+    this.name = 'NonNodeCommandError';
+    this.command = command;
+    this.project_root = projectRoot;
+  }
 }
 
 const takeValue = (arguments_: readonly string[], index: number, option: string): string => {
@@ -282,6 +322,7 @@ export const parseRecordArguments = (
   let noninteractive = false;
   let json = false;
   let includeDependencies = false;
+  let noDependencies = false;
   const reproductionPaths: string[] = [];
   const subjectPaths: string[] = [];
   const expectStdout: RecordOutputExpectation[] = [];
@@ -304,6 +345,10 @@ export const parseRecordArguments = (
     }
     if (argument === '--dependencies') {
       includeDependencies = true;
+      continue;
+    }
+    if (argument === '--no-dependencies') {
+      noDependencies = true;
       continue;
     }
     const exact = EXACT_OPTIONS.get(argument ?? '');
@@ -364,12 +409,20 @@ export const parseRecordArguments = (
     }
   }
 
+  if (includeDependencies && noDependencies) {
+    throw new Error('--dependencies and --no-dependencies cannot be combined.');
+  }
+  if (command !== undefined && command.length > 0 && command[0] !== 'node') {
+    throw new NonNodeCommandError(command, projectRoot ?? '.');
+  }
   if (command?.[0] !== 'node' || command.length < 2) {
     throw new Error('The command after -- must start with node and include at least one argument.');
   }
   return {
     json,
+    no_dependencies: noDependencies,
     noninteractive_confirmation: noninteractive,
+    output_path_defaulted: outputPath === undefined,
     request: {
       arguments: command.slice(1),
       environment_image: image ?? APPROVED_REPLAY_IMAGE,
@@ -388,17 +441,7 @@ export const parseRecordArguments = (
 /** Where a prepared dependency store goes in the suggested commands. */
 const SUGGESTED_DEPENDENCY_STORE = '.proofissue-store';
 
-/**
- * Quotes a path for the suggested commands. Plain paths stay plain; others are double-quoted,
- * or single-quoted when they hold a character a shell would still interpret inside double
- * quotes. The text is escaped first, so a control character never reaches the terminal.
- */
-export const quotePathForCommand = (value: string): string => {
-  const escaped = escapePresentationText(value);
-  if (/^[A-Za-z0-9_./:@%+=\\-]+$/u.test(escaped)) return escaped;
-  if (!/["$`!]/u.test(escaped)) return `"${escaped}"`;
-  return `'${escaped.replaceAll("'", "'\\''")}'`;
-};
+export { quotePathForCommand };
 
 export interface RecordSuccess {
   /** Whether the artifact records package.json and package-lock.json. */
@@ -460,6 +503,11 @@ export const runRecordCommand = async (
     io.write(
       usageError('record', error instanceof Error ? error.message : 'Invalid record command.'),
     );
+    if (error instanceof NonNodeCommandError) {
+      // The command is only explained, never rewritten, and nothing has run.
+      const hint = await explainRecordCommand(error.command, error.project_root);
+      if (hint !== undefined) io.write(renderCommandHint(hint));
+    }
     return { exit_code: 2 };
   }
   if (parsed.json && !parsed.noninteractive_confirmation) {
@@ -472,11 +520,50 @@ export const runRecordCommand = async (
     return { exit_code: 2 };
   }
 
+  // A person at a terminal can be asked and shown suggestions; under --yes, --json, or without a
+  // terminal nothing is ever suggested or applied. Needs `ask` too, as guided expectation does.
+  const ask = io.ask;
+  const terminal: GuidedIo | undefined =
+    !parsed.noninteractive_confirmation &&
+    !parsed.json &&
+    io.interactive === true &&
+    ask !== undefined
+      ? { ask, confirm: io.confirm, write: io.write }
+      : undefined;
+
+  const prepared = await prepareRecordRequest({
+    no_dependencies: parsed.no_dependencies,
+    platform: process.platform === 'win32' ? 'win32' : 'posix',
+    request: parsed.request,
+    ...(terminal === undefined ? {} : { terminal }),
+  });
+  if (prepared.status === 'cancelled') {
+    io.write('Recording cancelled; no artifact was written.\n');
+    return { exit_code: 0 };
+  }
+  let request = prepared.request;
+  if (parsed.output_path_defaulted) {
+    // The name follows the first reproduction file, which suggestions may have just chosen.
+    try {
+      request = {
+        ...request,
+        output_path: chooseOutputPath(request.reproduction_paths, nodeRecordEnvironment()),
+      };
+    } catch (error: unknown) {
+      io.write(
+        usageError('record', error instanceof Error ? error.message : 'Invalid record command.'),
+      );
+      return { exit_code: 2 };
+    }
+  }
+
   let hasDependencies = false;
   const confirm = async (preview: RecordPreview): Promise<RecordConfirmation> => {
     hasDependencies = preview.dependencies !== undefined;
     // Under --json the single result line owns stdout, so the preview goes to stderr.
-    (parsed.json ? io.writeError : io.write)?.(renderRecordPreview(preview));
+    (parsed.json ? io.writeError : io.write)?.(
+      renderRecordPreview(preview, { dependency_warning: prepared.dependency_warning }),
+    );
     if (parsed.noninteractive_confirmation) {
       return {
         reproduction_files_confirmed: true,
@@ -509,14 +596,9 @@ export const runRecordCommand = async (
   // Guided selection needs a person at a terminal and no request for machine-readable or
   // unattended behavior. Under --yes, --json, or without a terminal nothing is ever suggested
   // or applied: the recorder then asks for an expectation option.
-  const ask = io.ask;
   const select =
-    parsed.request.expect_stdout.length + parsed.request.expect_stderr.length === 0 &&
-    !parsed.noninteractive_confirmation &&
-    !parsed.json &&
-    io.interactive === true &&
-    ask !== undefined
-      ? createLineSelector({ ask, confirm: io.confirm, write: io.write })
+    request.expect_stdout.length + request.expect_stderr.length === 0 && terminal !== undefined
+      ? createLineSelector(terminal)
       : undefined;
   if (select !== undefined) {
     io.write(
@@ -529,19 +611,28 @@ export const runRecordCommand = async (
     undefined,
     undefined,
     select === undefined ? {} : { select_expectations: select },
-  ).record(parsed.request);
+  ).record(request);
   if (parsed.json) io.write(`${JSON.stringify(result)}\n`);
   else if (result.status === 'created')
     io.write(
       renderRecordSuccess({
         digest: result.artifact_digest ?? '',
         has_dependencies: hasDependencies,
-        output_path: parsed.request.output_path,
+        output_path: request.output_path,
       }),
     );
   else if (result.status === 'cancelled')
     io.write('Recording cancelled; no artifact was written.\n');
   else io.write(renderRecordFailure(result.errors));
+  if (
+    result.status !== 'created' &&
+    result.status !== 'cancelled' &&
+    prepared.copyable_suggestions !== undefined
+  ) {
+    // Suggestions are only ever offered, never applied: here they follow the failure they would
+    // have avoided. Under --json stdout holds the one result line, so they go to stderr.
+    (parsed.json ? io.writeError : io.write)?.(prepared.copyable_suggestions);
+  }
   return {
     exit_code: result.status === 'created' || result.status === 'cancelled' ? 0 : 1,
     result,

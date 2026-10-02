@@ -39,7 +39,7 @@ proofissue record --reproduction <path> --subject <path>
   [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
   [--expect-stdout-exact] [--expect-stderr-exact]
   [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
-  [--dependencies] [--yes] [--json] -- node <arguments...>
+  [--dependencies | --no-dependencies] [--yes] [--json] -- node <arguments...>
 ```
 
 ### Options
@@ -57,6 +57,7 @@ proofissue record --reproduction <path> --subject <path>
 | `--expect-stdout-exact`, `--expect-stderr-exact` | no | A flag, with no value. The whole stream must match exactly. At most one exact option per stream. |
 | `--expect-stdout-exact-normalized`, `--expect-stderr-exact-normalized` | no | A flag, with no value. The whole stream must match exactly after the same normalization. At most one exact option per stream, counting the raw one. |
 | `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Replay such an artifact only after `prepare`. See `dependencies.md`. |
+| `--no-dependencies` | no | Record no dependency files, and neither ask about them nor warn about them. Cannot be combined with `--dependencies`. Without either option, a project that has both `package.json` and `package-lock.json` is asked about in a terminal, and under `--yes` the preview warns that they are not recorded. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
 | `--json` | no | Needs `--yes`. Prints one `RecordOperationResult` line on stdout (`created`, `cancelled`, `invalid_input`, or `execution_failed`, with the artifact digest when created) and sends the preview to stderr. The result never contains output text. Without `--yes` it is a usage error, exit `2`. |
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. No argument may hold the project or home directory, and on Windows none may spell a project file with backslashes (write `test/a.mjs`); both are refused before anything runs. |
