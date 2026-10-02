@@ -10,10 +10,11 @@
 - `milestone-4-evidence.md` records locked-down replay implementation, tests, and the remaining hosted-container evidence.
 - `milestone-5-evidence.md` records declared-path fix verification, security cases, result presentation, and validation evidence.
 - `milestone-6-evidence.md` records the GitHub Action implementation, security analysis, dependency advisory triage, local evidence, and the hosted Linux run that completed the milestone.
+- `milestone-7-evidence.md` records the Milestone 7 security, compatibility, and documentation audit: what each criterion is proven by, which tests run where, and the decisions left to the maintainer.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
 - `decisions/0002-dependency-strategy.md` compares the options for dependency handling in the initial supported Node.js workflow and records the accepted choice: a separate explicit prepare step, then offline replay.
 - `decisions/0003-output-matching-modes.md` proposes exact, normalized, and bounded regular-expression output matching; all of it is implemented with assumed defaults awaiting maintainer sign-off.
-- `real-project-evaluation.md` defines the real-project trial method, the fixed replay budget, the outcome classes, the pilot cases, and where results go. The harness is in `../benchmarks/real-projects`; the three-case pilot has run once and all three cases were confirmed.
+- `real-project-evaluation.md` defines the real-project trial method, the fixed replay budget, the outcome classes, the pilot cases, and where results go. The harness is in `../benchmarks/real-projects`; the three-case pilot was confirmed, and the full set of twelve cases from three repositories ran in hosted run 36974824425 with all twelve confirmed.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.
 - `maintainer-participant-packet.md` is the answer-free participant research packet.
@@ -31,7 +32,7 @@
 - `dependencies.md` describes npm dependency handling for the initial supported workflow and the lockfile validation rules; it grows as each step lands.
 - `recording.md` defines command authorization, file selection, capture, redaction, confirmation, and recording failures.
 - `replay.md` defines static inspection, snapshot replay, current-checkout replay, result states, and failure behavior.
-- `github-action.md` documents Action inputs, outputs, permissions, summaries, failure behavior, and complete workflow examples.
+- `github-action.md` documents the replay and prepare Actions, each with purpose, example, inputs, outputs, failure behavior, summary, and security notes, plus shared permissions.
 
 ## Security
 
