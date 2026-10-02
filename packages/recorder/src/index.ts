@@ -1,16 +1,10 @@
 import { spawn } from 'node:child_process';
-import { constants, lstatSync } from 'node:fs';
-import { lstat, open, realpath } from 'node:fs/promises';
+import { lstatSync } from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
 
-import {
-  ARTIFACT_LIMITS,
-  isArtifactPath,
-  sha256,
-  validateArtifactValue,
-} from '@proofissue/artifact-schema';
+import { ARTIFACT_LIMITS, sha256, validateArtifactValue } from '@proofissue/artifact-schema';
 import type {
   ArtifactFileRoleV1,
   ArtifactFileV1,
@@ -36,6 +30,7 @@ import {
 import type { RecordOutputExpectation, RecordPathContexts } from './expectations.js';
 import { listObservation } from './observation.js';
 import type { ObservationListing } from './observation.js';
+import { prepareProjectRoot, readProjectTextFile } from './safe-files.js';
 
 export { findNonPortableArgument } from './arguments.js';
 export type { NonPortableArgument, NonPortableArgumentOptions } from './arguments.js';
@@ -60,6 +55,9 @@ export type {
   SuggestionRule,
   UnselectableReason,
 } from './observation.js';
+
+export { roleOfPath, SUGGESTION_LIMITS, suggestFiles } from './suggest.js';
+export type { FileSuggestions, SuggestedFile, SuggestionLimit, SuggestRequest } from './suggest.js';
 
 export const DEFAULT_RECORD_LIMITS: ArtifactLimitsV1 = Object.freeze({
   timeout_seconds: 60,
@@ -152,35 +150,6 @@ export interface GuidedRecorder extends Recorder {
   observe(request: ObserveRequest): Promise<RecordObservation>;
 }
 
-const isMissing = (error: unknown): boolean =>
-  typeof error === 'object' && error !== null && 'code' in error && error.code === 'ENOENT';
-
-const prepareProjectRoot = async (requestedRoot: string): Promise<string> => {
-  const absolute = path.resolve(requestedRoot);
-  let stat;
-  try {
-    stat = await lstat(absolute);
-  } catch (error: unknown) {
-    throw new RecorderError(
-      'unsafe_project',
-      isMissing(error)
-        ? 'Selected project does not exist.'
-        : 'Selected project could not be inspected.',
-    );
-  }
-  if (!stat.isDirectory() || stat.isSymbolicLink()) {
-    throw new RecorderError(
-      'unsafe_project',
-      'Selected project must be a directory, not a symbolic link.',
-    );
-  }
-  try {
-    return await realpath(absolute);
-  } catch {
-    throw new RecorderError('unsafe_project', 'Selected project could not be resolved safely.');
-  }
-};
-
 const isExistingProjectFile = (root: string, relative: string): boolean => {
   try {
     return lstatSync(path.join(root, ...relative.split('/'))).isFile();
@@ -189,120 +158,13 @@ const isExistingProjectFile = (root: string, relative: string): boolean => {
   }
 };
 
-// Intermediate directories are not protected by O_NOFOLLOW, so the final location is
-// resolved after the file is open and must still be inside the project root. This mirrors
-// the check the runner applies to current-checkout files.
-const isWithinRoot = (root: string, candidate: string): boolean => {
-  const relative = path.relative(root, candidate);
-  return (
-    relative !== '' &&
-    relative !== '..' &&
-    !relative.startsWith(`..${path.sep}`) &&
-    !path.isAbsolute(relative)
-  );
-};
-
-const assertSafePathComponents = async (root: string, artifactPath: string): Promise<string> => {
-  let current = root;
-  const segments = artifactPath.split('/');
-  for (let index = 0; index < segments.length; index += 1) {
-    const segment = segments[index];
-    if (segment === undefined) throw new RecorderError('unsafe_file', 'Selected path is invalid.');
-    current = path.join(current, segment);
-    let stat;
-    try {
-      stat = await lstat(current);
-    } catch (error: unknown) {
-      throw new RecorderError(
-        'unsafe_file',
-        isMissing(error)
-          ? `Selected file does not exist: ${artifactPath}`
-          : `Selected file could not be inspected: ${artifactPath}`,
-      );
-    }
-    if (stat.isSymbolicLink()) {
-      throw new RecorderError('unsafe_file', `Symbolic links are not collected: ${artifactPath}`);
-    }
-    const isLast = index === segments.length - 1;
-    if ((!isLast && !stat.isDirectory()) || (isLast && !stat.isFile())) {
-      throw new RecorderError(
-        'unsafe_file',
-        `Selected path must resolve to one regular file: ${artifactPath}`,
-      );
-    }
-  }
-  return current;
-};
-
 const readSelectedFile = async (
   root: string,
   artifactPath: string,
   role: ArtifactFileRoleV1,
 ): Promise<ArtifactFileV1> => {
-  if (!isArtifactPath(artifactPath)) {
-    throw new RecorderError(
-      'unsafe_file',
-      `Selected path is not a portable project-relative file path: ${artifactPath}`,
-    );
-  }
-  const absolute = await assertSafePathComponents(root, artifactPath);
-  const initialStat = await lstat(absolute);
-  if (initialStat.size > ARTIFACT_LIMITS.scalar_bytes) {
-    throw new RecorderError(
-      'unsafe_file',
-      `Selected file exceeds the ${String(ARTIFACT_LIMITS.scalar_bytes)} byte limit: ${artifactPath}`,
-    );
-  }
-
-  let handle;
-  try {
-    const noFollow = 'O_NOFOLLOW' in constants ? constants.O_NOFOLLOW : 0;
-    handle = await open(absolute, constants.O_RDONLY | noFollow);
-    const openedStat = await handle.stat();
-    const resolved = await realpath(absolute);
-    if (
-      !isWithinRoot(root, resolved) ||
-      !openedStat.isFile() ||
-      openedStat.size !== initialStat.size ||
-      openedStat.dev !== initialStat.dev ||
-      openedStat.ino !== initialStat.ino ||
-      openedStat.size > ARTIFACT_LIMITS.scalar_bytes
-    ) {
-      throw new RecorderError(
-        'unsafe_file',
-        `Selected file changed or escaped the project while opening: ${artifactPath}`,
-      );
-    }
-    const buffer = Buffer.alloc(openedStat.size + 1);
-    let offset = 0;
-    while (offset < buffer.byteLength) {
-      const { bytesRead } = await handle.read(buffer, offset, buffer.byteLength - offset, offset);
-      if (bytesRead === 0) break;
-      offset += bytesRead;
-    }
-    if (offset !== openedStat.size) {
-      throw new RecorderError(
-        'unsafe_file',
-        `Selected file changed while reading: ${artifactPath}`,
-      );
-    }
-    const bytes = buffer.subarray(0, offset);
-    let content: string;
-    try {
-      content = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
-    } catch {
-      throw new RecorderError('invalid_utf8', `Selected file is not valid UTF-8: ${artifactPath}`);
-    }
-    return { path: artifactPath, role, encoding: 'utf8', content, sha256: sha256(content) };
-  } catch (error: unknown) {
-    if (error instanceof RecorderError) throw error;
-    throw new RecorderError(
-      'unsafe_file',
-      `Selected file could not be read safely: ${artifactPath}`,
-    );
-  } finally {
-    await handle?.close().catch(() => undefined);
-  }
+  const content = await readProjectTextFile(root, artifactPath, ARTIFACT_LIMITS.scalar_bytes);
+  return { path: artifactPath, role, encoding: 'utf8', content, sha256: sha256(content) };
 };
 
 // On Windows, libuv then adds HOMEDRIVE, HOMEPATH, LOGONSERVER, PATH, SYSTEMDRIVE, TEMP,
