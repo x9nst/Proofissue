@@ -251,9 +251,11 @@ describe('output expectation modes', () => {
           }),
         ),
       ),
-    ).toEqual({
+    ).toMatchObject({
       code: 'invalid_request',
-      message: 'An expected stderr literal was not observed in the normalized output.',
+      message: expect.stringContaining(
+        'An expected stderr literal was not observed in the normalized output.',
+      ) as string,
     });
     // The raw text is not a substitute: the stored value is normalized, so this one passes
     // only because normalizing the literal reproduces what the stream normalizes to.
@@ -265,14 +267,112 @@ describe('output expectation modes', () => {
     expect(accepted.artifact.expect.stderr[0]?.value).toBe('took <duration>');
   });
 
+  describe('hints for a literal that was not observed', () => {
+    const missing = async (
+      reproduction: string,
+      expectation: Partial<RecordRequest>,
+    ): Promise<string> => {
+      const root = await project(reproduction);
+      return (await rejection(captureRecording(request(root, expectation)))).message;
+    };
+
+    it('points to the other stream when the literal was printed there', async () => {
+      const message = await missing(
+        "process.stdout.write('visible marker'); process.stderr.write('other'); process.exitCode = 1;\n",
+        { expect_stderr: ['visible marker'] },
+      );
+
+      expect(message).toContain('was not observed in retained output.');
+      expect(message).toContain('It was printed on stdout instead; use --expect-stdout.');
+      const reverse = await missing(
+        "process.stderr.write('visible marker'); process.stdout.write('other'); process.exitCode = 1;\n",
+        { expect_stdout: ['visible marker'] },
+      );
+      expect(reverse).toContain('It was printed on stderr instead; use --expect-stderr.');
+    });
+
+    it('points to a normalized expectation when only normalization makes it match', async () => {
+      const message = await missing(
+        "process.stderr.write('took 5ms\\n'); process.exitCode = 1;\n",
+        { expect_stderr: ['took <duration>'] },
+      );
+
+      expect(message).toContain(
+        'It matches the stderr only after normalization; use --expect-stderr-normalized.',
+      );
+      const other = await missing(
+        "process.stdout.write('took 5ms'); process.stderr.write('x'); process.exitCode = 1;\n",
+        { expect_stderr: [{ mode: 'contains', normalized: true, value: 'took 5ms' }] },
+      );
+      expect(other).toContain('was not observed in the normalized output.');
+      expect(other).toContain(
+        'It appears in the normalized stdout; use --expect-stdout-normalized.',
+      );
+    });
+
+    it('mentions truncation when the stream was truncated', async () => {
+      const root = await project("process.stderr.write('x'.repeat(4096)); process.exitCode = 1;\n");
+
+      const failure = await rejection(
+        captureRecording({
+          ...request(root, { expect_stderr: ['never printed'] }),
+          limits: {
+            timeout_seconds: 60,
+            memory_mb: 512,
+            cpus: 1,
+            processes: 64,
+            output_bytes_per_stream: 1024,
+          },
+        }),
+      );
+
+      expect(failure.message).toContain(
+        'The stderr was truncated at its retained byte limit, so the text may have been cut off.',
+      );
+    });
+
+    it('counts lines when nothing else explains it', async () => {
+      const message = await missing(
+        "process.stdout.write('a\\nb\\n'); process.stderr.write('c'); process.exitCode = 1;\n",
+        { expect_stderr: ['never printed'] },
+      );
+
+      expect(message).toContain('The command printed 2 stdout lines and 1 stderr line;');
+    });
+
+    it('never repeats the literal or output text in the hint', async () => {
+      const literal = 'distinctive-literal-9f3a';
+      const printed = 'distinctive-output-71c2';
+      const messages = await Promise.all([
+        missing(`process.stdout.write('${printed}'); process.exitCode = 1;\n`, {
+          expect_stderr: [literal],
+        }),
+        missing(`process.stdout.write('${printed}'); process.exitCode = 1;\n`, {
+          expect_stderr: [{ mode: 'contains', normalized: true, value: literal }],
+        }),
+        missing(
+          `process.stdout.write('${literal}'); process.stderr.write('${printed}'); process.exitCode = 1;\n`,
+          { expect_stderr: [literal] },
+        ),
+      ]);
+
+      for (const message of messages) {
+        expect(message).not.toContain(literal);
+        expect(message).not.toContain(printed);
+      }
+    });
+  });
+
   it('keeps the original messages for raw literals that were not printed or hold a secret', async () => {
     const root = await project("process.stderr.write('failure marker'); process.exitCode = 1;\n");
 
     expect(
       await rejection(captureRecording(request(root, { expect_stderr: ['never printed'] }))),
-    ).toEqual({
+    ).toMatchObject({
       code: 'invalid_request',
-      message: 'An expected stderr literal was not observed in retained output.',
+      message: expect.stringContaining(
+        'An expected stderr literal was not observed in retained output.',
+      ) as string,
     });
     expect(
       await rejection(

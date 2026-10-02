@@ -119,6 +119,7 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Crafted output slows a normalization rule | Availability | Linear scanners or anchored patterns with no nested repetition; time-budget tests on 1 MiB adversarial inputs | Containment |
 | Normalization joins escape-split text into a secret that is then stored | Recorder | Redaction check on every stored value after normalization; refuse the recording | Rejection |
 | Host paths or the user name leak through an exact or normalized value | Recorder / privacy | Exact path replacement; refuse a stored value that still contains the project or home directory | Rejection |
+| Host paths or the user name leak through a command argument, which is stored as typed | Recorder / privacy | Before the command runs, refuse an argument that holds the project or home directory; on Windows also refuse a backslash path to a project file, which cannot replay on Linux; the message never repeats the argument | Rejection |
 | Host context influences replay classification | Replay | Replay normalizes with only the fixed `/workspace` and `/tmp`; a container test proves the replayed command sees exactly those | Containment |
 | Catastrophic-backtracking pattern | Matcher | A linear-time Pike-VM engine instead of V8 `RegExp`; 1 MiB adversarial time-budget tests | Containment |
 | Pattern that expands into a huge automaton | Artifact validation | Length, repetition, nesting, and compiled-size limits; `semantic_violation` before any execution | Rejection |

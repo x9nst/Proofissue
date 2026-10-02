@@ -64,6 +64,7 @@ describe('buildRecordArguments', () => {
       'second literal',
       '--expect-stdout-exact-normalized',
       '--yes',
+      '--json',
       '--',
       'node',
       '--test',

@@ -1,12 +1,33 @@
 import { RECORD_HELP } from './record-command.js';
+import type { CliCommandName } from './usage.js';
 
-export const CLI_HELP = `Usage:
-  proofissue record [options] -- node <arguments...>
-  proofissue --version
-  proofissue validate <artifact.proofissue> [--json]
-  proofissue inspect <artifact.proofissue> [--json]
-  proofissue prepare <artifact.proofissue> --dependency-store <directory> [--json]
-  proofissue replay <artifact.proofissue> [--against <directory>]
+export const VALIDATE_HELP = `Usage:
+  proofissue validate <artifact> [--json]
+
+Checks an artifact against the version 1 schema and its limits without executing anything.
+Prints valid or invalid_artifact, with each problem; --json prints one result line.
+`;
+
+export const INSPECT_HELP = `Usage:
+  proofissue inspect <artifact> [--json]
+
+Validates an artifact and prints its status. --json prints one line with a summary of the
+runtime, command, files, expectations, limits, and redaction counts; it never includes file
+contents or expected text.
+`;
+
+export const PREPARE_HELP = `Usage:
+  proofissue prepare <artifact> --dependency-store <directory> [--json]
+
+prepare is the only ProofIssue step that makes network requests: it downloads exactly the
+packages the artifact's lockfile names from the public npm registry, checks each against its
+SHA-512 hash, and stores them in the given directory. It never runs the artifact or package
+code. Replay never uses the network; pass the same --dependency-store to replay an artifact
+with dependency files.
+`;
+
+export const REPLAY_HELP = `Usage:
+  proofissue replay <artifact> [--against <directory>]
     [--dependency-store <directory>]
     [--require-status reproduced|not_reproduced] [--json]
 
@@ -15,11 +36,36 @@ uses a locked-down local Docker Engine on x86-64 Linux, and never pulls an image
 Without --against, replay uses every file embedded in the artifact. With --against,
 only declared subject paths are replaced; undeclared additions, removals, and renames
 are not evaluated.
+`;
 
-prepare is the only ProofIssue step that makes network requests: it downloads exactly the
-packages the artifact's lockfile names from the public npm registry, checks each against its
-SHA-512 hash, and stores them in the given directory. It never runs the artifact or package
-code. Replay never uses the network; pass the same --dependency-store to replay an artifact
-with dependency files.
+export { RECORD_HELP };
 
-${RECORD_HELP}`;
+const COMMAND_HELP: Readonly<Record<CliCommandName, string>> = {
+  record: RECORD_HELP,
+  validate: VALIDATE_HELP,
+  inspect: INSPECT_HELP,
+  prepare: PREPARE_HELP,
+  replay: REPLAY_HELP,
+};
+
+/** The help for one command, as printed by `proofissue <command> --help`. */
+export const helpFor = (command: CliCommandName): string => COMMAND_HELP[command];
+
+// Every command's help is part of this text, so the documentation check sees every option.
+export const CLI_HELP = `ProofIssue records a failing Node.js command as a portable artifact and replays it.
+
+Commands:
+  record    Record a failing command as an artifact
+  validate  Check an artifact without running it
+  inspect   Summarize an artifact without running it
+  prepare   Download an artifact's locked npm packages (the only network step)
+  replay    Replay an artifact in a locked-down container
+
+Run "proofissue <command> --help" for one command's options.
+Run "proofissue --version" to print the version.
+
+${RECORD_HELP}
+${VALIDATE_HELP}
+${INSPECT_HELP}
+${PREPARE_HELP}
+${REPLAY_HELP}`;

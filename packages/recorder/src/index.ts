@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { constants } from 'node:fs';
+import { constants, lstatSync } from 'node:fs';
 import { lstat, open, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import process from 'node:process';
@@ -25,6 +25,7 @@ import { BoundedOutputCollector } from '@proofissue/process-output';
 import { createRedactor, RedactionLimitError } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
 
+import { describeNonPortableArgument, findNonPortableArgument } from './arguments.js';
 import { RecorderError } from './errors.js';
 import {
   createRecordPathContexts,
@@ -34,6 +35,8 @@ import {
 } from './expectations.js';
 import type { RecordOutputExpectation } from './expectations.js';
 
+export { findNonPortableArgument } from './arguments.js';
+export type { NonPortableArgument, NonPortableArgumentOptions } from './arguments.js';
 export { RecorderError } from './errors.js';
 export type { RecorderErrorCode } from './errors.js';
 export type { RecordOutputExpectation } from './expectations.js';
@@ -115,6 +118,14 @@ const prepareProjectRoot = async (requestedRoot: string): Promise<string> => {
     return await realpath(absolute);
   } catch {
     throw new RecorderError('unsafe_project', 'Selected project could not be resolved safely.');
+  }
+};
+
+const isExistingProjectFile = (root: string, relative: string): boolean => {
+  try {
+    return lstatSync(path.join(root, ...relative.split('/'))).isFile();
+  } catch {
+    return false;
   }
 };
 
@@ -511,6 +522,25 @@ export const captureRecording = async (
   }
   const root = await prepareProjectRoot(request.project_root);
   const limits = request.limits ?? DEFAULT_RECORD_LIMITS;
+  // The directories this recording can print are known before anything runs, so an argument
+  // that holds one is refused first: it would leak into the artifact and cannot replay.
+  const contexts = await createRecordPathContexts({
+    declared_paths: [
+      ...request.reproduction_paths,
+      ...request.subject_paths,
+      ...(request.include_dependencies === true ? DEPENDENCY_PATHS : []),
+    ],
+    project_root: root,
+    requested_root: request.project_root,
+  });
+  const nonPortable = findNonPortableArgument(request.arguments, {
+    exists: (relative) => isExistingProjectFile(root, relative),
+    host_context: contexts.host,
+    platform: process.platform === 'win32' ? 'win32' : 'posix',
+  });
+  if (nonPortable !== undefined) {
+    throw new RecorderError('invalid_request', describeNonPortableArgument(nonPortable));
+  }
   const selectedFiles = await Promise.all([
     ...request.reproduction_paths.map((filePath) =>
       readSelectedFile(root, filePath, 'reproduction'),
@@ -573,22 +603,19 @@ export const captureRecording = async (
       );
     }
   }
-  const contexts = await createRecordPathContexts({
-    declared_paths: redactedFiles.map((item) => item.file.path),
-    project_root: root,
-    requested_root: request.project_root,
-  });
   const stdoutExpectations = deriveOutputExpectations(
     { name: 'stdout', text: stdout.text, truncated: command.stdout.truncated },
     request.expect_stdout,
     contexts,
     redactor,
+    { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
   );
   const stderrExpectations = deriveOutputExpectations(
     { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
     request.expect_stderr,
     contexts,
     redactor,
+    { name: 'stdout', text: stdout.text, truncated: command.stdout.truncated },
   );
 
   const version = process.versions.node.split('.')[0];

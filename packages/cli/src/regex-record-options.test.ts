@@ -43,6 +43,12 @@ const command = ['--', 'node', 'test/a.mjs'];
 const parse = (...options: readonly string[]) =>
   parseRecordArguments([...required, ...options, ...command]).request;
 
+// The path the reporter chose for the artifact is echoed back as given, in the preview and in the
+// suggested commands; everything else must
+// stay free of host paths.
+const withoutOutputPath = (text: string): string =>
+  text.replace(/^(?:(?:Artifact file|Saved): | {2}proofissue ).*$/gmu, '');
+
 const capture = (): { io: CliIo; output: () => string } => {
   let written = '';
   return {
@@ -188,8 +194,8 @@ describe('record with regex expectations', () => {
       '  normalization: line endings, terminal escape sequences, trailing whitespace, paths (<project>, <tmp>), Node.js version, Node.js internal locations, process IDs, durations',
     );
     expect(output()).toContain('Artifact created.');
-    expect(output()).not.toContain(root);
-    expect(output()).not.toContain(resolved);
+    expect(withoutOutputPath(output())).not.toContain(root);
+    expect(withoutOutputPath(output())).not.toContain(resolved);
 
     const written = await readFile(path.join(root, 'failure.proofissue'), 'utf8');
     expect(written).not.toContain(root);

@@ -6,18 +6,19 @@ Recording creates a minimal, reviewable description of one observed Node.js fail
 
 ## First-Slice Workflow
 
-An illustrative command is:
+An illustrative command, run from the project directory, is:
 
 ```text
 proofissue record \
-  --project . \
-  --output failure.proofissue \
-  --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6 \
   --reproduction test/reproduction.mjs \
   --subject src/calculate.mjs \
   --expect-stderr "Expected 4 from calculate(2)" \
   -- node test/reproduction.mjs
 ```
+
+Three options have defaults. `--project` is the current directory. `--image` is the approved replay image. `--output` is named after the first reproduction file: `reproduction.proofissue.yaml` in the current directory here, with `-2` through `-99` added before the extension when the name is taken. The `.yaml` extension is deliberate: GitHub issues accept `.yaml` attachments and refuse `.proofissue`, and the artifact is YAML. A name you give with `--output` is used exactly as written, and both extensions are valid. The preview shows the file and image that will be used, and warns when the image is not the approved one or when you recorded with a Node.js major other than 24. The defaults are written out in the same command as `--project . --output reproduction.proofissue.yaml --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6`.
+
+After a successful recording the output says where the file is, the first 12 characters of its SHA-256, how to attach it to a GitHub issue, and the commands to replay it. `--json` (with `--yes`) prints one result line instead and sends the preview to stderr, for scripts.
 
 The explicit two-role behavior is fixed by this document. Future terminology changes require new maintainer evidence and normal compatibility review.
 
@@ -88,6 +89,8 @@ Misclassification changes the meaning of fix verification:
 
 ProofIssue may show examples and warnings but does not silently guess or change a role in version 1. The role names used in the CLI and preview passed the task-based maintainer gate as confirmed by the project owner on 2026-07-15.
 
+Selections are project-relative paths with forward slashes. A leading `./` is removed, and on Windows backslashes are converted, so `.\test\a.mjs` is recorded as `test/a.mjs`; the preview shows the stored path.
+
 Version 1 accepts individual file paths only. Directory recursion and glob patterns are deferred because they make minimal collection and review harder.
 
 ## Dependency Files
@@ -99,6 +102,15 @@ Both files must be at the project root and must both exist. The lockfile is chec
 If redaction finds a likely secret in either file, recording stops instead of editing it, because an edited lockfile would no longer match its hashes. A file that is selected as a reproduction or subject file cannot also be a dependency file.
 
 The preview lists the two files, how many packages the lockfile names, and how many of them declare install scripts, which are never run. Package names are not printed. Recording dependencies does not make an artifact replayable yet: preparation and offline installation are not implemented, so replay refuses such an artifact. See `dependencies.md`.
+
+## Command Arguments
+
+The arguments after `node` are stored exactly as given, so they must mean the same thing on the computer that replays them. Before anything runs, the recorder refuses:
+
+- an argument that holds the project directory or the home directory of the person recording, in any spelling the output rules know (native, forward-slash, doubled-backslash, and `file:` URL forms). Stored, it would leak the user name and could not exist elsewhere;
+- on Windows, an argument that spells an existing project file with backslashes. Replay runs on Linux, where `test\a.mjs` is not a path. The message names the forward-slash spelling.
+
+The message gives the argument's position and never repeats the path. Nothing has run when it appears. A relative path such as `test/reproduction.mjs` is always accepted.
 
 ## Output Capture
 
@@ -136,6 +148,8 @@ The artifact never stores a path from your machine for a normalized expectation.
 
 The preview shows each expectation's mode, its rules, and the text that will be stored.
 
+When a literal was not printed, the error explains where it does appear using only facts, never the literal or the output: that it was printed on the other stream, that it matches only after normalization, that the stream was truncated at its retained limit, or otherwise how many lines each stream printed. Every error is printed, not only the first.
+
 Expected literals are copied into the artifact exactly as given. Redaction does not recognize user names, computer names, or paths, so a literal copied from output that contains a home, profile, or temporary path puts the user name into the artifact. Choose the error message itself, not the path around it.
 
 ## Redaction Review
@@ -159,6 +173,7 @@ Recording stops without writing an artifact when:
 - file, output, argument, or aggregate limits are exceeded incompatibly;
 - the command cannot start or has no representable exit result;
 - the recording command exceeds its wall-clock limit or cannot be terminated cleanly;
+- a command argument holds the project or home directory, or, on Windows, spells a project file with backslashes (refused before the command runs);
 - with `--dependencies`, either dependency file is missing, `package.json` is not a JSON object, the lockfile is unsupported, or redaction would alter either file;
 - an exact expectation is requested for a truncated, empty, oversized, or redacted stream, or twice for one stream;
 - a pattern is outside the bounded language, can match without consuming output, or does not match the recording;

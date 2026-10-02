@@ -64,6 +64,7 @@ const buildArguments = (
   ...item.subject_files.flatMap((file) => ['--subject', file]),
   ...expectations,
   '--yes',
+  '--json',
   '--',
   ...command,
 ];

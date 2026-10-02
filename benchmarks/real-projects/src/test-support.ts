@@ -13,6 +13,7 @@ import type {
   BoundedStreamCapture,
   InspectOperationResult,
   PrepareOperationResult,
+  RecordOperationResult,
   ReplayOperationResult,
 } from '@proofissue/contracts';
 
@@ -264,13 +265,29 @@ export const createFakeWorld = (inputs: FakeWorldInputs): FakeWorld => {
       case 'record': {
         const output = argAfter(args, '--output');
         if (output === undefined) return failedOutcome(2, 'Usage: ...');
-        const preview = 'ProofIssue recording preview\n\nRedaction findings: 0\n\n';
         if (options.recordFailure !== undefined) {
-          return failedOutcome(1, `${preview}Recording failed: ${options.recordFailure}\n`);
+          const failure: RecordOperationResult = {
+            result_schema_version: 1,
+            operation: 'record',
+            status: 'invalid_input',
+            warnings: [],
+            errors: [{ code: 'policy_rejection', message: options.recordFailure }],
+          };
+          return failedOutcome(1, `${JSON.stringify(failure)}\n`);
         }
         await mkdir(path.dirname(output), { recursive: true });
-        await writeFile(output, `artifact bytes for ${path.basename(output)}\n`);
-        return okOutcome(`${preview}Artifact created.\n`);
+        const bytes = `artifact bytes for ${path.basename(output)}\n`;
+        await writeFile(output, bytes);
+        const created: RecordOperationResult = {
+          result_schema_version: 1,
+          operation: 'record',
+          status: 'created',
+          artifact_version: 1,
+          artifact_digest: createHash('sha256').update(bytes).digest('hex'),
+          warnings: [],
+          errors: [],
+        };
+        return okOutcome(`${JSON.stringify(created)}\n`);
       }
       case 'inspect': {
         const target = args[0] ?? '';

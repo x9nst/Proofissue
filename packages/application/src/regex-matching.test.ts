@@ -371,7 +371,10 @@ describe('record application service regex expectations', () => {
       { mode: 'regex', normalize: [...DEFAULT_OUTPUT_NORMALIZATION], value: raw`cwd=<project>$` },
       { mode: 'regex', normalize: [...DEFAULT_OUTPUT_NORMALIZATION], value: raw`took <duration>` },
     ]);
-    for (const text of [JSON.stringify(preview), await readFile(fixture.output, 'utf8')]) {
+    for (const text of [
+      JSON.stringify({ ...preview, output_path: undefined }),
+      await readFile(fixture.output, 'utf8'),
+    ]) {
       expect(text).not.toContain(fixture.root);
       expect(text).not.toContain(await realpath(fixture.root));
     }

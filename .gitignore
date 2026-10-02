@@ -19,6 +19,9 @@ coverage/
 *.proofissue
 !examples/**/*.proofissue
 !tests/fixtures/**/*.proofissue
+*.proofissue.yaml
+!examples/**/*.proofissue.yaml
+!tests/fixtures/**/*.proofissue.yaml
 
 npm-debug.log*
 yarn-debug.log*

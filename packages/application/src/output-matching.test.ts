@@ -432,7 +432,10 @@ describe('record application service output expectations', () => {
       { mode: 'contains', normalize: [...DEFAULT_OUTPUT_NORMALIZATION], value: 'took <duration>' },
       { mode: 'contains', normalize: [], value: 'took' },
     ]);
-    for (const text of [JSON.stringify(preview), await readFile(fixture.output, 'utf8')]) {
+    for (const text of [
+      JSON.stringify({ ...preview, output_path: undefined }),
+      await readFile(fixture.output, 'utf8'),
+    ]) {
       expect(text).not.toContain(fixture.root);
       expect(text).not.toContain(await realpath(fixture.root));
     }

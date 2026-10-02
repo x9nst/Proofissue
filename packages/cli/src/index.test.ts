@@ -1,4 +1,8 @@
-import type { PrepareOperationResult, ReplayOperationResult } from '@proofissue/application';
+import {
+  APPROVED_REPLAY_IMAGE,
+  type PrepareOperationResult,
+  type ReplayOperationResult,
+} from '@proofissue/application';
 import { describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -14,6 +18,12 @@ import {
   runCli,
   type CliIo,
 } from './index.js';
+import {
+  quotePathForCommand,
+  renderRecordFailure,
+  renderRecordSuccess,
+  toPortableProjectPath,
+} from './record-command.js';
 
 describe('CLI application boundary', () => {
   it('exports the adapter factory', () => {
@@ -155,7 +165,9 @@ describe('CLI argument errors', () => {
     expect(result.exit_code).toBe(2);
     expect(result.result).toBeUndefined();
     expect(output()).toContain(message);
-    expect(output()).toContain('Usage:');
+    expect(output()).toMatch(/^Error: /u);
+    expect(output()).toContain('--help');
+    expect(output()).not.toContain('File roles:');
   });
 
   it.each([[[]], [['--help']], [['-h']]])('%j prints usage and exits 0', async (arguments_) => {
@@ -165,6 +177,75 @@ describe('CLI argument errors', () => {
 
     expect(result.exit_code).toBe(0);
     expect(output()).toContain('Usage:');
+  });
+
+  it('prints record help and exits 0 for record --help', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['record', '--help'], io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toBe(RECORD_HELP);
+  });
+
+  it('prints replay help for replay -h', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['replay', '-h'], io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toContain('proofissue replay <artifact>');
+    expect(output()).toContain('--require-status');
+    expect(output()).not.toContain('--expect-stdout');
+  });
+
+  it.each(['validate', 'inspect', 'prepare'])('prints %s help for --help', async (command) => {
+    const { io, output } = capture();
+
+    const result = await runCli([command, 'a.proofissue', '--help'], io);
+
+    expect(result.exit_code).toBe(0);
+    expect(output()).toContain(`proofissue ${command} <artifact>`);
+  });
+
+  it('does not treat --help after -- as a request for help', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['record', '--', 'node', '--help'], io);
+
+    expect(result.exit_code).toBe(1);
+    expect(output()).not.toContain('File roles:');
+  });
+
+  it('prints the error and a help pointer, not the full help, for a malformed command', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['replay', 'a.proofissue', '--bogus'], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output().trimEnd().split('\n')).toEqual([
+      'Error: Unknown option: --bogus',
+      'Usage: proofissue replay <artifact> [options]',
+      'Run "proofissue replay --help" for all options.',
+    ]);
+  });
+
+  it('explains that the command goes after -- when a positional argument comes first', async () => {
+    const { io, output } = capture();
+
+    const result = await runCli(['record', 'node', 'test/a.mjs'], io);
+
+    expect(result.exit_code).toBe(2);
+    expect(output()).toContain('put the command after --');
+    expect(output()).not.toContain('Unknown record option');
+  });
+
+  it('escapes terminal controls in an echoed argument', async () => {
+    const { io, output } = capture();
+
+    await runCli(['record', 'node\u001b[31m'], io);
+
+    expect(output()).not.toContain('\u001b');
   });
 
   it('never calls an application service when arguments are rejected', async () => {
@@ -598,8 +679,93 @@ describe('record CLI', () => {
     expect(parsed.request.arguments).toEqual(['test/a.mjs', 'argument with spaces', '&']);
   });
 
+  const minimalRecordArguments = [
+    '--reproduction',
+    'test/reproduction.mjs',
+    '--subject',
+    'src/calculate.mjs',
+    '--expect-stderr',
+    'Expected 4',
+    '--',
+    'node',
+    'test/reproduction.mjs',
+  ];
+  const nothingExists = { cwd: 'work', exists: () => false };
+
+  it('accepts a record command with only files, an expectation, and the command', () => {
+    const parsed = parseRecordArguments(minimalRecordArguments, nothingExists);
+
+    expect(parsed.request).toMatchObject({
+      environment_image: APPROVED_REPLAY_IMAGE,
+      output_path: 'reproduction.proofissue.yaml',
+      project_root: '.',
+      reproduction_paths: ['test/reproduction.mjs'],
+      subject_paths: ['src/calculate.mjs'],
+    });
+  });
+
+  it('derives the artifact name from the first reproduction file', () => {
+    const parsed = parseRecordArguments(
+      [
+        '--reproduction',
+        'test/second.mjs',
+        '--reproduction',
+        'test/other.mjs',
+        '--subject',
+        'src/a.mjs',
+        '--expect-stderr',
+        'x',
+        '--',
+        'node',
+        'test/second.mjs',
+      ],
+      nothingExists,
+    );
+
+    expect(parsed.request.output_path).toBe('second.proofissue.yaml');
+  });
+
+  it('keeps an explicit --output, image, and project exactly as given', () => {
+    const image = `node@sha256:${'1'.repeat(64)}`;
+    const parsed = parseRecordArguments(
+      [
+        '--output',
+        'mine.proofissue',
+        '--image',
+        image,
+        '--project',
+        'sub',
+        ...minimalRecordArguments,
+      ],
+      nothingExists,
+    );
+
+    expect(parsed.request).toMatchObject({
+      environment_image: image,
+      output_path: 'mine.proofissue',
+      project_root: 'sub',
+    });
+  });
+
+  it('adds a numeric suffix when the default name exists and refuses after -99', () => {
+    const taken = new Set(['reproduction.proofissue.yaml', 'reproduction-2.proofissue.yaml']);
+    const exists = (candidate: string): boolean =>
+      taken.has(path.basename(candidate)) && path.dirname(candidate) === 'work';
+
+    expect(
+      parseRecordArguments(minimalRecordArguments, { cwd: 'work', exists }).request.output_path,
+    ).toBe('reproduction-3.proofissue.yaml');
+
+    expect(() =>
+      parseRecordArguments(minimalRecordArguments, { cwd: 'work', exists: () => true }),
+    ).toThrow('pass --output <file>');
+  });
+
   it('renders grouped roles, consequences, limits, and safe redaction metadata', () => {
     const preview = renderRecordPreview({
+      host_node_major: 24,
+      output_path: 'failure.proofissue.yaml',
+      replay_image: APPROVED_REPLAY_IMAGE,
       command: { program: 'node', arguments: ['test/reproduction.mjs'] },
       reproduction_files: ['test/reproduction.mjs'],
       subject_files: ['src/subject.mjs'],
@@ -670,6 +836,9 @@ describe('record CLI', () => {
       'durations',
     ] as const;
     const preview = renderRecordPreview({
+      host_node_major: 24,
+      output_path: 'failure.proofissue.yaml',
+      replay_image: APPROVED_REPLAY_IMAGE,
       command: { program: 'node', arguments: ['test/reproduction.mjs'] },
       reproduction_files: ['test/reproduction.mjs'],
       subject_files: ['src/subject.mjs'],
@@ -720,6 +889,9 @@ describe('record CLI', () => {
     };
     const hidden = `a${String.fromCharCode(0x202e)}b${String.fromCharCode(0x85)}c${String.fromCharCode(127)}`;
     const preview = renderRecordPreview({
+      host_node_major: 24,
+      output_path: 'failure.proofissue.yaml',
+      replay_image: APPROVED_REPLAY_IMAGE,
       command: { program: 'node', arguments: ['x.mjs'] },
       reproduction_files: ['x.mjs'],
       subject_files: ['y.mjs'],
@@ -873,6 +1045,9 @@ describe('record CLI dependency capture', () => {
     truncated: false,
   };
   const basePreview = {
+    host_node_major: 24,
+    output_path: 'failure.proofissue.yaml',
+    replay_image: APPROVED_REPLAY_IMAGE,
     command: { program: 'node' as const, arguments: ['test/reproduction.mjs'] },
     reproduction_files: ['test/reproduction.mjs'],
     subject_files: ['src/subject.mjs'],
@@ -910,6 +1085,179 @@ describe('record CLI dependency capture', () => {
     '--expect-stderr',
     'failure marker',
   ];
+
+  it('warns in the preview when --image is not the approved image', () => {
+    const approved = renderRecordPreview(basePreview);
+    const other = renderRecordPreview({
+      ...basePreview,
+      replay_image: `node@sha256:${'1'.repeat(64)}`,
+    });
+
+    expect(approved).toContain('Replay image: approved Node.js 24 image');
+    expect(approved).not.toContain('Warning');
+    expect(other).toContain('Warning: this is not the approved replay image');
+    expect(other).toContain(`node@sha256:${'1'.repeat(64)}`);
+  });
+
+  it('warns when recording with a Node.js major other than 24', () => {
+    const rendered = renderRecordPreview({ ...basePreview, host_node_major: 22 });
+
+    expect(rendered).toContain('recorded with Node.js 22, but replay always uses Node.js 24');
+    expect(renderRecordPreview(basePreview)).not.toContain('recorded with Node.js');
+  });
+
+  it('shows where the artifact will be written, escaped', () => {
+    const rendered = renderRecordPreview({
+      ...basePreview,
+      output_path: 'a\u001b[31mb.proofissue',
+    });
+
+    expect(rendered).toContain('Artifact file: a\\u{001b}[31mb.proofissue');
+    expect(rendered).not.toContain('\u001b');
+  });
+
+  it('normalizes ./ and backslash selections before recording', () => {
+    const select = (platform: 'posix' | 'win32', reproduction: string, subject: string) =>
+      parseRecordArguments(
+        [
+          '--reproduction',
+          reproduction,
+          '--subject',
+          subject,
+          '--expect-stderr',
+          'x',
+          '--',
+          'node',
+          'test/a.mjs',
+        ],
+        { cwd: 'work', exists: () => false, platform },
+      ).request;
+
+    const windows = select('win32', '.\\test\\a.mjs', './src\\a.mjs');
+    expect(windows.reproduction_paths).toEqual(['test/a.mjs']);
+    expect(windows.subject_paths).toEqual(['src/a.mjs']);
+
+    const posix = select('posix', './test/a.mjs', '././src/a.mjs');
+    expect(posix.reproduction_paths).toEqual(['test/a.mjs']);
+    expect(posix.subject_paths).toEqual(['src/a.mjs']);
+    // A backslash is part of a name on posix, so it is left for the recorder to refuse.
+    expect(select('posix', 'test\\a.mjs', 'src/a.mjs').reproduction_paths).toEqual(['test\\a.mjs']);
+    expect(toPortableProjectPath('..\\x', 'win32')).toBe('../x');
+  });
+
+  it('refuses an argument holding the project path before running the command', async () => {
+    const root = await mkdtemp(path.join(tmpdir(), 'proofissue-cli-arguments-'));
+    try {
+      await mkdir(path.join(root, 'test'));
+      await mkdir(path.join(root, 'src'));
+      await writeFile(
+        path.join(root, 'test', 'a.mjs'),
+        "import { writeFileSync } from 'node:fs'; writeFileSync('ran.txt', 'x'); console.error('failure'); process.exitCode = 1;\n",
+      );
+      await writeFile(path.join(root, 'src', 'a.mjs'), 'export {};\n');
+      const { io, output } = capture();
+
+      const result = await runCli(
+        [
+          'record',
+          '--project',
+          root,
+          '--output',
+          path.join(root, 'out.proofissue'),
+          '--reproduction',
+          './test/a.mjs',
+          '--subject',
+          'src/a.mjs',
+          '--expect-stderr',
+          'failure',
+          '--yes',
+          '--',
+          'node',
+          'test/a.mjs',
+          path.join(root, 'src', 'a.mjs'),
+        ],
+        io,
+      );
+
+      expect(result.exit_code).toBe(1);
+      expect(output()).toContain('Recording failed: Command argument 2 (after node) holds a path');
+      expect(output()).not.toContain('ProofIssue recording preview');
+      expect(output().replaceAll(root, '')).toBe(output());
+      await expect(stat(path.join(root, 'ran.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(stat(path.join(root, 'out.proofissue'))).rejects.toMatchObject({
+        code: 'ENOENT',
+      });
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
+  });
+
+  it('prints the path, digest prefix, attach guidance, and the replay command after creation', () => {
+    const rendered = renderRecordSuccess({
+      digest: 'abcdef0123456789'.repeat(4),
+      has_dependencies: false,
+      output_path: 'reproduction.proofissue.yaml',
+    });
+
+    expect(rendered.split('\n')).toEqual([
+      'Artifact created.',
+      'Saved: reproduction.proofissue.yaml (sha256 abcdef012345)',
+      'To share it, drag the file into a GitHub issue comment: GitHub accepts the .yaml extension.',
+      'A maintainer replays it on x86-64 Linux with Docker:',
+      '  proofissue replay reproduction.proofissue.yaml',
+      'On x86-64 Linux with Docker you can check it yourself first:',
+      '  proofissue replay reproduction.proofissue.yaml --require-status reproduced',
+      '',
+    ]);
+  });
+
+  it('prints the prepare and replay commands for an artifact with dependencies', () => {
+    const rendered = renderRecordSuccess({
+      digest: 'f'.repeat(64),
+      has_dependencies: true,
+      output_path: 'failure.proofissue.yaml',
+    });
+
+    expect(rendered).toContain(
+      '  proofissue prepare failure.proofissue.yaml --dependency-store .proofissue-store\n',
+    );
+    expect(rendered).toContain(
+      '  proofissue replay failure.proofissue.yaml --dependency-store .proofissue-store\n',
+    );
+    expect(rendered).toContain('--dependency-store .proofissue-store --require-status reproduced');
+  });
+
+  it('says how to attach a .proofissue file, which GitHub refuses', () => {
+    const rendered = renderRecordSuccess({
+      digest: '0'.repeat(64),
+      has_dependencies: false,
+      output_path: 'failure.proofissue',
+    });
+
+    expect(rendered).toContain('GitHub does not accept the .proofissue extension');
+    expect(rendered).toContain('ending in .yaml');
+  });
+
+  it.each([
+    ['plain/name.proofissue.yaml', 'plain/name.proofissue.yaml'],
+    ['my file.proofissue.yaml', '"my file.proofissue.yaml"'],
+    ["it's $HOME.yaml", "'it'\\''s $HOME.yaml'"],
+    ['a\u001bb.yaml', '"a\\u{001b}b.yaml"'],
+  ])('quotes %j for the suggested commands', (value, expected) => {
+    expect(quotePathForCommand(value)).toBe(expected);
+  });
+
+  it('prints every error, escaped, and not only the first', () => {
+    const rendered = renderRecordFailure([
+      { message: 'first problem' },
+      { message: 'second\u001b[31m problem' },
+    ]);
+
+    expect(rendered).toBe(
+      'Recording failed: first problem\nRecording failed: second\\u{001b}[31m problem\n',
+    );
+    expect(renderRecordFailure([])).toBe('Recording failed: unknown error\n');
+  });
 
   it('documents the flag and its limits', () => {
     expect(RECORD_HELP).toContain('--dependencies');

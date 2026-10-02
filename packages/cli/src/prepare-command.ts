@@ -7,9 +7,9 @@ import {
 } from '@proofissue/application';
 
 import { takeStoreValue } from './arguments.js';
-import { CLI_HELP } from './help.js';
 import type { CliIo, CliRunResult } from './io.js';
 import { escapePresentationText } from './presentation.js';
+import { usageError } from './usage.js';
 
 export interface ParsedPrepareCommand {
   readonly artifact_path: string;
@@ -76,7 +76,7 @@ export const runPrepareCommand = async (
     parsed = parsePrepareArguments(arguments_.slice(1));
   } catch (error: unknown) {
     io.write(
-      `${escapePresentationText(error instanceof Error ? error.message : 'Invalid prepare command.')}\n\n${CLI_HELP}`,
+      usageError('prepare', error instanceof Error ? error.message : 'Invalid prepare command.'),
     );
     return { exit_code: 2 };
   }

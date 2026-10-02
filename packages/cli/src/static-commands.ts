@@ -4,9 +4,9 @@ import {
 } from '@proofissue/application';
 
 import { parseArtifactCommand, type ParsedArtifactCommand } from './arguments.js';
-import { CLI_HELP } from './help.js';
 import type { CliIo, CliRunResult } from './io.js';
 import { escapePresentationText } from './presentation.js';
+import { usageError } from './usage.js';
 
 export const runStaticCommand = async (
   arguments_: readonly string[],
@@ -18,7 +18,10 @@ export const runStaticCommand = async (
     parsed = parseArtifactCommand(arguments_.slice(1), false);
   } catch (error: unknown) {
     io.write(
-      `${escapePresentationText(error instanceof Error ? error.message : 'Invalid command.')}\n\n${CLI_HELP}`,
+      usageError(
+        arguments_[0] === 'validate' ? 'validate' : 'inspect',
+        error instanceof Error ? error.message : 'Invalid command.',
+      ),
     );
     return { exit_code: 2 };
   }
