@@ -1,0 +1,248 @@
+name: Release
+
+# A release is created only by pushing a tag named vX.Y.Z. A manual run (workflow_dispatch) is a
+# dry run: it executes the same verify and smoke jobs on the selected ref, and every job that
+# publishes anything is skipped because it requires a push event on a tag.
+#
+# Third-party actions are pinned to full commit SHAs. The comment beside each pin names the tag
+# that was resolved when it was pinned.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify and build the package
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The automatic npm cache is disabled: a release is built from a clean install.
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Require the tag to be on main and to equal the package version
+        if: github.event_name == 'push'
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main \
+            || { echo "::error::Tag $TAG is not an ancestor of origin/main."; exit 1; }
+          package_version=$(node -p "JSON.parse(require('node:fs').readFileSync('release/npm/package.json','utf8')).version")
+          source_version=$(sed -n "s/^export const PROOFISSUE_VERSION = '\(.*\)';$/\1/p" packages/cli/src/version.ts)
+          [ "$TAG" = "v$package_version" ] \
+            || { echo "::error::Tag $TAG does not equal v$package_version from release/npm/package.json."; exit 1; }
+          [ "$TAG" = "v$source_version" ] \
+            || { echo "::error::Tag $TAG does not equal v$source_version from PROOFISSUE_VERSION."; exit 1; }
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Run the full repository check
+        run: npm run check
+
+      - name: Confirm tracked files were not rewritten
+        run: git diff --exit-code
+
+      - name: Pack the CLI and write release files
+        env:
+          IS_RELEASE: ${{ github.event_name == 'push' && 'true' || 'false' }}
+        run: |
+          mkdir "$RUNNER_TEMP/package"
+          npm pack ./release/npm --pack-destination "$RUNNER_TEMP/package"
+          version=$(node -p "JSON.parse(require('node:fs').readFileSync('release/npm/package.json','utf8')).version")
+          cp release/npm/dist/third-party-licenses.txt "$RUNNER_TEMP/package/third-party-licenses.txt"
+          # A real release must have a dated CHANGELOG section for its version. A dry run falls
+          # back to the Unreleased section so the extraction logic is still exercised.
+          if [ "$IS_RELEASE" = "true" ]; then section="$version"; else section="Unreleased"; fi
+          node scripts/release-notes.mjs "$section" > "$RUNNER_TEMP/package/release-notes.md"
+          (cd "$RUNNER_TEMP/package" && sha256sum "proofissue-$version.tgz" > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Check the packed CLI and its reproducibility
+        run: node scripts/check-cli-package.mjs "$RUNNER_TEMP"/package/proofissue-*.tgz --reproducible
+
+      - name: Upload the package and release files
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/package/
+          if-no-files-found: error
+          retention-days: 14
+
+  smoke:
+    name: Smoke test on ${{ matrix.os }}
+    needs: verify
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Download the package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/package
+
+      - name: Verify the downloaded checksum
+        shell: bash
+        run: cd "$RUNNER_TEMP/package" && sha256sum --check SHA256SUMS
+
+      - name: Smoke-test the packed CLI
+        shell: bash
+        env:
+          PROOFISSUE_SMOKE_REPLAY: ${{ runner.os == 'Linux' && '1' || '0' }}
+        run: node scripts/smoke-cli-package.mjs "$RUNNER_TEMP"/package/proofissue-*.tgz
+
+      - name: Confirm replay left no containers
+        if: runner.os == 'Linux' && always()
+        run: test -z "$(docker ps --all --quiet --filter label=org.proofissue.replay=true)"
+
+  github-release:
+    name: Create the GitHub Release
+    needs:
+      - verify
+      - smoke
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - name: Download the package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/package
+
+      - name: Verify the downloaded checksum
+        run: cd "$RUNNER_TEMP/package" && sha256sum --check SHA256SUMS
+
+      - name: Attest build provenance of the package
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: ${{ runner.temp }}/package/proofissue-*.tgz
+
+      - name: Create the prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" \
+            "$RUNNER_TEMP"/package/proofissue-*.tgz \
+            "$RUNNER_TEMP/package/SHA256SUMS" \
+            "$RUNNER_TEMP/package/third-party-licenses.txt" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --prerelease \
+            --title "ProofIssue ${TAG#v} (preview)" \
+            --notes-file "$RUNNER_TEMP/package/release-notes.md"
+
+  # Trusted publishing cannot create a package that does not exist yet, so the first version is
+  # published by hand (docs/release.md). This job stays disabled until the repository variable
+  # NPM_TRUSTED_PUBLISHING is set to true after trusted publishing is configured on npmjs.com.
+  # It uses OpenID Connect only: no npm token or secret exists anywhere in this workflow.
+  npm-publish:
+    name: Publish to npm with trusted publishing
+    needs:
+      - verify
+      - smoke
+      - github-release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.NPM_TRUSTED_PUBLISHING == 'true'
+    environment: npm-publish
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      id-token: write
+    steps:
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Require an npm version that supports trusted publishing
+        run: |
+          required=11.5.1
+          current=$(npm --version)
+          [ "$(printf '%s\n%s\n' "$required" "$current" | sort -V | head -n1)" = "$required" ] \
+            || { echo "::error::npm $current is older than $required."; exit 1; }
+
+      - name: Download the package
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-package
+          path: ${{ runner.temp }}/package
+
+      - name: Verify the downloaded checksum
+        run: cd "$RUNNER_TEMP/package" && sha256sum --check SHA256SUMS
+
+      - name: Publish the verified tarball
+        run: npm publish "$RUNNER_TEMP"/package/proofissue-*.tgz --access public --provenance
+
+  move-major-tag:
+    name: Move the major version tag
+    needs: github-release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      # The tag is moved through the API so no git credential is stored on the runner. It moves
+      # only when this tag is the highest release of its major version, so re-running an old tag
+      # cannot move it backwards.
+      - name: Create or update the major tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          major="${TAG%%.*}"
+          highest=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$major." --paginate --jq '.[].ref' \
+            | sed 's#^refs/tags/##' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -n1)
+          if [ "$highest" != "$TAG" ]; then
+            echo "$TAG is not the highest $major release ($highest); leaving $major in place."
+            exit 0
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$major" > /dev/null 2>&1; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/git/refs/tags/$major" \
+              -f sha="$GITHUB_SHA" -F force=true
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$major" -f sha="$GITHUB_SHA"
+          fi
