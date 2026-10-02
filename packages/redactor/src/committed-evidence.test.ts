@@ -25,10 +25,15 @@ const scannedRoots = [
 const skippedDirectories = new Set(['dist', 'node_modules']);
 const scannedExtensions = new Set(['.proofissue', '.json', '.md', '.yaml', '.yml', '.mjs', '.txt']);
 
-// Likely-secret findings that are known and justified, by file. The one entry is the table row
-// in the security model that describes the password rule itself; it is not a credential.
+// Likely-secret findings that are known and justified, by file. The security-model entry is the
+// table row that describes the password rule itself. The release workflow entries are the two
+// `GH_TOKEN: ${{ github.token }}` lines that give the gh CLI the run's own short-lived token
+// through an expression, so no value is committed. Neither is a credential.
 // Any other finding fails the test: remove the value or build it at run time instead.
-const ALLOWED_FINDINGS: Readonly<Record<string, number>> = { 'docs/security-model.md': 1 };
+const ALLOWED_FINDINGS: Readonly<Record<string, number>> = {
+  '.github/workflows/release.yml': 2,
+  'docs/security-model.md': 1,
+};
 
 const collect = async (entry: string, found: string[]): Promise<void> => {
   const absolute = path.join(repositoryRoot, entry);

@@ -1,8 +1,17 @@
 # Security Policy
 
-## Current Status
+## Supported Versions
 
-ProofIssue is pre-release software. No artifact or CLI compatibility version is supported yet. The dependency-free technical prototype can replay validated artifacts in the documented restricted Linux container and can substitute only explicitly declared subject files from a selected current checkout. It is not yet a supported workflow for typical Node.js projects.
+ProofIssue 0.1.0 is a preview release of the initial supported Node.js workflow. Security fixes are made for the latest 0.1.x release only; older versions are not patched, so upgrade to the latest 0.1.x before reporting. Until the first release is published, only the `main` branch is supported.
+
+| Version | Supported |
+| --- | --- |
+| 0.1.x (latest) | Yes |
+| earlier than 0.1.0 | No |
+
+The preview supports the documented environment only: replay on a local, rootful Docker Engine 27 or newer on x86-64 Linux, npm lockfile version 3 dependencies from the public registry, and pure-JavaScript test runners. See `docs/supported-environments.md`. Roadmap Phase 1 is not complete.
+
+Release artifacts carry a build-provenance attestation, which `gh attestation verify` checks; see `docs/release.md`.
 
 ## Reporting a Vulnerability
 

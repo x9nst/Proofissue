@@ -62,6 +62,7 @@ Commands:
   replay    Replay an artifact in a locked-down container
 
 Run "proofissue <command> --help" for one command's options.
+Run "proofissue --version" to print the version.
 
 ${RECORD_HELP}
 ${VALIDATE_HELP}
