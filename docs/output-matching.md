@@ -225,6 +225,7 @@ Line and column are 1-based and count Unicode code points. Lengths are code poin
 | Part of the text varies in a way normalization does not cover (a port, a timestamp, a random suffix, a count) | `--expect-stderr-regex <pattern>`, for example `listening on port \d+` |
 | The whole output is the failure, and it fits in 8 KiB | `--expect-stderr-exact` (raw) or `--expect-stderr-exact-normalized` |
 | A number is the point of the bug (a count, a version, a size) | A raw literal. Normalization would hide a change to it. |
+| You have not seen the output yet, or do not want to retype it | Give no expectation option in a terminal and choose a line from the listing. It is stored as a normalized literal, so the choice carries the same limits as `--expect-stderr-normalized`: it hides changes to durations, process IDs, and the other normalized values. |
 
 ## Known limitations
 

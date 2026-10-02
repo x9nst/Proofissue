@@ -40,6 +40,8 @@ For automation, add `--yes` only after the project, command, file roles, expecta
 
 If any earlier step fails or the user cancels, no artifact is written.
 
+In guided selection (no `--expect-*` option, in a terminal, without `--yes` or `--json`) the expectations are not known at the start. Steps 1 to 7 run first, the redacted output is listed for the person to choose lines from, and the expectations derived from the chosen lines then feed step 8. The selected files are still read before the command runs, and the preview and confirmations still follow.
+
 ## Authorization Boundary
 
 The user is authorizing the recorder to run the command on the host. The recorder must display or receive that command explicitly. It must not add package installation, shell startup, environment loading, or other hidden commands.
@@ -123,6 +125,8 @@ Raw captured output is held in memory only until redaction. It is not written to
 ## Expectations
 
 The observed exit code becomes the proposed exact expectation. A failing artifact also requires at least one output expectation from stdout or stderr. The user chooses or supplies it; ProofIssue does not guess which error text identifies the failure.
+
+There are two ways to supply it. Pass an `--expect-*` option, which is checked before the command runs. Or, in a terminal with none of those options, let the command run once and choose lines from a numbered listing of its normalized, redacted output; the listing suggests one line by a fixed, documented rule table, and pressing Enter takes that suggestion (see `cli.md`). A suggestion is never applied under `--yes`, with `--json`, or without a terminal: those fail with the options to use instead, because applying it would be a silent guess. A chosen line is stored as a normalized `contains` expectation, taken directly from the normalized stream after the same secret, path, and length checks as a typed one, and it passes the same self-check and confirmations.
 
 Volatile values such as temporary paths, timestamps, ports, and random identifiers make a raw literal unstable. Normalized, exact, and pattern expectations exist for that. `output-matching.md` defines the modes, the eight normalization rules, and the pattern language.
 

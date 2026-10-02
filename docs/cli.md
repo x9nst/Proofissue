@@ -51,7 +51,7 @@ proofissue record --reproduction <path> --subject <path>
 | `--image <repo@sha256:digest>` | no | The replay image. Defaults to the approved Node.js 24 image, the only one replay accepts. Another image is recorded as given, and the preview warns that replay will refuse it. |
 | `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. A leading `./` is removed, and on Windows backslashes become forward slashes, so `.\test\a.mjs` is stored as `test/a.mjs`. |
 | `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. Spelled like `--reproduction`. |
-| `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain, byte for byte. Repeatable. |
+| `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall, unless you choose from the output in a terminal | A literal substring the failing output must contain, byte for byte. Repeatable. |
 | `--expect-stdout-normalized <text>`, `--expect-stderr-normalized <text>` | no | Text as it was printed on your machine. Replay compares after ignoring line endings, terminal escape sequences, trailing whitespace, the project and temporary directories, durations, process IDs, the Node.js version, and Node.js internal line numbers. Repeatable. |
 | `--expect-stdout-regex <pattern>`, `--expect-stderr-regex <pattern>` | no | A pattern that must match somewhere in the stream after the same normalization, written against the normalized text (for example `took <duration>` or `<project>/test/a\.mjs:\d+:\d+`). The language is a bounded subset of JavaScript regular expressions that always runs in linear time: no lookaround or backreferences, at most 1024 characters, and a pattern that can match nothing, such as `a*`, is refused. It is checked before the command runs and must match the recording. Repeatable. |
 | `--expect-stdout-exact`, `--expect-stderr-exact` | no | A flag, with no value. The whole stream must match exactly. At most one exact option per stream. |
@@ -62,6 +62,51 @@ proofissue record --reproduction <path> --subject <path>
 | `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. No argument may hold the project or home directory, and on Windows none may spell a project file with backslashes (write `test/a.mjs`); both are refused before anything runs. |
 
 The expected exit code is whatever the recorded command actually returned. The options that take no value derive the expectation from the recording itself, and the preview shows what will be stored. `output-matching.md` defines each normalization rule and the pattern language, and says how to choose between the options.
+
+#### Choosing the expected lines from the output
+
+Give no `--expect-*` option, in a terminal, without `--yes` or `--json`, and `record` runs the command once and lets you choose the expected lines from what it printed, instead of making you type text before you have seen any output. Nothing is chosen for you except by pressing Enter on a line the listing names as suggested, and the recording preview, the self-check, and the three confirmations still apply to the choice.
+
+The listing shows the normalized output (the same rules as `--expect-stderr-normalized`) with secrets already removed, one numbered line per output line: `o1`, `o2`, ... for stdout and `e1`, `e2`, ... for stderr. The ids are line numbers in the normalized stream, and stderr is printed last, nearest the prompt. Each line has its leading whitespace removed, is escaped so that terminal and bidirectional control characters are shown as `\u{...}` text, and is cut at 200 characters on screen (the preview shows the stored value in full). A stream of more than 200 lines shows its first 50 and last 150 lines and says how many were not shown. These lines are marked `[not selectable: <reason>]` and cannot be chosen: an empty line, a line that holds a redaction marker, a line that still holds a path from this computer or looks like a secret (these two are not echoed), and a line longer than 8192 bytes.
+
+The prompt is `Enter line ids separated by spaces (e.g. e3 o12), or press Enter to use the suggested line e3:`. Up to 16 ids are accepted. A chosen line is stored as a `contains` expectation with all eight normalization rules, exactly as the listing showed it. The suggestion comes from this fixed table, tried in this order; within one rule stderr is searched before stdout, and lines in order, among the listed selectable lines:
+
+| Order | Rule name | A line matches when, ignoring leading whitespace |
+| --- | --- | --- |
+| 1 | `assertion_error` | it contains the word `AssertionError` |
+| 2 | `named_error` | it starts with an error name and a message, such as `TypeError: ...` or `Error [ERR_X]: ...` (optionally after `Uncaught `) |
+| 3 | `expected_line` | it starts with the word `Expected` |
+| 4 | `expected_to` | it contains the word `expected`, and later the word `to` |
+| 5 | `tap_not_ok` | it starts with `not ok ` and a number |
+| 6 | `failing_count` | it is a number followed by ` failing` |
+
+When no line matches, there is no suggestion and Enter is not accepted. A command that exited `0` first asks `The command exited 0; it did not fail. Record it anyway? [y/N]`. Three unusable answers, or ending the input, cancel the recording with exit `0` and write nothing. If no listed line can be chosen, the recording fails and says to give an `--expect` option.
+
+A terminal session for the example, recorded by running the built CLI through a test harness with the answers shown after each prompt (the harness answers `y` to the three confirmations, and the preview is shortened here):
+
+```text
+No expected output was given, so the command will run now (no shell) and you can choose the expected lines from what it prints.
+The command exited with code 1. What it printed, normalized and with secrets removed:
+
+stdout (0 lines):
+  (nothing printed)
+
+stderr (1 line):
+  e1  Expected 4 from calculate(2)
+Suggested: e1, a line that starts with "Expected".
+Enter line ids separated by spaces (e.g. e3 o12), or press Enter to use the suggested line e1: <Enter>
+ProofIssue recording preview
+...
+Expected failure:
+  exit code: 1
+  stderr contains after normalization: "Expected 4 from calculate(2)"
+  normalization: line endings, terminal escape sequences, trailing whitespace, paths (<project>, <tmp>), Node.js version, Node.js internal locations, process IDs, durations
+...
+Artifact created.
+Saved: reproduction.proofissue.yaml (sha256 e5cc43a45925)
+```
+
+Under `--yes`, with `--json`, or when standard input or output is not a terminal, nothing is ever suggested or applied, and a recording with no expectation fails before the command runs (see Failure behavior).
 
 ### Example
 
@@ -181,7 +226,9 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 ### Failure behavior
 
 - Malformed arguments exit `2` and print the error, a one-line synopsis, and a pointer to `record --help`: an unknown option, a positional argument before `--` (the error says to put the command after `--`), a command that does not start with `node` and have an argument, `--json` without `--yes`, an exact option given twice for the same stream (a raw and a normalized exact option for one stream count as twice), or a default artifact name whose `-2` through `-99` variants all exist.
-- A request with no `--reproduction` path, no `--subject` path, or no expectation exits `1` and writes no artifact.
+- A request with no `--reproduction` path, no `--subject` path, or no expectation exits `1` and writes no artifact. With no `--expect-*` option under `--yes`, with `--json`, or without a terminal, the command does not run and the error explains both ways forward: `Recording failed: A failing recording needs an expected stdout or stderr literal. Run record in a terminal without --expect options to choose a line from the command's output, or pass --expect-stderr-normalized "<text>" (or another --expect option).`
+- In guided selection, declining a command that exited `0`, three unusable answers, or ended input exit `0` and write nothing; a command whose output has no line that can be chosen exits `1`.
+- When a literal you gave was not printed and the message cannot say where the text does appear, it suggests running `record` without `--expect` options in a terminal to choose a line.
 - An expected output literal that the command did not actually print, within the retained output, exits `1` and writes no artifact. A normalized literal must appear in the normalized output. The message says where the text does appear, without repeating it: that it was printed on the other stream (use `--expect-stdout` or `--expect-stderr`), that it matches only after normalization (use the `-normalized` option), that the stream was truncated, and otherwise how many lines each stream printed. Every error is printed, not only the first.
 - A command argument that holds the project or home directory exits `1` before the command runs, and so does, on Windows, an argument that spells an existing project file with backslashes. The message gives the argument's position and, for a backslash path, the forward-slash spelling to use; it never repeats a local path.
 - A pattern outside the bounded language (lookaround, a backreference, an unknown escape, an unbalanced bracket, a pattern beyond a limit, or one that can match without consuming output) exits `1` before the command runs, and the message names the feature and its position without repeating the pattern. A pattern that does not match the normalized recording exits `1` and writes no artifact.
@@ -199,6 +246,8 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 Recording is not sandboxed. The command runs on your machine with your user's files, processes, and network access; only its wall-clock time and the output ProofIssue retains are bounded, and the whole process tree is ended when the time limit is reached. Record only commands you would run in that shell anyway, and replay the artifact later in the locked-down container. Expected values and patterns are checked for likely secrets, and a value that holds one is refused without being repeated.
 
 You are authorizing the recorder to run the command on your machine, so read the preview before confirming. Secrets are redacted before the artifact is written, but redaction is rule-based and not a guarantee; see `security-model.md`. Only the files you select are collected. Command output reaches the artifact only through your expected literals, which redaction does not check for user names or paths, so leave absolute paths out of them. See `recording.md` for the full sequence.
+
+Guided selection prints what the command printed, so that text is untrusted: a command can print terminal control sequences, bidirectional text controls, or text shaped like another listed line or a prompt. Every listed line is escaped and cut before it reaches the terminal, the output shown is already redacted, and a line that holds a redaction marker, a path from this computer, or a likely secret cannot be chosen. The output is never placed in a result, a log, or the artifact, except for the lines you choose, which the preview shows in full before you confirm.
 
 ## `validate`
 
