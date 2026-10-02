@@ -1,0 +1,64 @@
+name: Package smoke test
+
+on:
+  pull_request:
+  push:
+
+permissions:
+  contents: read
+
+jobs:
+  package-smoke:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2025
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # setup-node enables the npm cache automatically when package.json has a packageManager
+      # field. The packed CLI is tested without any cache.
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack the CLI
+        shell: bash
+        run: |
+          mkdir "$RUNNER_TEMP/package"
+          npm pack ./release/npm --pack-destination "$RUNNER_TEMP/package"
+          ls -l "$RUNNER_TEMP/package"
+
+      - name: Check the packed CLI and its reproducibility
+        shell: bash
+        run: node scripts/check-cli-package.mjs "$RUNNER_TEMP"/package/proofissue-*.tgz --reproducible
+
+      - name: Smoke-test the packed CLI
+        shell: bash
+        env:
+          PROOFISSUE_SMOKE_REPLAY: ${{ runner.os == 'Linux' && '1' || '0' }}
+        run: node scripts/smoke-cli-package.mjs "$RUNNER_TEMP"/package/proofissue-*.tgz
+
+      - name: Confirm replay left no containers
+        if: runner.os == 'Linux' && always()
+        run: test -z "$(docker ps --all --quiet --filter label=org.proofissue.replay=true)"
+
+      - name: Confirm tracked files were not rewritten
+        run: git diff --exit-code

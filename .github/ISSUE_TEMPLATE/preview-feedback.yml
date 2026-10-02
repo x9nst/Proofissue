@@ -1,0 +1,58 @@
+name: Preview feedback
+description: Tell us how trying the ProofIssue preview went
+title: 'feedback: '
+labels:
+  - feedback
+body:
+  - type: markdown
+    attributes:
+      value: Thank you for trying the preview. Do not include credentials, private artifacts, or security vulnerabilities. Use private security reporting for sensitive issues.
+  - type: input
+    id: version
+    attributes:
+      label: ProofIssue version
+      description: The output of `proofissue --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: What did you try to do?
+      description: For example, record a failing test from your project, replay an artifact from a bug report, or verify a fix.
+    validations:
+      required: true
+  - type: textarea
+    id: stuck
+    attributes:
+      label: Where did you get stuck?
+      description: Name the step, the message you saw, and what you expected instead. Remove usernames and local paths.
+    validations:
+      required: true
+  - type: input
+    id: time
+    attributes:
+      label: How long did it take to produce your first artifact?
+      description: An approximate time, or "did not get one".
+    validations:
+      required: true
+  - type: dropdown
+    id: again
+    attributes:
+      label: Would you use it again?
+      options:
+        - Yes
+        - Maybe, with changes
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else?
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, private data, usernames, and local absolute paths.
+          required: true

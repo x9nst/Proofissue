@@ -39,6 +39,7 @@
 - `security-model.md` defines protected assets, trust boundaries, replay isolation, image policy, resource policy, and security claims.
 - `threat-model.md` maps concrete malicious inputs and behaviors to rejection, containment, or detection requirements.
 - `testing-strategy.md` defines property-based testing, fuzzing, cleanup fault injection, hostile-output testing, compatibility evidence, and repeatability measurement.
+- `release.md` is the maintainer runbook for tagging, attesting, and publishing the npm package and GitHub Release.
 - `supported-environments.md` defines development, recording, replay, engine, host, and CI support claims.
 - `license-decision.md` records the owner's Apache License 2.0 decision and contribution terms.
 - `PRE_MILESTONE_2_READINESS_REVIEW.md` records the readiness audit and the implementation response.
