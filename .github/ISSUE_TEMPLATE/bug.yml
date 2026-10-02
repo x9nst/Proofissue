@@ -23,7 +23,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: ProofIssue version or commit
+      label: ProofIssue version
+      description: The output of `proofissue --version`, or the commit if you built from source.
     validations:
       required: true
   - type: textarea
