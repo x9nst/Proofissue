@@ -10,6 +10,8 @@ export interface ParsedArtifactCommand {
   readonly artifact_path: string;
   readonly dependency_store?: string;
   readonly json: boolean;
+  /** Replay only: prepare the dependency store first, then replay with it. */
+  readonly prepare: boolean;
   readonly required_status?: 'not_reproduced' | 'reproduced';
 }
 
@@ -21,6 +23,7 @@ export const parseArtifactCommand = (
   if (artifactPath === undefined || artifactPath.startsWith('--'))
     throw new Error('An artifact path is required.');
   let json = false;
+  let prepare = false;
   let againstPath: string | undefined;
   let dependencyStore: string | undefined;
   let requiredStatus: ParsedArtifactCommand['required_status'];
@@ -28,6 +31,10 @@ export const parseArtifactCommand = (
     const argument = arguments_[index];
     if (argument === '--json') {
       json = true;
+      continue;
+    }
+    if (argument === '--prepare' && allowRequiredStatus) {
+      prepare = true;
       continue;
     }
     if (argument === '--require-status' && allowRequiredStatus) {
@@ -53,9 +60,18 @@ export const parseArtifactCommand = (
     }
     throw new Error(`Unknown option: ${argument ?? ''}`);
   }
+  if (prepare && dependencyStore === undefined)
+    throw new Error(
+      '--prepare requires --dependency-store: it needs a directory to keep the downloaded packages in.',
+    );
+  if (prepare && json)
+    throw new Error(
+      '--prepare cannot be combined with --json. Run proofissue prepare --json, then proofissue replay --json.',
+    );
   return {
     artifact_path: artifactPath,
     json,
+    prepare,
     ...(dependencyStore === undefined ? {} : { dependency_store: dependencyStore }),
     ...(againstPath === undefined ? {} : { against_path: againstPath }),
     ...(requiredStatus === undefined ? {} : { required_status: requiredStatus }),

@@ -1,7 +1,11 @@
 import { createInterface } from 'node:readline/promises';
 import { stderr, stdin, stdout } from 'node:process';
 
-import type { OperationResult } from '@proofissue/application';
+import type {
+  ApplicationServices,
+  DoctorApplicationService,
+  OperationResult,
+} from '@proofissue/application';
 
 export interface CliIo {
   /**
@@ -53,6 +57,9 @@ export const defaultIo = (): CliIo => ({
     }
   },
 });
+
+/** The application services a command may be given in place of the real ones, for tests. */
+export type CliServices = Partial<ApplicationServices> & Partial<DoctorApplicationService>;
 
 export interface CliRunResult {
   readonly exit_code: 0 | 1 | 2;

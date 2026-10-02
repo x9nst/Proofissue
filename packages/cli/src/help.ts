@@ -28,7 +28,7 @@ with dependency files.
 
 export const REPLAY_HELP = `Usage:
   proofissue replay <artifact> [--against <directory>]
-    [--dependency-store <directory>]
+    [--dependency-store <directory> [--prepare]]
     [--require-status reproduced|not_reproduced] [--json]
 
 Replay validates before execution, accepts only the approved digest-pinned image,
@@ -36,6 +36,19 @@ uses a locked-down local Docker Engine on x86-64 Linux, and never pulls an image
 Without --against, replay uses every file embedded in the artifact. With --against,
 only declared subject paths are replaced; undeclared additions, removals, and renames
 are not evaluated.
+--prepare (which needs --dependency-store, and cannot be combined with --json) first runs the
+prepare step, the only step that uses the network, with the same store, then replays offline.
+If preparation fails, nothing is replayed.
+`;
+
+export const DOCTOR_HELP = `Usage:
+  proofissue doctor
+
+Checks whether this machine can replay artifacts: Node.js, host platform, Docker CLI, a local
+Docker context, Docker Engine 27 or newer, the default seccomp profile, and the approved replay
+image. It runs only read-only Docker commands, never pulls the image (a missing image is
+reported with the exact docker pull command), starts no container, and uses no network.
+Exits 0 when replay is ready and 1 when it is not.
 `;
 
 export { RECORD_HELP };
@@ -46,6 +59,7 @@ const COMMAND_HELP: Readonly<Record<CliCommandName, string>> = {
   inspect: INSPECT_HELP,
   prepare: PREPARE_HELP,
   replay: REPLAY_HELP,
+  doctor: DOCTOR_HELP,
 };
 
 /** The help for one command, as printed by `proofissue <command> --help`. */
@@ -60,6 +74,7 @@ Commands:
   inspect   Summarize an artifact without running it
   prepare   Download an artifact's locked npm packages (the only network step)
   replay    Replay an artifact in a locked-down container
+  doctor    Check whether this machine can replay artifacts
 
 Run "proofissue <command> --help" for one command's options.
 Run "proofissue --version" to print the version.
@@ -68,4 +83,5 @@ ${RECORD_HELP}
 ${VALIDATE_HELP}
 ${INSPECT_HELP}
 ${PREPARE_HELP}
-${REPLAY_HELP}`;
+${REPLAY_HELP}
+${DOCTOR_HELP}`;

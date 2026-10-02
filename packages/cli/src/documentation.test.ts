@@ -26,7 +26,7 @@ const sectionOf = (document: string, heading: string): string => {
 describe('docs/cli.md', () => {
   const read = async (): Promise<string> => await readFile('docs/cli.md', 'utf8');
 
-  it.each(['record', 'validate', 'inspect', 'prepare', 'replay'])(
+  it.each(['record', 'validate', 'inspect', 'prepare', 'replay', 'doctor'])(
     'documents %s completely',
     async (command) => {
       const section = sectionOf(await read(), `## \`${command}\``);

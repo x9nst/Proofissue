@@ -30,6 +30,8 @@ Rootless Docker, remote Docker contexts, ARM64, Docker Desktop, Podman, and othe
 
 Before creating a container, the runner will check engine availability, version, local context, architecture, and every mandatory isolation control. A missing control produces a typed failure. ProofIssue never retries with weaker isolation.
 
+`proofissue doctor` runs these same checks without replaying anything and reports each as `ok`, `warn`, `fail`, or `skipped`, with the approved image last. It starts only read-only Docker CLI subcommands (`context inspect`, `version`, `info`, `image inspect`) with an empty environment, never pulls the image, never creates a container, and exits `0` only when replay is ready. A Node.js major other than 24 on the recording host is a `warn`, because replay always uses the Node.js 24 image. On a host that is not x86-64 Linux, `doctor` reports the host check as failed and the Docker checks as skipped; recording still works there. The foundation workflow's locked-down job runs `doctor` after pulling the image on a GitHub-hosted `ubuntu-24.04` runner and requires it to pass.
+
 Replay never pulls an image automatically. Image preparation is a separate explicit action that displays and verifies the requested registry and digest. Artifact input alone cannot approve an image.
 
 ## CI Images

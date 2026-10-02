@@ -1,6 +1,6 @@
 # Command Line Reference
 
-ProofIssue installs one executable, `proofissue`, with five commands: `record`, `validate`, `inspect`, `prepare`, and `replay`. Until the package is published, run it from a built checkout:
+ProofIssue installs one executable, `proofissue`, with six commands: `record`, `validate`, `inspect`, `prepare`, `replay`, and `doctor`. Until the package is published, run it from a built checkout:
 
 ```text
 npm ci
@@ -255,7 +255,7 @@ On x86-64 Linux with Docker you can check it yourself first:
   proofissue replay reproduction.proofissue.yaml --require-status reproduced
 ```
 
-The preview names the file and image. It adds a warning when the image is not the approved one, and when you recorded with a Node.js major other than 24, because replay always uses Node.js 24. After the artifact is written, the output says where it is, the first 12 characters of its SHA-256, how to attach it, and the commands to replay it; for an artifact recorded with `--dependencies` those are `proofissue prepare <file> --dependency-store .proofissue-store` followed by `proofissue replay <file> --dependency-store .proofissue-store`. GitHub refuses attachments ending in `.proofissue`, so when you chose such a name the output says to copy the file to a name ending in `.yaml` before attaching it. The artifact is YAML either way.
+The preview names the file and image. It adds a warning when the image is not the approved one, and when you recorded with a Node.js major other than 24, because replay always uses Node.js 24. After the artifact is written, the output says where it is, the first 12 characters of its SHA-256, how to attach it, and the commands to replay it; for an artifact recorded with `--dependencies` that is the single command `proofissue replay <file> --prepare --dependency-store .proofissue-store`. GitHub refuses attachments ending in `.proofissue`, so when you chose such a name the output says to copy the file to a name ending in `.yaml` before attaching it. The artifact is YAML either way.
 
 With `--json`, stdout holds one line and the preview and these hints are not printed:
 
@@ -393,13 +393,25 @@ proofissue inspect <artifact.proofissue> [--json]
 
 ### Options
 
-`--json` prints the summary. Without it, `inspect` prints only the status line, `inspected`, so use `--json` to see the contents.
+`--json` prints the versioned result with the full summary as one line. Without it, `inspect` prints the status line, `inspected`, and under it a readable summary: the runtime and image, the command's program and argument count, each file with its role and size, the expectation modes, the limits, the redaction count, and whether `--prepare` is needed before replay. The human summary never shows file contents, expected text, or argument values.
 
 ### Example
 
+This is real output from `node packages/cli/dist/bin.js inspect tests/fixtures/artifacts/v1/valid/minimal.proofissue`. The fixture's image is a placeholder, so the summary says replay would refuse it:
+
 ```text
-$ proofissue inspect failure.proofissue
+$ proofissue inspect minimal.proofissue
 inspected
+Runtime: Node.js 24 on Linux
+Image: node@sha256:1111111111111111111111111111111111111111111111111111111111111111 (not the approved replay image; replay refuses it)
+Command: node with 1 argument
+Files: 2 (reproduction 1, subject 1)
+  reproduction reproduction.mjs (146 bytes)
+  subject      calculate.mjs (56 bytes)
+Expectations: exit code 1; stdout none; stderr contains
+Limits: 60 s, 512 MB, 1 CPU, 64 processes, 1048576 bytes per output stream
+Redaction: enabled, 0 likely secrets replaced
+Prepare: not needed
 ```
 
 This is real output from `node packages/cli/dist/bin.js inspect tests/fixtures/artifacts/v1/valid/minimal.proofissue --json`, pretty-printed here (the command prints it on one line):
@@ -559,7 +571,7 @@ Run the artifact's command in a locked-down container and report whether the cap
 
 ```text
 proofissue replay <artifact.proofissue> [--against <directory>]
-  [--dependency-store <directory>]
+  [--dependency-store <directory> [--prepare]]
   [--require-status reproduced|not_reproduced] [--json]
 ```
 
@@ -569,6 +581,7 @@ proofissue replay <artifact.proofissue> [--against <directory>]
 | --- | --- |
 | `--against <directory>` | Current-checkout mode: replace the artifact's declared subject files from the same relative paths under this directory. Undeclared additions, removals, and renames are not evaluated. |
 | `--dependency-store <directory>` | The store filled by `prepare`. Needed only for an artifact with dependency files; ignored otherwise. Replay never uses the network. |
+| `--prepare` | Run `prepare` first with the same `--dependency-store`, then replay. This is an explicit opt-in to the one network step: both results are printed, and if preparation fails nothing is replayed (exit `1`). It requires `--dependency-store` and cannot be combined with `--json` (exit `2`). Without `--prepare`, replay never fetches anything. |
 | `--require-status <status>` | Exit `0` only if the replay ends in this classification. The classification itself is unchanged. |
 | `--json` | Print the versioned result as one line of JSON. |
 
@@ -586,7 +599,13 @@ After fixing `src/calculate.mjs` in your checkout, confirm the failure is gone:
 proofissue replay failure.proofissue --against . --require-status not_reproduced
 ```
 
-For an artifact with dependency files, prepare the packages first and pass the same directory to replay:
+For an artifact with dependency files, `--prepare` downloads and verifies the locked packages into the store and then replays offline from it:
+
+```text
+proofissue replay failure.proofissue --prepare --dependency-store .proofissue-store --require-status reproduced
+```
+
+This is the same as running the two steps yourself, which you can do when you want to prepare once and replay several times:
 
 ```text
 proofissue prepare failure.proofissue --dependency-store .proofissue-store
@@ -682,19 +701,29 @@ A process killed for exceeding the memory limit, including one reported only as 
 
 ### Failure behavior
 
-Exit `1` for `execution_failed`, `invalid_artifact`, or a status other than the one `--require-status` asked for. Exit `2` for malformed arguments. `Ctrl+C` stops the container and removes the workspace before the command returns.
+Exit `1` for `execution_failed`, `invalid_artifact`, or a status other than the one `--require-status` asked for, and, with `--prepare`, for a failed preparation (nothing is replayed then). Exit `2` for malformed arguments, including `--prepare` without `--dependency-store` or with `--json`. `Ctrl+C` stops the container and removes the workspace before the command returns.
 
 An `execution_failed` result carries one error code. None of them is evidence about the original failure. `result-contract.md` defines the full contract.
+
+For these codes the human-readable output ends with a `Next step:` line, built from fixed text and your own paths (escaped and quoted), never from the artifact or from Docker output. `--json` output is unchanged and carries no such line.
+
+| Code | `Next step:` line |
+| --- | --- |
+| `image_unavailable` | The exact `docker pull node@sha256:...` command for the approved image. |
+| `engine_unavailable`, `engine_capability_unavailable` | Run `proofissue doctor` to see which prerequisite is missing, or replay with the GitHub Action on a hosted Linux runner. |
+| `dependencies_not_prepared` | `proofissue replay <artifact> --prepare --dependency-store <store>`, filled in with your artifact path (and `--against` and store when you gave them). |
+| `dependency_install_failed` | The same command with a new, empty store (the store you gave with `-new` appended, or `.proofissue-store-new`). |
+| `timeout`, `resource_termination` | None: the limits are fixed in this release, and reaching one is a support boundary, not evidence about the original failure. |
 
 | Code | Meaning | What to do |
 | --- | --- | --- |
 | `engine_unavailable` | Docker is not installed, not running, or its context could not be inspected. | Start Docker Engine and run the replay again. |
 | `engine_capability_unavailable` | The host is not a local x86-64 Linux Docker Engine 27 or newer with the default seccomp profile, or the Docker context is remote. | Replay on a supported host, such as a GitHub-hosted Ubuntu runner. |
-| `image_unavailable` | The approved image is not present locally. Replay never pulls images. | Pull the approved digest yourself, then replay again. |
+| `image_unavailable` | The approved image is not present locally. Replay never pulls images. | Pull the approved digest yourself (the `Next step:` line prints the command), then replay again. |
 | `policy_rejection` | The request was refused before any container was created: an image that is not approved, a missing or unneeded `--against` directory, an unsafe workspace location, or a dependency artifact without a lockfile. | Fix the request. Nothing ran. |
 | `container_creation_failed` | The container could not be created or completed safely. | Check Docker's health and disk space, then replay again. |
 | `unsafe_checkout_file` | With `--against`, a declared subject path is missing, is not a regular file, is a symbolic link or reached through one, is too large, or is not valid UTF-8; or it names a reproduction file. The checkout itself must not be a symbolic link. | Correct the checkout or the artifact. Nothing ran. |
-| `dependencies_not_prepared` | The artifact has dependency files and the store is missing, unusable, or incomplete. The CLI suggests the next step. | Run `prepare` with the same `--dependency-store`, then replay. |
+| `dependencies_not_prepared` | The artifact has dependency files and the store is missing, unusable, or incomplete. The CLI prints the next step. | Run `replay --prepare --dependency-store <store>`, or `prepare` and then replay with the same store. |
 | `dependency_install_failed` | The offline install of the locked packages inside the sandbox did not complete. | Re-run `prepare` against a fresh store directory. The message may name one npm error code, such as `ENOSPC`. |
 | `timeout` | The replay reached its wall-clock limit, or you interrupted it with `Ctrl+C`. The container was stopped and removed. | Raise the artifact's `timeout_seconds` at record time, or investigate a hang. |
 | `resource_termination` | The command was ended by an enforced limit, such as memory, including an exit status of 137. | Treat the limit as part of the reproduction, or record again with an adequate limit. |
@@ -704,3 +733,71 @@ An `execution_failed` result carries one error code. None of them is evidence ab
 ### Security notes
 
 Treat every artifact as hostile. Replay validates it first, accepts only the approved digest-pinned image, and runs it with no network, a read-only base filesystem, dropped capabilities, no privilege escalation, a non-root user, and limits on processes, memory, CPU, output and time, then removes the container and workspace. Output is redacted for likely secrets before it is matched, and the result and its summaries carry counts and fixed messages, never output text. The Docker CLI is started with an empty environment, and the container receives only `PATH` and `HOME=/tmp`. The input mount is read-only, and `/tmp` is a 16 MiB in-memory filesystem. See `replay.md` and `security-model.md`. The GitHub Action runs the same replay; see `github-action.md`.
+
+## `doctor`
+
+### Purpose
+
+Check whether this machine can replay artifacts, and say what to run when it cannot. It exists because replay's prerequisites (an x86-64 Linux host, a local Docker Engine 27 or newer with the default seccomp profile, and the approved image already pulled) otherwise surface one at a time as replay error codes.
+
+### Syntax
+
+```text
+proofissue doctor
+```
+
+### Options
+
+`doctor` takes no options. It has no `--json` form: its output is for a person, and the replay result contract is not changed by it. Any argument is a usage error.
+
+### Example
+
+The checks run in a fixed order, and everything after the first failure is shown as `skipped` instead of being guessed at. This is real output from `node packages/cli/dist/bin.js doctor` on a Windows host (exit `1`), where replay cannot run but recording can:
+
+```text
+ok      Node.js: Node.js 24.15.0; replay uses the same major version.
+fail    Host: Replay currently requires a local x86-64 Linux host with Docker Engine.
+        Replay needs an x86-64 Linux host. Record here, then replay on Linux or with the GitHub Action on a hosted Linux runner.
+skipped Docker CLI: Not checked because an earlier check failed.
+skipped Docker context: Not checked because an earlier check failed.
+skipped Docker Engine: Not checked because an earlier check failed.
+skipped Seccomp: Not checked because an earlier check failed.
+skipped Replay image: Not checked because an earlier check failed.
+
+Recording: ready. It runs on this host and needs no container.
+Replay: not ready. Fix the failed checks above, then run proofissue doctor again.
+```
+
+On a ready host the output is the following, captured from the GitHub-hosted `ubuntu-24.04` runner of the foundation workflow's locked-down job (exit `0`):
+
+```text
+ok      Node.js: Node.js 24.21.0; replay uses the same major version.
+ok      Host: linux x64.
+ok      Docker CLI: The docker command runs.
+ok      Docker context: The Docker context is a local unix socket.
+ok      Docker Engine: Docker Engine 28.0.4, linux/amd64.
+ok      Seccomp: The default seccomp profile is available.
+ok      Replay image: The approved replay image is present locally.
+
+Recording: ready. It runs on this host and needs no container.
+Replay: ready.
+```
+
+Each line starts with `ok`, `warn`, `fail`, or `skipped`. A `warn` does not stop replay: a Node.js major other than 24 only means that a recording made here can behave differently from the replay, which always uses the Node.js 24 image. A missing image is reported with the exact command that fetches it, and `doctor` does not run it:
+
+```text
+fail    Replay image: The approved replay image is not available locally; replay never pulls images automatically.
+        Run: docker pull node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
+```
+
+### Failure behavior
+
+- Exit `0` when replay is ready: every check is `ok` or `warn`.
+- Exit `1` when any check fails. The failed line carries one fixed next step; run it and run `doctor` again.
+- Exit `2` for any argument. The error, a one-line synopsis, and a pointer to `--help` are printed, and nothing is checked.
+
+The messages on a failed line are the same ones `replay` reports for the same problem (`engine_unavailable`, `engine_capability_unavailable`, `image_unavailable`), because both use one diagnosis.
+
+### Security notes
+
+`doctor` is read-only. It starts only the Docker CLI subcommands `context inspect`, `version`, `info`, and `image inspect`, each with an empty environment and no shell. It never pulls an image, never creates or starts a container, never reads an artifact, and never uses the network itself. It prints no Docker endpoint, path, or user name; the Docker Engine version appears only when it looks like a version number. Every line is escaped for the terminal.

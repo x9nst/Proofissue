@@ -89,6 +89,11 @@ jobs:
           docker version --format 'Docker Engine {{.Server.Version}} ({{.Server.Os}}/{{.Server.Arch}})'
           uname -m
 
+      - name: Diagnose the replay environment with proofissue doctor
+        run: |
+          npm run build:types
+          node packages/cli/dist/bin.js doctor
+
       - name: Run locked-down replay and fix-verification tests
         run: npm test -- packages/runner/src/container.integration.test.ts packages/runner/src/dependencies.integration.test.ts packages/application/src/fix-verification.integration.test.ts
 

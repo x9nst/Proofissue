@@ -5,6 +5,7 @@ import {
 
 import { parseArtifactCommand, type ParsedArtifactCommand } from './arguments.js';
 import type { CliIo, CliRunResult } from './io.js';
+import { renderInspectSummary } from './inspect-summary.js';
 import { escapePresentationText } from './presentation.js';
 import { usageError } from './usage.js';
 
@@ -34,10 +35,14 @@ export const runStaticCommand = async (
       : await (application?.inspect ?? staticServices.inspect)({
           artifact_path: parsed.artifact_path,
         });
+  const summary =
+    result.operation === 'inspect' && result.inspection !== undefined
+      ? renderInspectSummary(result.inspection)
+      : '';
   io.write(
     parsed.json
       ? `${JSON.stringify(result)}\n`
-      : `${result.status}\n${result.errors.map((error) => `Error: ${escapePresentationText(error.message)}\n`).join('')}`,
+      : `${result.status}\n${summary}${result.errors.map((error) => `Error: ${escapePresentationText(error.message)}\n`).join('')}`,
   );
   return {
     exit_code: result.status === 'valid' || result.status === 'inspected' ? 0 : 1,
