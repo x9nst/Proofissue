@@ -15,6 +15,7 @@ import { runRecordCommand } from './record-command.js';
 import { runReplayCommand } from './replay-command.js';
 import { runStaticCommand } from './static-commands.js';
 import { unknownCommandError, wantsHelp, type CliCommandName } from './usage.js';
+import { PROOFISSUE_VERSION } from './version.js';
 
 export interface CliAdapter {
   readonly application: ApplicationServices;
@@ -51,6 +52,11 @@ export const runCli = async (
   const command = arguments_[0];
   if (isCommandName(command) && wantsHelp(arguments_.slice(1))) {
     io.write(helpFor(command));
+    return { exit_code: 0 };
+  }
+
+  if (arguments_[0] === '--version' && arguments_.length === 1) {
+    io.write(`${PROOFISSUE_VERSION}\n`);
     return { exit_code: 0 };
   }
 

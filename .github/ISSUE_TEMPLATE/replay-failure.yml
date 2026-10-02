@@ -1,0 +1,65 @@
+name: Artifact did not replay
+description: A .proofissue artifact did not replay as expected
+title: 'replay: '
+labels:
+  - replay
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste credentials, private artifacts, or output text from a private project. The `replay --json` result contains no output text, so it is safe to paste. Report security vulnerabilities through private security reporting instead.
+  - type: input
+    id: version
+    attributes:
+      label: ProofIssue version
+      description: The output of `proofissue --version`.
+    validations:
+      required: true
+  - type: textarea
+    id: command
+    attributes:
+      label: Command you ran
+      description: The exact `proofissue replay` command, with local paths removed.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Environment diagnosis
+      description: The output of `proofissue doctor`, if your version has it. Otherwise give your operating system, architecture, Node.js version, and Docker Engine version. Remove usernames and local paths.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Replay result
+      description: The output of the same command with `--json`.
+      render: json
+    validations:
+      required: true
+  - type: dropdown
+    id: shareable
+    attributes:
+      label: Can the artifact be shared?
+      options:
+        - Yes, I can attach it (renamed to end in .yaml or .txt, or zipped)
+        - Not as is, but I can make a synthetic one that fails the same way
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: For example, that the status would be `reproduced`.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety check
+      options:
+        - label: I removed credentials, private data, usernames, and local absolute paths.
+          required: true
