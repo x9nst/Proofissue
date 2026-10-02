@@ -2,8 +2,9 @@
 
 ## Status
 
-Milestone 7 — Initial supported Node.js workflow remains In Progress. No
-acceptance box is ticked: the maintainer decides, and the first two criteria
+Milestone 7 — Initial supported Node.js workflow is Complete. The maintainer
+reviewed this evidence and signed the milestone off on 2026-10-02, ticking every
+acceptance box and accepting decisions A–F below. The first two criteria
 (real-project trials and repeatability) are recorded separately in
 `real-project-evaluation.md`.
 
@@ -135,7 +136,8 @@ covered (decision B).
 
 ## Decisions for the maintainer
 
-The audit took the recommended default for each. Please confirm or change them.
+The audit took the recommended default for each, and the maintainer accepted all
+six on 2026-10-02.
 
 - **A.** "Replay-compatible" means a fixture replays unchanged except that
   `environment.image` is replaced by the currently approved digest. Fixtures carry

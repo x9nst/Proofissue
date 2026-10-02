@@ -1,6 +1,6 @@
 # Decision 0003: Exact, Normalized, and Bounded Regular-Expression Output Matching
 
-**Status:** Proposed on 2026-10-01. The `contains`, `exact`, and `regex` modes and output normalization are implemented with the defaults below. Every item marked *assumed; awaiting maintainer sign-off* was implemented with the recommended default and should be confirmed or changed in review.  
+**Status:** Accepted on 2026-10-02. Proposed on 2026-10-01; the `contains`, `exact`, and `regex` modes and output normalization are implemented with the defaults below, and the maintainer accepted every item that was marked for sign-off when signing off Milestone 7.  
 **Date:** 2026-10-01
 
 ## Context
@@ -79,7 +79,7 @@ Each expectation lists its rules explicitly. The canonical order is also the app
 
 **Items for sign-off.**
 
-- **[SIGN-OFF: rule names, tokens, and the CLI default of all rules]** The eight names, the token spellings, and the choice that every CLI option for normalized matching applies all eight rules. The artifact format supports any subset. *Assumed; awaiting maintainer sign-off.*
+- **[SIGN-OFF: rule names, tokens, and the CLI default of all rules]** The eight names, the token spellings, and the choice that every CLI option for normalized matching applies all eight rules. The artifact format supports any subset. *Accepted by the maintainer on 2026-10-02.*
 
 ### D3. Regular expressions
 
@@ -115,7 +115,7 @@ Exceeding the step limit is a deterministic `regex_step_limit` difference, never
 
 **Item for sign-off.**
 
-- **[SIGN-OFF: in-house engine]** The choice of an in-house engine over `re2js`. *Assumed; awaiting maintainer sign-off.*
+- **[SIGN-OFF: in-house engine]** The choice of an in-house engine over `re2js`. *Accepted by the maintainer on 2026-10-02.*
 
 ### D4. Package placement
 
@@ -134,7 +134,7 @@ There is no recorder-to-matcher edge. The check that a recording satisfies its o
 
 **Item for sign-off.**
 
-- **[SIGN-OFF: new package and dependency edges]** *Assumed; awaiting maintainer sign-off.*
+- **[SIGN-OFF: new package and dependency edges]** *Accepted by the maintainer on 2026-10-02.*
 
 ### D5. Command line
 
@@ -152,7 +152,7 @@ At most one `exact` expectation (raw or normalized) per stream; a repeat is a us
 
 **Item for sign-off.**
 
-- **[SIGN-OFF: public command line]** The option names, the flag form for `exact`, and the preview wording. *Assumed; awaiting maintainer sign-off.*
+- **[SIGN-OFF: public command line]** The option names, the flag form for `exact`, and the preview wording. *Accepted by the maintainer on 2026-10-02.*
 
 ### D6. Result contract
 
@@ -160,7 +160,7 @@ Additive only. Evidence kinds `stdout_exact`, `stderr_exact`, `stdout_regex`, an
 
 **Item for sign-off.**
 
-- **[SIGN-OFF: result contract]** The new kinds, the `normalization` object, and the inspection fields. *Assumed; awaiting maintainer sign-off.*
+- **[SIGN-OFF: result contract]** The new kinds, the `normalization` object, and the inspection fields. *Accepted by the maintainer on 2026-10-02.*
 
 ### D7. Fix verification
 
@@ -186,12 +186,12 @@ The application then runs the matcher over the recording's own output with the r
 
 Adopt the design above, implemented in two changes: the first (modes `contains` and `exact`, all eight rules, the new package, the CLI options, results, fixtures, and documentation) and a second for bounded regular expressions (the `regex` mode, the engine, its options, results, fixtures, and documentation). Both are in place.
 
-1. **Additive change inside artifact version 1, recorded here.** The schema stays provisional, existing artifacts stay valid, and a consumer that does not know the new content rejects it. This is the "new compatibility decision" that `artifact-format.md` requires. It must be revisited before the schema leaves provisional status. *(Assumed; awaiting maintainer sign-off.)*
-2. **Normalization rules, names, and tokens as in D2.** *(Assumed; awaiting maintainer sign-off.)*
-3. **A new `@proofissue/output-rules` package and its dependency edges as in D4.** *(Assumed; awaiting maintainer sign-off.)*
-4. **The command-line options as in D5.** *(Assumed; awaiting maintainer sign-off.)*
-5. **The additive result contract as in D6.** *(Assumed; awaiting maintainer sign-off.)*
-6. **An in-house, linear-time engine for regular expressions rather than `re2js`.** Implemented with the recommended default: no new dependency, no native code, and no WebAssembly. *(Assumed; awaiting maintainer sign-off.)*
+1. **Additive change inside artifact version 1, recorded here.** The schema stays provisional, existing artifacts stay valid, and a consumer that does not know the new content rejects it. This is the "new compatibility decision" that `artifact-format.md` requires. It must be revisited before the schema leaves provisional status. *(Accepted by the maintainer on 2026-10-02.)*
+2. **Normalization rules, names, and tokens as in D2.** *(Accepted by the maintainer on 2026-10-02.)*
+3. **A new `@proofissue/output-rules` package and its dependency edges as in D4.** *(Accepted by the maintainer on 2026-10-02.)*
+4. **The command-line options as in D5.** *(Accepted by the maintainer on 2026-10-02.)*
+5. **The additive result contract as in D6.** *(Accepted by the maintainer on 2026-10-02.)*
+6. **An in-house, linear-time engine for regular expressions rather than `re2js`.** Implemented with the recommended default: no new dependency, no native code, and no WebAssembly. *(Accepted by the maintainer on 2026-10-02.)*
 
 ## Rule-versioning policy
 

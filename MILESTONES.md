@@ -229,7 +229,7 @@ A user can:
 
 ## Status
 
-`In Progress` — the technical prototype slice and the GitHub Action are complete (`IMPLEMENTATION_PLAN.md` Milestones 0–6). The initial supported Node.js workflow, the remaining deliverables, and the success metrics above are not.
+`In Progress` — the technical prototype slice, the GitHub Action, and the initial supported Node.js workflow are complete (`IMPLEMENTATION_PLAN.md` Milestones 0–7; Milestone 7 signed off on 2026-10-02). The remaining Phase 1 deliverables and the success metrics above are not.
 
 ---
 

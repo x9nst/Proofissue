@@ -2,7 +2,7 @@
 
 ## Status
 
-The pilot (three cases) was confirmed in its first hosted run and again in a rerun on `main`. The full set (twelve cases from three repositories) then ran twice on hosted CI; the second run confirmed all twelve. See Results. The numeric thresholds in the first two Milestone 7 acceptance criteria are met by this evidence, with the caveats listed under "Full set, caveats". This document is not a Milestone 7 completion claim, and nothing here ticks an acceptance box: the maintainer decides, and the other criteria (security suite, documentation, compatibility) are tracked elsewhere.
+The pilot (three cases) was confirmed in its first hosted run and again in a rerun on `main`. The full set (twelve cases from three repositories) then ran twice on hosted CI; the second run confirmed all twelve. See Results. The numeric thresholds in the first two Milestone 7 acceptance criteria are met by this evidence, with the caveats listed under "Full set, caveats". The maintainer reviewed this evidence, with those caveats, and signed off Milestone 7 on 2026-10-02; the other criteria (security suite, documentation, compatibility) are evidenced in `milestone-7-evidence.md`.
 
 The harness and the hosted workflow exist (see `../benchmarks/real-projects/README.md` and `../.github/workflows/real-project-trials.yml`). This document describes the method and the pilot so that results can be read against stated rules rather than after the fact. Numbers are added only from a recorded run.
 
