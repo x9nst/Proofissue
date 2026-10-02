@@ -18,6 +18,8 @@ The examples below write `proofissue` for that invocation. They use the project 
 | `1` | The command ran but did not succeed: an invalid or missing artifact, a replay that could not complete, a required status that was not met, a preparation that failed, or a recording that failed. |
 | `2` | The arguments were malformed. The message and usage text are printed, and nothing is executed. |
 
+Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. The same text is printed, with exit `2`, after an unknown command or malformed arguments.
+
 A replay that ends in `reproduced` or `not_reproduced` is a successful classification. Which of the two you want is a policy decision, expressed with `--require-status`.
 
 ## `record`
@@ -163,6 +165,8 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 
 ### Security notes
 
+Recording is not sandboxed. The command runs on your machine with your user's files, processes, and network access; only its wall-clock time and the output ProofIssue retains are bounded, and the whole process tree is ended when the time limit is reached. Record only commands you would run in that shell anyway, and replay the artifact later in the locked-down container. Expected values and patterns are checked for likely secrets, and a value that holds one is refused without being repeated.
+
 You are authorizing the recorder to run the command on your machine, so read the preview before confirming. Secrets are redacted before the artifact is written, but redaction is rule-based and not a guarantee; see `security-model.md`. Only the files you select are collected. Command output reaches the artifact only through your expected literals, which redaction does not check for user names or paths, so leave absolute paths out of them. See `recording.md` for the full sequence.
 
 ## `validate`
@@ -209,7 +213,7 @@ Error: must have required property 'environment'
 
 ### Security notes
 
-Validation never executes the artifact or creates a workspace. A valid artifact is still untrusted: validation says nothing about whether its command is safe to run.
+Validation never executes the artifact or creates a workspace. A valid artifact is still untrusted: validation says nothing about whether its command is safe to run. The errors it prints are bounded in number and length, and control characters in them are escaped, so a hostile artifact cannot rewrite your terminal.
 
 ## `inspect`
 
@@ -230,18 +234,88 @@ proofissue inspect <artifact.proofissue> [--json]
 ### Example
 
 ```text
-$ proofissue inspect failure.proofissue --json
+$ proofissue inspect failure.proofissue
+inspected
+```
+
+This is real output from `node packages/cli/dist/bin.js inspect tests/fixtures/artifacts/v1/valid/minimal.proofissue --json`, pretty-printed here (the command prints it on one line):
+
+```json
+{
+  "result_schema_version": 1,
+  "operation": "inspect",
+  "status": "inspected",
+  "artifact_version": 1,
+  "artifact_digest": "e30c4eccb623954a5345ab71b57431de2fd11775c50ddf8881f7ee6f302b87b7",
+  "warnings": [],
+  "errors": [],
+  "inspection": {
+    "runtime": "node",
+    "runtime_version": "24",
+    "operating_system": "linux",
+    "image": "node@sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "command": {
+      "program": "node",
+      "argument_count": 1,
+      "working_directory": "."
+    },
+    "files": [
+      {
+        "path": "calculate.mjs",
+        "role": "subject",
+        "bytes": 56,
+        "sha256": "4efedc1500baf98326c0ec905ce57d08952b86e985598f5dfbc7508262c72b7c"
+      },
+      {
+        "path": "reproduction.mjs",
+        "role": "reproduction",
+        "bytes": 146,
+        "sha256": "3f2b69382a3fb8e0ded1f07b73e7ba06592c1d9bdc82c9235f3f88e132556f3a"
+      }
+    ],
+    "expectations": {
+      "exit_code": 1,
+      "stdout_count": 0,
+      "stderr_count": 1,
+      "stdout_expectations": [],
+      "stderr_expectations": [
+        {
+          "mode": "contains",
+          "normalize": []
+        }
+      ]
+    },
+    "limits": {
+      "timeout_seconds": 60,
+      "memory_mb": 512,
+      "cpus": 1,
+      "processes": 64,
+      "output_bytes_per_stream": 1048576
+    },
+    "redaction": {
+      "enabled": true,
+      "finding_count": 0,
+      "findings": []
+    }
+  }
+}
 ```
 
 The result carries an `inspection` object with the runtime and image, the command's program, argument count and working directory, each file's path, role, size and SHA-256, the expectation counts and, for each expectation, its mode and normalization rules (`stdout_expectations` and `stderr_expectations`, each entry shaped like `{ "mode": "exact", "normalize": [] }`, where an empty list means the raw stream), the limits, and the redaction findings. File contents and expected text are not included.
 
 ### Failure behavior
 
-The same as `validate`: an invalid or missing artifact exits `1`.
+- Malformed arguments (no artifact path, an unknown option) exit `2`, print the message and usage text, and execute nothing.
+- An invalid, missing, or oversized artifact exits `1`. Under `--json` the problem is in the `errors` list and there is no `inspection` object:
+
+```text
+$ proofissue inspect broken.proofissue --json
+{"result_schema_version":1,"operation":"inspect","status":"invalid_artifact","warnings":[],"errors":[{"code":"schema_violation","message":"must have required property 'environment'","details":{"path":"/"}}]}
+```
 
 ### Security notes
 
-`inspect` is a static command. It reads the artifact only.
+`inspect` is a static command. It reads the artifact only and never executes it or creates a workspace. It shows no file contents, no expected text, and no argument values, only counts, sizes, digests, and modes. Every message it prints is bounded and has control characters escaped.
 
 ## `prepare`
 
@@ -446,6 +520,23 @@ A process killed for exceeding the memory limit, including one reported only as 
 
 Exit `1` for `execution_failed`, `invalid_artifact`, or a status other than the one `--require-status` asked for. Exit `2` for malformed arguments. `Ctrl+C` stops the container and removes the workspace before the command returns.
 
+An `execution_failed` result carries one error code. None of them is evidence about the original failure. `result-contract.md` defines the full contract.
+
+| Code | Meaning | What to do |
+| --- | --- | --- |
+| `engine_unavailable` | Docker is not installed, not running, or its context could not be inspected. | Start Docker Engine and run the replay again. |
+| `engine_capability_unavailable` | The host is not a local x86-64 Linux Docker Engine 27 or newer with the default seccomp profile, or the Docker context is remote. | Replay on a supported host, such as a GitHub-hosted Ubuntu runner. |
+| `image_unavailable` | The approved image is not present locally. Replay never pulls images. | Pull the approved digest yourself, then replay again. |
+| `policy_rejection` | The request was refused before any container was created: an image that is not approved, a missing or unneeded `--against` directory, an unsafe workspace location, or a dependency artifact without a lockfile. | Fix the request. Nothing ran. |
+| `container_creation_failed` | The container could not be created or completed safely. | Check Docker's health and disk space, then replay again. |
+| `unsafe_checkout_file` | With `--against`, a declared subject path is missing, is not a regular file, is a symbolic link or reached through one, is too large, or is not valid UTF-8; or it names a reproduction file. The checkout itself must not be a symbolic link. | Correct the checkout or the artifact. Nothing ran. |
+| `dependencies_not_prepared` | The artifact has dependency files and the store is missing, unusable, or incomplete. The CLI suggests the next step. | Run `prepare` with the same `--dependency-store`, then replay. |
+| `dependency_install_failed` | The offline install of the locked packages inside the sandbox did not complete. | Re-run `prepare` against a fresh store directory. The message may name one npm error code, such as `ENOSPC`. |
+| `timeout` | The replay reached its wall-clock limit, or you interrupted it with `Ctrl+C`. The container was stopped and removed. | Raise the artifact's `timeout_seconds` at record time, or investigate a hang. |
+| `resource_termination` | The command was ended by an enforced limit, such as memory, including an exit status of 137. | Treat the limit as part of the reproduction, or record again with an adequate limit. |
+| `cleanup_failed` | The replay finished but the container or workspace could not be removed. | Remove the leftover resources named in the result, and check Docker. |
+| `internal_error` | An unexpected condition. The message is fixed and carries no details. | Report it with the artifact if it can be shared. |
+
 ### Security notes
 
-Treat every artifact as hostile. Replay validates it first, accepts only the approved digest-pinned image, and runs it with no network, a read-only base filesystem, dropped capabilities, no privilege escalation, a non-root user, and limits on processes, memory, CPU, output and time, then removes the container and workspace. See `replay.md` and `security-model.md`. The GitHub Action runs the same replay; see `github-action.md`.
+Treat every artifact as hostile. Replay validates it first, accepts only the approved digest-pinned image, and runs it with no network, a read-only base filesystem, dropped capabilities, no privilege escalation, a non-root user, and limits on processes, memory, CPU, output and time, then removes the container and workspace. Output is redacted for likely secrets before it is matched, and the result and its summaries carry counts and fixed messages, never output text. The Docker CLI is started with an empty environment, and the container receives only `PATH` and `HOME=/tmp`. The input mount is read-only, and `/tmp` is a 16 MiB in-memory filesystem. See `replay.md` and `security-model.md`. The GitHub Action runs the same replay; see `github-action.md`.

@@ -3,7 +3,16 @@ import path from 'node:path';
 
 const root = path.resolve(import.meta.dirname, '..');
 const ignoredDirectories = new Set(['.agents', '.git', 'coverage', 'dist', 'node_modules']);
-const textExtensions = new Set(['.cjs', '.json', '.md', '.mjs', '.ts', '.yml', '.yaml']);
+const textExtensions = new Set([
+  '.cjs',
+  '.json',
+  '.md',
+  '.mjs',
+  '.proofissue',
+  '.ts',
+  '.yml',
+  '.yaml',
+]);
 const violations = [];
 
 const visit = async (directory) => {

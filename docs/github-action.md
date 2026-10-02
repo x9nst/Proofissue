@@ -1,6 +1,12 @@
 # GitHub Action
 
-## Purpose
+ProofIssue ships two Actions: the replay Action (`action`) and the prepare Action
+(`action/prepare`). Each section below documents one of them completely. Permissions
+and maintainer validation apply to both and are at the end.
+
+## Replay Action
+
+### Purpose
 
 The ProofIssue Action validates and replays one `.proofissue` artifact on an
 x86-64 Linux runner. It calls the same application service as the local command
@@ -10,7 +16,7 @@ behavior do not have separate CI implementations.
 The Action does not create issue or pull-request comments and does not call the
 GitHub API.
 
-## Example
+### Example
 
 The approved replay image must be prepared explicitly before the Action runs.
 Replay itself never pulls an image.
@@ -54,7 +60,7 @@ jobs:
 Pin the Action to a reviewed full commit SHA. The repository integration fixture
 uses `./action` so it exercises the exact checked-out bundle.
 
-## Inputs
+### Inputs
 
 | Input | Required | Default | Meaning |
 | --- | --- | --- | --- |
@@ -68,53 +74,7 @@ Supplying `checkout-path` in snapshot mode is rejected. Current-checkout replay
 reads only declared, existing subject paths. It does not discover additions or
 infer removals and renames.
 
-## Preparing dependencies
-
-An artifact recorded with `--dependencies` carries a lockfile. Its packages are
-downloaded by a separate Action, `action/prepare`, so that the one step that uses
-the network is a distinct `uses:` line in the workflow, and the replay Action
-never contains download code. Run it before replay and give both the same
-directory:
-
-```yaml
-      - name: Prepare dependencies
-        id: prepare
-        uses: x9nst/Proofissue/action/prepare@FULL_COMMIT_SHA
-        with:
-          artifact-path: failures/example.proofissue
-          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
-
-      - name: Confirm the failure still reproduces
-        uses: x9nst/Proofissue/action@FULL_COMMIT_SHA
-        with:
-          artifact-path: failures/example.proofissue
-          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
-          required-status: reproduced
-```
-
-The prepare Action is safe to run unconditionally: an artifact without dependency
-files reports `not_required`, fetches nothing, and creates no directory.
-
-| Input | Required | Meaning |
-| --- | --- | --- |
-| `artifact-path` | yes | Path to the artifact whose locked packages are prepared |
-| `dependency-store` | yes | Directory for the verified package store; use a directory under the runner's temporary directory, never an npm cache |
-
-| Output | Format | Meaning |
-| --- | --- | --- |
-| `status` | string | `prepared`, `not_required`, `invalid_input`, `invalid_artifact`, or `execution_failed` |
-| `result` | JSON object | Complete version 1 prepare result, without package names, tarball paths, or the store path |
-
-The step succeeds for `prepared` and `not_required` and fails for every other
-status. Outputs are written before the step fails, so a later step using
-`if: always()` can still read them. The workflow summary shows the status and
-counts only: packages, tarballs downloaded, tarballs already in the store, packages
-skipped for another platform, and the numbers of warnings and errors. It never
-shows error messages, package locations, or directories; the structured `result`
-output carries the bounded details. A failed preparation is not a replay result: a
-replay without a prepared store reports `dependencies_not_prepared`.
-
-## Outputs
+### Outputs
 
 | Output | Format | Meaning |
 | --- | --- | --- |
@@ -138,7 +98,7 @@ Action has no new inputs or outputs, and the existing `evidence`, `differences`,
 `result` outputs only gain the new kinds and the optional object. See
 `result-contract.md`.
 
-## Step Results and Failures
+### Failure behavior
 
 Without `required-status`, both `reproduced` and `not_reproduced` are successful
 completed classifications. `invalid_artifact` and `execution_failed` fail the
@@ -151,7 +111,7 @@ fails the step, so a later step using `if: always()` can still inspect them.
 Invalid Action inputs fail before replay. If GitHub's output or summary files
 cannot be written, the Action fails rather than claiming a usable machine result.
 
-## Workflow Summary
+### Workflow summary
 
 The summary shows only:
 
@@ -163,6 +123,88 @@ The summary shows only:
 It never publishes command output, file contents, expected text, environment
 values, or application error messages. Use the structured `result` output for
 bounded diagnostic codes and details.
+
+### Security notes
+
+The artifact is treated as malicious. It is validated first and then replayed in the
+same locked-down container as the command line: no network, a read-only base
+filesystem, dropped capabilities, and limits on processes, memory, CPU, output, and
+time. The container never receives the Docker socket, repository credentials, job
+secrets, host network, or undeclared host files, and the Action passes no workflow
+environment variables into it. Output is redacted before it is matched, and neither
+the outputs nor the summary carry output text. See "Permissions and security" below
+and `security-model.md`.
+
+## Prepare Action
+
+### Purpose
+
+An artifact recorded with `--dependencies` carries a lockfile. Its packages are
+downloaded by a separate Action, `action/prepare`, so that the one step that uses
+the network is a distinct `uses:` line in the workflow, and the replay Action
+never contains download code. Run it before replay and give both the same
+directory.
+
+### Example
+
+```yaml
+      - name: Prepare dependencies
+        id: prepare
+        uses: x9nst/Proofissue/action/prepare@FULL_COMMIT_SHA
+        with:
+          artifact-path: failures/example.proofissue
+          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
+
+      - name: Confirm the failure still reproduces
+        uses: x9nst/Proofissue/action@FULL_COMMIT_SHA
+        with:
+          artifact-path: failures/example.proofissue
+          dependency-store: ${{ runner.temp }}/proofissue-dependency-store
+          required-status: reproduced
+```
+
+The prepare Action is safe to run unconditionally: an artifact without dependency
+files reports `not_required`, fetches nothing, and creates no directory.
+
+### Inputs
+
+| Input | Required | Meaning |
+| --- | --- | --- |
+| `artifact-path` | yes | Path to the artifact whose locked packages are prepared |
+| `dependency-store` | yes | Directory for the verified package store; use a directory under the runner's temporary directory, never an npm cache |
+
+### Outputs
+
+| Output | Format | Meaning |
+| --- | --- | --- |
+| `status` | string | `prepared`, `not_required`, `invalid_input`, `invalid_artifact`, or `execution_failed` |
+| `result` | JSON object | Complete version 1 prepare result, without package names, tarball paths, or the store path |
+
+### Failure behavior
+
+The step succeeds for `prepared` and `not_required` and fails for every other
+status. Outputs are written before the step fails, so a later step using
+`if: always()` can still read them. An empty `artifact-path` or `dependency-store`
+fails the step before the application runs, with a fixed message and no outputs.
+A failed preparation is not a replay result: a replay without a prepared store
+reports `dependencies_not_prepared`.
+
+### Workflow summary
+
+The workflow summary shows the status and
+counts only: packages, tarballs downloaded, tarballs already in the store, packages
+skipped for another platform, and the numbers of warnings and errors. It never
+shows error messages, package locations, or directories; the structured `result`
+output carries the bounded details.
+
+### Security notes
+
+This is the only step that uses the network. It contacts only
+`https://registry.npmjs.org`, for exactly the tarballs the artifact's lockfile
+names, checked against their hashes. It sends no token, follows no redirects, and
+extracts and runs nothing. Packages are stored only in the directory you give, which
+should be under `runner.temp`, never in the npm cache. The artifact and its lockfile
+are validated before any request is made or any directory is created.
 
 ## Permissions and Security
 

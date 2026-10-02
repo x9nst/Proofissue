@@ -20,4 +20,13 @@ Fixtures are public compatibility and security evidence. They must be minimal, r
 - A compatibility fixture is not reformatted merely because a newer serializer changes style.
 - Provisional fixtures are clearly labeled and carry no compatibility promise.
 
-The first artifact pair, a deterministic canonical byte fixture, and all four replay-result statuses are present. Milestone 2 tests preserve artifact compatibility, schema synchronization, and exact canonical serialization. Result fixtures retain status coverage and prevent detailed decoded output from entering public examples.
+## Compatibility and evidence checks
+
+- **Replay compatibility.** A valid artifact fixture is replay-compatible when it replays unchanged except that `environment.image` is replaced by the currently approved digest; fixtures carry a placeholder digest and are never edited. In the hosted Linux job, `packages/application/src/fix-verification.integration.test.ts` replays every `*.proofissue` file in `artifacts/v1/valid`, reproducing it and then not reproducing it with the declared fix. The directory is listed at run time, so a fixture added there is covered automatically, and a fixture that stops reproducing is a compatibility finding, not a reason to edit the fixture.
+- **Enumeration.** `packages/artifact-schema/src/index.test.ts` parses and canonically round-trips every file in `artifacts/v1/valid` and rejects every file in `artifacts/v1/invalid`.
+- **Committed-evidence scan.** `packages/redactor/src/committed-evidence.test.ts` runs the repository's redactor over the fixtures, fuzz corpus, trial results, examples, workflows, and documentation, and allows exactly one known finding (the password-rule description in `docs/security-model.md`). `scripts/check-repository-hygiene.mjs` also scans `.proofissue` files for local paths and credential-shaped values. Build any synthetic secret at run time instead of writing it out.
+- **Result fixtures** stay provisional and are outside the replay-compatibility rule.
+
+## Current fixtures
+
+Artifacts in `artifacts/v1/valid`: `canonical` (also the permanent canonical-byte fixture), `minimal` (valid but not in canonical form), `exact-output`, `normalized-output`, `regex-output`, and `with-dependencies`. In `artifacts/v1/invalid`: `unknown-field`, `normalize-out-of-order`, and `regex-lookahead`. `action` holds the approved-image failure and corrected checkout, and `results/v1` holds one result fixture per replay status plus the output-matching and preparation results. Milestone 2 tests preserve artifact compatibility, schema synchronization, and exact canonical serialization. Result fixtures retain status coverage and prevent detailed decoded output from entering public examples.

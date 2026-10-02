@@ -537,3 +537,42 @@ describe('dependency files', () => {
     }
   });
 });
+
+describe('committed version 1 fixture directories', () => {
+  const fixtureNames = async (kind: 'invalid' | 'valid'): Promise<string[]> =>
+    (await readdir(`tests/fixtures/artifacts/v1/${kind}`))
+      .filter((name) => name.endsWith('.proofissue'))
+      .sort();
+
+  it('parses every committed valid fixture and round-trips it canonically', async () => {
+    const names = await fixtureNames('valid');
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      const source = await readFile(`tests/fixtures/artifacts/v1/valid/${name}`);
+      const first = parseAndValidateArtifact(source);
+      expect(first.ok, name).toBe(true);
+      if (!first.ok) continue;
+      // Not byte-compared: the minimal fixture is valid but not written in canonical form, so
+      // its digest (taken over the original bytes) legitimately differs after re-serializing.
+      const second = parseAndValidateArtifact(Buffer.from(serializeArtifact(first.artifact)));
+      expect(second.ok, name).toBe(true);
+      if (!second.ok) continue;
+      const { digest: firstDigest, ...firstContent } = first.artifact;
+      const { digest: secondDigest, ...secondContent } = second.artifact;
+      expect(secondContent, name).toEqual(firstContent);
+      expect(firstDigest, name).toMatch(/^[0-9a-f]{64}$/u);
+      expect(secondDigest, name).toMatch(/^[0-9a-f]{64}$/u);
+    }
+  });
+
+  it('rejects every committed invalid fixture', async () => {
+    const names = await fixtureNames('invalid');
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) {
+      const result = parseAndValidateArtifact(
+        await readFile(`tests/fixtures/artifacts/v1/invalid/${name}`),
+      );
+      expect(result.ok, name).toBe(false);
+    }
+  });
+});

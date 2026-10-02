@@ -312,6 +312,53 @@ describe('captureRecording', () => {
     ).rejects.toMatchObject({ code: 'timeout' } satisfies Partial<RecorderError>);
   });
 
+  it('terminates the whole process tree at the wall-clock limit', async () => {
+    const root = await project();
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      [
+        "import { spawn } from 'node:child_process';",
+        "import { writeFileSync } from 'node:fs';",
+        "const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });",
+        "writeFileSync('child.pid', String(child.pid));",
+        'setInterval(() => {}, 1000);',
+        '',
+      ].join(String.fromCharCode(10)),
+    );
+    let pid: number | undefined;
+    const alive = (candidate: number): boolean => {
+      try {
+        process.kill(candidate, 0);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      await expect(
+        captureRecording(
+          request(root, { limits: { ...DEFAULT_RECORD_LIMITS, timeout_seconds: 1 } }),
+        ),
+      ).rejects.toMatchObject({ code: 'timeout' } satisfies Partial<RecorderError>);
+      pid = Number.parseInt(await readFile(path.join(root, 'child.pid'), 'utf8'), 10);
+      expect(Number.isInteger(pid)).toBe(true);
+
+      const deadline = Date.now() + 10_000;
+      while (alive(pid) && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(alive(pid), 'the grandchild process must not outlive the recording').toBe(false);
+    } finally {
+      if (pid !== undefined && Number.isInteger(pid)) {
+        try {
+          process.kill(pid, 'SIGKILL');
+        } catch {
+          // Already gone, which is the expected outcome.
+        }
+      }
+    }
+  }, 30_000);
+
   it('never invokes a shell for argument interpretation', async () => {
     const root = await project();
     const sentinel = path.join(root, 'shell-must-not-create.txt');

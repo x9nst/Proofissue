@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { readdirSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -22,7 +23,11 @@ import {
   type ContainerState,
 } from '@proofissue/runner';
 
-import { createRecordApplicationService, createReplayApplicationService } from './index.js';
+import {
+  createPrepareApplicationService,
+  createRecordApplicationService,
+  createReplayApplicationService,
+} from './index.js';
 
 const integration = describe.runIf(process.env.PROOFISSUE_RUN_CONTAINER_TESTS === '1');
 
@@ -435,4 +440,173 @@ integration('Output matching fix verification in the locked-down container', () 
       await rm(root, { force: true, recursive: true });
     }
   }, 120_000);
+});
+
+// The reproduction prints a likely secret, built at run time so no secret-shaped literal is
+// committed, followed by the marker the expectation needs.
+const secretPrintingReproduction = (): string =>
+  [
+    "const secret = 'PROOFISSUE_SYNTHETIC_' + 'TOKEN=' + 'SYNTHETIC_' + 'TEST_ONLY_' + 'replay';",
+    "process.stderr.write(secret + String.fromCharCode(10) + 'proofissue-marker');",
+    'process.exitCode = 1;',
+    '',
+  ].join(String.fromCharCode(10));
+
+const runSecretRedactionFixture = async (useRealContainer: boolean): Promise<void> => {
+  const root = await mkdtemp(path.join(tmpdir(), 'proofissue-replay-redaction-'));
+  const artifactPath = path.join(root, 'secret.proofissue');
+  try {
+    const reproduction = secretPrintingReproduction();
+    const subject = 'export const unused = true;\n';
+    const value: ArtifactV1 = {
+      version: 1,
+      environment: {
+        runtime: 'node',
+        runtime_version: '24',
+        operating_system: 'linux',
+        image: APPROVED_NODE_IMAGE,
+      },
+      capture: {
+        host_operating_system: 'linux',
+        host_architecture: 'x64',
+        node_version: '24.15.0',
+      },
+      command: { program: 'node', arguments: ['reproduction.mjs'], working_directory: '.' },
+      files: [
+        {
+          path: 'reproduction.mjs',
+          role: 'reproduction',
+          encoding: 'utf8',
+          content: reproduction,
+          sha256: sha256(reproduction),
+        },
+        {
+          path: 'subject.mjs',
+          role: 'subject',
+          encoding: 'utf8',
+          content: subject,
+          sha256: sha256(subject),
+        },
+      ],
+      expect: {
+        exit_code: 1,
+        stdout: [],
+        stderr: [{ mode: 'contains', value: 'proofissue-marker' }],
+      },
+      limits: {
+        timeout_seconds: 30,
+        memory_mb: 512,
+        cpus: 1,
+        processes: 64,
+        output_bytes_per_stream: 4096,
+      },
+      redaction: { enabled: true, findings: [] },
+    };
+    await writeFile(artifactPath, serializeArtifact(value));
+
+    const runner = useRealContainer
+      ? undefined
+      : createDockerRunner({ engine: new LocalFixtureEngine() });
+    const result = await createReplayApplicationService({
+      ...(runner === undefined ? {} : { runner }),
+    }).replay({ artifact_path: artifactPath, mode: 'snapshot' });
+
+    expect(result.status).toBe('reproduced');
+    expect(result.warnings).toContainEqual(
+      expect.objectContaining({ code: 'replay_output_redacted' }),
+    );
+    const encoded = JSON.stringify(result);
+    expect(encoded).not.toContain('SYNTHETIC_TEST_ONLY');
+    expect(encoded).not.toContain('decoded_text');
+  } finally {
+    await rm(root, { force: true, recursive: true });
+  }
+};
+
+describe('Replay output redaction through the shared application service', () => {
+  it('redacts a likely secret the replayed command prints and keeps it out of the result', async () => {
+    await runSecretRedactionFixture(false);
+  });
+});
+
+integration('Replay output redaction in the locked-down container', () => {
+  it('redacts a likely secret the replayed command prints and keeps it out of the result', async () => {
+    await runSecretRedactionFixture(true);
+  }, 90_000);
+});
+
+// Every committed version 1 artifact fixture, found by listing the directory so a fixture added
+// later is covered without editing this test. "Replay-compatible" means the fixture replays
+// unchanged except that its placeholder image is replaced by the currently approved digest.
+const COMPATIBILITY_DIRECTORY = 'tests/fixtures/artifacts/v1/valid';
+const compatibilityFixtures = readdirSync(COMPATIBILITY_DIRECTORY)
+  .filter((name) => name.endsWith('.proofissue'))
+  .sort();
+
+// A fetcher that fails every request, so preparing an artifact with an empty dependency set
+// proves the fixture needs no network.
+const refusingFetcher = {
+  fetch: (): Promise<never> => Promise.reject(new Error('The fixture replay must not fetch.')),
+};
+
+integration('Version 1 compatibility fixtures in the locked-down container', () => {
+  it('finds the committed fixtures', () => {
+    expect(compatibilityFixtures).toEqual(
+      expect.arrayContaining(['canonical.proofissue', 'minimal.proofissue']),
+    );
+  });
+
+  it.each(compatibilityFixtures)(
+    'replays %s, then not after the declared fix',
+    async (name) => {
+      const root = await mkdtemp(path.join(tmpdir(), 'proofissue-compatibility-'));
+      const checkout = path.join(root, 'checkout');
+      const artifactPath = path.join(root, 'fixture.proofissue');
+      await mkdir(checkout);
+      try {
+        const parsed = parseAndValidateArtifact(
+          await readFile(path.join(COMPATIBILITY_DIRECTORY, name)),
+        );
+        if (!parsed.ok) throw new Error(`${name} must be valid.`);
+        await writeFile(
+          artifactPath,
+          serializeArtifact({
+            ...parsed.artifact,
+            environment: { ...parsed.artifact.environment, image: APPROVED_NODE_IMAGE },
+          }),
+        );
+        await writeFile(path.join(checkout, 'calculate.mjs'), FIXED_SUBJECT_SOURCE);
+
+        let dependencyStore: string | undefined;
+        if (parsed.artifact.files.some((file) => file.role === 'dependency')) {
+          dependencyStore = path.join(root, 'store');
+          const prepared = await createPrepareApplicationService({
+            fetcher: refusingFetcher,
+          }).prepare({ artifact_path: artifactPath, dependency_store: dependencyStore });
+          expect(prepared.status).toBe('prepared');
+        }
+
+        const replay = createReplayApplicationService().replay;
+        const store = dependencyStore === undefined ? {} : { dependency_store: dependencyStore };
+        const snapshot = await replay({
+          artifact_path: artifactPath,
+          mode: 'snapshot',
+          ...store,
+        });
+        const corrected = await replay({
+          artifact_path: artifactPath,
+          mode: 'current_checkout',
+          against_path: checkout,
+          ...store,
+        });
+
+        expect(snapshot.status).toBe('reproduced');
+        expect(corrected.status).toBe('not_reproduced');
+        expect(corrected.substituted_paths).toEqual(['calculate.mjs']);
+      } finally {
+        await rm(root, { force: true, recursive: true });
+      }
+    },
+    180_000,
+  );
 });
