@@ -65,7 +65,7 @@ Human and structured results must list all substituted subject paths and state t
 9. Capture bounded raw stdout and stderr bytes, drain discarded bytes, decode retained buffers with the shared UTF-8 rules, redact whole decoded buffers, and record exit code, termination reason, duration, and structured lifecycle events.
 10. Stop or kill the container when execution finishes, exceeds a limit, or is interrupted.
 11. Remove the container and temporary workspace.
-12. Match the bounded result against the artifact expectations. An expectation that lists normalization rules is compared against the normalized redacted output, using the fixed replay directories `/workspace` and `/tmp`.
+12. Match the bounded result against the artifact expectations. An expectation that lists normalization rules is compared against the normalized redacted output, using the fixed replay directories `/workspace` and `/tmp`. A `regex` expectation is searched with the bounded engine, which runs in time proportional to the output and stops with `regex_step_limit` after a fixed number of steps.
 13. Return a structured classification with evidence.
 
 Cleanup runs even when matching or result formatting fails.
@@ -78,7 +78,7 @@ Execution completed and every expected exit-code and output condition matched. E
 
 ### `not_reproduced`
 
-Execution completed but one or more expectations differed. Differences show the expected exit code, actual exit code, missing literal evidence, the first position at which an exact comparison differed, truncation, and other bounded facts needed to understand the result.
+Execution completed but one or more expectations differed. Differences show the expected exit code, actual exit code, missing literal evidence, the first position at which an exact comparison differed, a pattern that did not match or ran into its step limit, truncation, and other bounded facts needed to understand the result.
 
 Each explanation says which comparison was made and, for a normalized one, which rules changed the replay output, in counts only. For example:
 
@@ -86,6 +86,16 @@ Each explanation says which comparison was made and, for a normalized one, which
 Matched: Normalized replay stderr matched the expected output exactly; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.
 Different: Normalized replay stderr differed from the expected output at line 1, column 1 (expected 76 characters, received 0); normalization changed nothing in the replay output.
 ```
+
+A pattern expectation is explained the same way, without the pattern:
+
+```text
+Matched: Normalized replay stderr matched the expected pattern; normalization changed 2 line endings, 2 terminal escape sequences, 1 path, and 1 duration in the replay output.
+Different: Normalized replay stderr did not match the expected pattern; normalization changed nothing in the replay output.
+Different: The stderr pattern could not be evaluated within the deterministic limit of 20000000 steps.
+```
+
+A pattern that reaches the step limit is a result that could not be established, like truncated output, and classifies as `not_reproduced`. `--require-status not_reproduced` can therefore pass for it.
 
 Normalization cannot see a change confined to what it replaces. A fix that only changes a duration, a process ID, or a Node.js internal line number would go unnoticed by a normalized expectation, so a raw literal is the right choice for a number that is the point of the bug. See `output-matching.md`.
 

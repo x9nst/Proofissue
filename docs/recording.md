@@ -112,12 +112,13 @@ Raw captured output is held in memory only until redaction. It is not written to
 
 The observed exit code becomes the proposed exact expectation. A failing artifact also requires at least one output expectation from stdout or stderr. The user chooses or supplies it; ProofIssue does not guess which error text identifies the failure.
 
-Volatile values such as temporary paths, timestamps, ports, and random identifiers make a raw literal unstable. Normalized and exact expectations exist for that. `output-matching.md` defines the modes and the eight normalization rules.
+Volatile values such as temporary paths, timestamps, ports, and random identifiers make a raw literal unstable. Normalized, exact, and pattern expectations exist for that. `output-matching.md` defines the modes, the eight normalization rules, and the pattern language.
 
 | Option | What is stored | Use it when |
 | --- | --- | --- |
 | `--expect-stdout`, `--expect-stderr` | The literal, as typed, matched byte for byte | The text never varies |
 | `--expect-stdout-normalized`, `--expect-stderr-normalized` | The literal as printed here, normalized: your project and temporary directories become `<project>` and `<tmp>`, durations become `<duration>`, and so on | The text varies by machine or run, but the rest is the point |
+| `--expect-stdout-regex`, `--expect-stderr-regex` | The pattern as typed, matched against the normalized output | Part of the text varies in a way the rules do not cover, such as a port or a count: `listening on port \d+` |
 | `--expect-stdout-exact`, `--expect-stderr-exact` | The whole redacted stream | The entire output is the failure and it is short |
 | `--expect-stdout-exact-normalized`, `--expect-stderr-exact-normalized` | The whole stream, normalized | The same, with varying parts |
 
@@ -126,9 +127,10 @@ Choose a raw literal for a number that is the point of the bug: normalization wo
 The recorder derives each stored value from the recording itself, then:
 
 - checks every normalized literal against the normalized recording, so a literal that was not printed is refused;
+- compiles every pattern before the command runs, so a pattern outside the bounded language (lookaround, a backreference, a pattern that can match nothing, or one beyond the limits) is refused without running anything, and then requires each pattern to match the normalized recording;
 - refuses an exact expectation when the stream was truncated, is empty, is larger than 8 KiB, or contains a redaction marker, and points to a normalized literal instead;
 - checks each stored value for a likely secret again after normalization, because removing terminal escape sequences can join text that redaction could not see split;
-- refuses a stored value that still holds your project directory or your home directory, because that value could not replay and would reveal your user name.
+- refuses a stored value or pattern that still holds your project directory or your home directory, because it could not replay and would reveal your user name.
 
 The artifact never stores a path from your machine for a normalized expectation. The application then replays the recording's own output against its expectations with the same matcher a replay uses, and writes nothing if the recording does not satisfy them.
 
@@ -159,6 +161,7 @@ Recording stops without writing an artifact when:
 - the recording command exceeds its wall-clock limit or cannot be terminated cleanly;
 - with `--dependencies`, either dependency file is missing, `package.json` is not a JSON object, the lockfile is unsupported, or redaction would alter either file;
 - an exact expectation is requested for a truncated, empty, oversized, or redacted stream, or twice for one stream;
+- a pattern is outside the bounded language, can match without consuming output, or does not match the recording;
 - an expected value forms a likely secret after normalization or still holds a local path;
 - the recording does not satisfy its own expectations;
 - artifact validation fails;

@@ -339,7 +339,7 @@ Linux run are recorded in `docs/milestone-6-evidence.md`.
 
 **Status:** In Progress
 
-**Current evidence:** decision 0002 steps 1-6 implemented: dependency capture, lockfile validation, prepare (CLI and prepare Action), offline replay; real-project trials (step 7) pending. Exact and normalized output matching implemented (decision 0003, defaults awaiting maintainer sign-off); bounded regular-expression matching is the next step. Real-project trial harness and hosted workflow added; the pilot (N1, T1, M3) ran once on hosted CI and all three cases were confirmed (see `docs/real-project-evaluation.md`). No acceptance criterion below is met yet.
+**Current evidence:** decision 0002 steps 1-6 implemented: dependency capture, lockfile validation, prepare (CLI and prepare Action), offline replay; real-project trials (step 7) pending. Exact, normalized, and bounded regular-expression output matching implemented (decision 0003, defaults awaiting maintainer sign-off). Real-project trial harness and hosted workflow added; the pilot (N1, T1, M3) ran once on hosted CI and all three cases were confirmed (see `docs/real-project-evaluation.md`). No acceptance criterion below is met yet.
 
 **Target outcome:**
 

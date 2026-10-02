@@ -12,7 +12,7 @@
 - `milestone-6-evidence.md` records the GitHub Action implementation, security analysis, dependency advisory triage, local evidence, and the hosted Linux run that completed the milestone.
 - `decisions/0001-version-1-contracts.md` records the accepted version 1 product decisions.
 - `decisions/0002-dependency-strategy.md` compares the options for dependency handling in the initial supported Node.js workflow and records the accepted choice: a separate explicit prepare step, then offline replay.
-- `decisions/0003-output-matching-modes.md` proposes exact, normalized, and bounded regular-expression output matching; the exact and normalized parts are implemented with assumed defaults awaiting maintainer sign-off, and regular expressions are the next step.
+- `decisions/0003-output-matching-modes.md` proposes exact, normalized, and bounded regular-expression output matching; all of it is implemented with assumed defaults awaiting maintainer sign-off.
 - `real-project-evaluation.md` defines the real-project trial method, the fixed replay budget, the outcome classes, the pilot cases, and where results go. The harness is in `../benchmarks/real-projects`; the three-case pilot has run once and all three cases were confirmed.
 - `product-validation.md` tracks early maintainer research, file-role usability gates, product-demand evidence, and findings.
 - `maintainer-review-packet.md` provides the mock artifact workflow, task prompts, and facilitator notes used for early research.
@@ -25,7 +25,7 @@
 - `artifact-format.md` defines the proposed version 1 artifact fields, limits, validation order, and compatibility rules.
 - `artifact-io-contract.md` defines exact parser limits, deterministic serialization, and no-overwrite atomic publication.
 - `output-handling.md` defines raw-byte capture, UTF-8 decoding, truncation, whole-buffer redaction, and matching input.
-- `output-matching.md` defines the `contains` and `exact` modes, the eight normalization rules, the record and replay path contexts, the explanation messages, and known limitations.
+- `output-matching.md` defines the `contains`, `exact`, and `regex` modes, the eight normalization rules, the pattern language and its limits, the record and replay path contexts, the explanation messages, and known limitations.
 - `result-contract.md` defines neutral versioned operation results and the error taxonomy.
 - `cli.md` is the command reference: syntax, options, examples, exit codes, failure behavior, and security notes for `record`, `validate`, `inspect`, `prepare`, and `replay`.
 - `dependencies.md` describes npm dependency handling for the initial supported workflow and the lockfile validation rules; it grows as each step lands.

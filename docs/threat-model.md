@@ -120,6 +120,12 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Normalization joins escape-split text into a secret that is then stored | Recorder | Redaction check on every stored value after normalization; refuse the recording | Rejection |
 | Host paths or the user name leak through an exact or normalized value | Recorder / privacy | Exact path replacement; refuse a stored value that still contains the project or home directory | Rejection |
 | Host context influences replay classification | Replay | Replay normalizes with only the fixed `/workspace` and `/tmp`; a container test proves the replayed command sees exactly those | Containment |
+| Catastrophic-backtracking pattern | Matcher | A linear-time Pike-VM engine instead of V8 `RegExp`; 1 MiB adversarial time-budget tests | Containment |
+| Pattern that expands into a huge automaton | Artifact validation | Length, repetition, nesting, and compiled-size limits; `semantic_violation` before any execution | Rejection |
+| Backreferences, lookaround, property escapes, or modifiers | Artifact validation | `semantic_violation` naming the feature and offset | Rejection |
+| Pattern and output combination too costly even in linear time | Matcher | Deterministic step limit; `regex_step_limit`, never a match | Containment / Detection |
+| Vacuous pattern (`a*`, `^`) used to make any failure "reproduce" | Artifact validation | Reject patterns that can match without consuming output | Rejection |
+| Pattern aimed at redaction markers | Artifact validation | Reject `REDACTED:` in a pattern | Rejection |
 | Normalization hides a meaningful difference | Matcher | Explicit per-expectation rules shown in every result; exact exit code; limits documented | Detection (residual) |
 | New expectation content is misread by an older consumer | Compatibility | Closed schema that enumerates modes and rule names; a frozen-schema test proves an older consumer rejects it | Rejection |
 | Exact expectation satisfied by a truncated stream | Matcher | An exact comparison is `insufficient_output` for a truncated stream, never a match | Detection |
@@ -170,6 +176,8 @@ Action adapter tests must additionally prove that:
 - Local administrators can inspect host memory or temporary resources.
 - Resource enforcement differs by container engine and operating-system host.
 - Literal matching can still mistake two similar failures for one another.
+- A pattern can widen what counts as the same failure, and can match a redaction marker through a character set; validation refuses only the spelled-out marker.
+- `regex_step_limit` and `insufficient_output` classify as `not_reproduced`, so they satisfy `--require-status not_reproduced`.
 - Normalization can hide a change confined to a normalized token (a duration, a process ID, a Node.js internal line number, the Node.js version, or a path root); each result names the rules that were applied.
 - Digest pinning gives integrity, not provenance or vulnerability-free content.
 
@@ -177,4 +185,4 @@ These risks are documented, not silently accepted. Highly adversarial replay req
 
 ## Review Triggers
 
-This threat model must be reviewed when adding archives, binary files, directory collection, shell execution, dependency installation, network access, custom images, new runtimes, additional mounts, regular expressions, artifact signing, hosted execution, or automatic issue comments.
+This threat model must be reviewed when adding archives, binary files, directory collection, shell execution, dependency installation, network access, custom images, new runtimes, additional mounts, artifact signing, hosted execution, or automatic issue comments. The review for regular expressions is done: the rows above and decision 0003 record it, and it must be repeated before the pattern language is extended (for example with lookaround, flags, or captures).

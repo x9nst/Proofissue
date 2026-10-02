@@ -146,11 +146,11 @@ Each output entry contains:
 
 | Field | Purpose | Validation and limit |
 | --- | --- | --- |
-| `mode` | Makes matching behavior explicit | Required; `contains` or `exact` |
+| `mode` | Makes matching behavior explicit | Required; `contains`, `exact`, or `regex` |
 | `normalize` | Asks for the replay stream to be normalized before the comparison | Optional list of 1-8 unique rule names in the documented order; see `output-matching.md` |
-| `value` | Holds the expected text | Required nonempty string; maximum 8 KiB |
+| `value` | Holds the expected text, or the pattern for `regex` | Required nonempty string; maximum 8 KiB; a `regex` pattern is at most 1024 characters and must compile in the bounded language |
 
-`contains` without `normalize` is the original behavior: the value must appear in the redacted stream. `exact` means the whole retained redacted stream equals the value. When `normalize` is present, the stream is normalized with those rules before the comparison, and the stored value is already normalized. The artifact never stores a host path: the `paths` rule replaces exact known directories with `<project>` and `<tmp>` on both sides.
+`contains` without `normalize` is the original behavior: the value must appear in the redacted stream. `exact` means the whole retained redacted stream equals the value. `regex` means the value is a pattern in the bounded regular-expression language (see `output-matching.md`) that matches somewhere in the stream. When `normalize` is present, the stream is normalized with those rules before the comparison, and the stored value is already normalized, except that a `regex` pattern is stored as typed. The artifact never stores a host path: the `paths` rule replaces exact known directories with `<project>` and `<tmp>` on both sides.
 
 ```yaml
 expect:
@@ -172,7 +172,26 @@ expect:
       value: "Expected 4 from calculate(2) (<duration>)"
 ```
 
-A failing expectation must contain at least one stdout or stderr entry. Values containing a redaction replacement are invalid because they cannot establish original failure identity. A normalized value must be unchanged by its own rules (with no path context), because replay compares normalized output with it. The rules and the stored values are the same for every replay, so the explanation can say which rules changed the replay output, never what it contained.
+A pattern entry, here with the same rules, and one without `normalize` that matches the redacted stream as printed (the double-quoted YAML scalar doubles each backslash):
+
+```yaml
+  stderr:
+    - mode: regex
+      normalize:
+        - line_endings
+        - ansi_escapes
+        - trailing_whitespace
+        - paths
+        - node_version
+        - node_internal_locations
+        - process_ids
+        - durations
+      value: "Expected \\d+ from calculate\\(\\d+\\) \\(<duration>\\)"
+    - mode: regex
+      value: "checking calculate\\(\\d+\\)"
+```
+
+A failing expectation must contain at least one stdout or stderr entry. Values containing a redaction replacement are invalid because they cannot establish original failure identity; for a `regex`, the text `REDACTED:` anywhere in the pattern is invalid, so an escaped bracket cannot hide a marker. A normalized `contains` or `exact` value must be unchanged by its own rules (with no path context), because replay compares normalized output with it; a pattern is not output, so this rule does not apply to `regex`. A `regex` pattern that uses a feature outside the bounded language, exceeds a limit, or can match without consuming output is a `semantic_violation` that names the feature and the offset, for example `Regular expression is not supported: Lookahead assertions are not supported. (offset 9).`. The rules and the stored values are the same for every replay, so the explanation can say which rules changed the replay output, never what it contained.
 
 ### `limits`
 
@@ -228,6 +247,7 @@ Steps 1-7 are static validation. Step 8 is local replay authorization and must s
 - A producer must not emit fields outside the published version 1 schema.
 - Additive fields require a new compatibility decision even if made optional. The `dependency` file role is such an addition: artifacts without it are unchanged and remain valid, and a consumer that predates it rejects an artifact that uses it instead of guessing. It is accepted within version 1 only while the schema is marked provisional, as recorded in decision 0002, and must be revisited before the schema is declared stable. `tests/fixtures/artifacts/v1/valid/with-dependencies.proofissue` is its permanent compatibility fixture.
 - Output matching modes are another such addition. A `contains` entry without `normalize` is exactly the original form and serializes to the same bytes. The `exact` mode and the `normalize` list are accepted within version 1 under the same provisional status, as recorded in decision 0003, and must be revisited before the schema is declared stable. A consumer that predates them rejects them with a schema violation, which `tests/fixtures/artifacts/v1/legacy-schema/artifact-v1-contains-only.schema.json` (a frozen copy of the earlier published schema) proves against `valid/exact-output.proofissue` and `valid/normalized-output.proofissue`, the permanent compatibility fixtures. `invalid/normalize-out-of-order.proofissue` is the invalid fixture. A rule name's definition is frozen; a changed definition gets a new name.
+- The `regex` mode is the next such addition (decision 0003). A consumer that predates it rejects it with a schema violation, which `tests/fixtures/artifacts/v1/legacy-schema/artifact-v1-before-regex.schema.json` (a frozen copy of the schema as published before it) proves against `valid/regex-output.proofissue`, while every earlier fixture stays valid under it. `invalid/regex-lookahead.proofissue` is the invalid fixture. The pattern language is part of the format: a feature added to it later is accepted only by consumers that know it, and one that does not know it rejects the artifact at validation, never at replay.
 - Every supported artifact version retains a parser fixture and compatibility test.
 - Unsupported future versions produce `invalid_artifact` with an explicit version error.
 - Artifact hashes prove content integrity only; they do not prove authorship or trust.

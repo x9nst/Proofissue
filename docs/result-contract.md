@@ -88,11 +88,14 @@ Cleanup errors do not erase the original error. An incomplete required cleanup p
 | `exit_code` | The exit code matched, or differed (a difference). |
 | `stdout_contains`, `stderr_contains` | A `contains` expectation found its value. |
 | `stdout_exact`, `stderr_exact` | An `exact` expectation's value equalled the whole stream. |
+| `stdout_regex`, `stderr_regex` | A `regex` expectation's pattern matched somewhere in the stream. |
 | `stdout_missing`, `stderr_missing` | A `contains` expectation did not find its value. |
 | `stdout_differs`, `stderr_differs` | An `exact` expectation's value differed from the whole stream. The message gives the first difference as a 1-based line and column in Unicode code points and both lengths. |
+| `stdout_no_match`, `stderr_no_match` | A `regex` expectation's pattern did not match, and the stream was not truncated. |
+| `regex_step_limit` | A `regex` pattern could not be evaluated within the deterministic limit of 20,000,000 steps. It is never a match. |
 | `insufficient_output` | The stream was truncated, so the expectation could not be established. |
 
-Messages are fixed sentences built from counts and positions. They never contain an expected value or any output text. The wording is listed in `output-matching.md`.
+Messages are fixed sentences built from counts and positions. They never contain an expected value, a pattern, or any output text. The wording is listed in `output-matching.md`.
 
 An evidence or difference item for an expectation that compares normalized output carries an optional `normalization` object:
 
@@ -132,7 +135,7 @@ A successful inspection adds a content-free summary of the runtime, pinned image
 
 ## Fixtures and Validation
 
-Before compatibility is claimed, retain valid fixtures for every operation and all four replay statuses. Prepare results are kept in `tests/fixtures/results/v1/prepare`. `reproduced-normalized.json` and `not-reproduced-output-modes.json` carry the exact and normalized evidence and differences; the application tests check them against the matcher's own output. Tests verify:
+Before compatibility is claimed, retain valid fixtures for every operation and all four replay statuses. Prepare results are kept in `tests/fixtures/results/v1/prepare`. `reproduced-normalized.json` and `not-reproduced-output-modes.json` carry the exact and normalized evidence and differences, and `reproduced-regex.json` and `not-reproduced-regex.json` carry the pattern evidence, the no-match difference, and the step-limit difference; the application tests check them against the matcher's own output. Tests verify:
 
 - result version and operation-specific status;
 - bounds on every list and string;
