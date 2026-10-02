@@ -5,11 +5,15 @@ import process from 'node:process';
 
 import type { ArtifactOutputExpectationV1 } from '@proofissue/artifact-schema';
 import {
+  BOUNDED_REGEX_LIMITS,
   DEFAULT_OUTPUT_NORMALIZATION,
+  compileBoundedRegex,
   containsContextPath,
   createOutputPathContext,
   normalizeOutput,
+  searchBoundedRegex,
 } from '@proofissue/output-rules';
+import type { BoundedRegexProgram } from '@proofissue/output-rules';
 import type { OutputPathContext, OutputPathPlatform } from '@proofissue/output-rules';
 import type { Redactor } from '@proofissue/redactor';
 
@@ -24,20 +28,40 @@ import { RecorderError } from './errors.js';
  * - `contains` with `normalized: true`: the literal is normalized with every rule, as the
  *   reporter saw it printed locally, and must appear in the normalized recording.
  * - `exact`: the whole stream (redacted, and normalized when `normalized` is true).
+ * - `regex`: a pattern in the bounded regular-expression language, which must match the
+ *   recording (normalized when `normalized` is true) and is stored as typed.
  */
 export type RecordOutputExpectation =
   | string
   | { readonly mode: 'contains'; readonly normalized: boolean; readonly value: string }
-  | { readonly mode: 'exact'; readonly normalized: boolean };
+  | { readonly mode: 'exact'; readonly normalized: boolean }
+  | { readonly mode: 'regex'; readonly normalized: boolean; readonly pattern: string };
 
 export const MAX_OUTPUT_VALUE_BYTES = 8192;
 
 type StreamName = 'stderr' | 'stdout';
 
-/** The literal a reporter typed, for the forms that carry one. */
+/** The literal or pattern a reporter typed, for the forms that carry one. */
 const literalOf = (item: RecordOutputExpectation): string | undefined => {
   if (typeof item === 'string') return item;
-  return item.mode === 'contains' ? item.value : undefined;
+  if (item.mode === 'contains') return item.value;
+  return item.mode === 'regex' ? item.pattern : undefined;
+};
+
+/** The pattern of a regular-expression expectation, or undefined for the other forms. */
+const patternOf = (item: RecordOutputExpectation): string | undefined =>
+  typeof item !== 'string' && item.mode === 'regex' ? item.pattern : undefined;
+
+/** Explains why a pattern cannot be recorded, or returns nothing when it can. */
+const patternProblem = (pattern: string): string | undefined => {
+  if (pattern.includes('REDACTED:')) {
+    return 'it contains redaction marker text, which cannot be matching evidence';
+  }
+  const compiled = compileBoundedRegex(pattern);
+  if (compiled.ok) return undefined;
+  return compiled.error.code === 'matches_empty'
+    ? compiled.error.message
+    : `${compiled.error.message} (offset ${String(compiled.error.offset)})`;
 };
 
 export const isExactExpectation = (item: RecordOutputExpectation): boolean =>
@@ -68,6 +92,17 @@ export const validateExpectationRequest = (
     )
   ) {
     throw new RecorderError('invalid_request', 'Expected output literals exceed artifact limits.');
+  }
+  for (const item of [...stdout, ...stderr]) {
+    const pattern = patternOf(item);
+    const problem = pattern === undefined ? undefined : patternProblem(pattern);
+    if (problem !== undefined) {
+      // The message never repeats the pattern: it may be long, and the reporter typed it.
+      throw new RecorderError(
+        'invalid_request',
+        `An expected output pattern is not supported: ${problem}`,
+      );
+    }
   }
   if (
     stdout.filter(isExactExpectation).length > 1 ||
@@ -199,6 +234,41 @@ const deriveExact = (
 };
 
 /**
+ * Checks that a pattern matches what was recorded, searching the same text replay will search.
+ * The pattern is stored as typed: it is not normalized, because it is a pattern, not output.
+ */
+const deriveRegex = (
+  stream: RecordedStream,
+  pattern: string,
+  normalized: boolean,
+  searched: string,
+): ArtifactOutputExpectationV1 => {
+  const compiled = compileBoundedRegex(pattern);
+  if (!compiled.ok) {
+    throw new RecorderError('invalid_request', 'An expected output pattern is not supported.');
+  }
+  const program: BoundedRegexProgram = compiled.program;
+  const result = searchBoundedRegex(program, searched);
+  if (result.status === 'step_limit_exceeded') {
+    throw new RecorderError(
+      'invalid_request',
+      `An expected ${stream.name} pattern could not be evaluated within the limit of ${String(BOUNDED_REGEX_LIMITS.steps)} steps; simplify it.`,
+    );
+  }
+  if (result.status === 'not_matched') {
+    throw new RecorderError(
+      'invalid_request',
+      `An expected ${stream.name} pattern did not match the ${normalized ? 'normalized ' : ''}recorded output.`,
+    );
+  }
+  return {
+    mode: 'regex',
+    ...(normalized ? { normalize: [...DEFAULT_OUTPUT_NORMALIZATION] } : {}),
+    value: pattern,
+  };
+};
+
+/**
  * Turns the requested expectations for one stream into artifact entries, in request order, and
  * checks that each one holds for this recording and is safe to store.
  */
@@ -239,6 +309,19 @@ export const deriveOutputExpectations = (
         );
       }
       entries.push({ mode: 'contains', value: item.value });
+      continue;
+    }
+
+    if (item.mode === 'regex') {
+      if (containsContextPath(item.pattern, contexts.host)) {
+        throw new RecorderError(
+          'invalid_request',
+          `An expected ${stream.name} pattern contains a local path from this computer; match the normalized path token instead.`,
+        );
+      }
+      entries.push(
+        deriveRegex(stream, item.pattern, normalized, normalized ? normalizedText() : stream.text),
+      );
       continue;
     }
 
