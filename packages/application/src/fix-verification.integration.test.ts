@@ -209,6 +209,22 @@ const outputMatchingExpectations = (
   },
 ];
 
+// Patterns are stored as typed and matched against the normalized output, so they name the same
+// tokens a normalized literal does.
+const regexExpectations = (withLocations: boolean): readonly ArtifactOutputExpectationV1[] => [
+  {
+    mode: 'regex',
+    normalize: all,
+    value: String.raw`Expected \d+ from calculate\(\d+\) \(<duration>\)`,
+  },
+  ...(withLocations
+    ? ([
+        { mode: 'regex', normalize: all, value: String.raw`^ {4}at <project>/reproduction\.mjs$` },
+        { mode: 'regex', normalize: all, value: String.raw`^tmp=<tmp>$` },
+      ] as const)
+    : []),
+];
+
 const outputMatchingArtifact = (
   withLocations: boolean,
   stderr: readonly ArtifactOutputExpectationV1[],
@@ -252,24 +268,30 @@ const outputMatchingArtifact = (
   };
 };
 
+const DIFFERENCE_KIND = {
+  contains: 'stderr_missing',
+  exact: 'stderr_differs',
+  regex: 'stderr_no_match',
+} as const;
+
 const expectedKinds = (stderr: readonly ArtifactOutputExpectationV1[]) => ({
   evidence: ['exit_code', ...stderr.map((item) => `stderr_${item.mode}`)],
-  differences: [
-    'exit_code',
-    ...stderr.map((item) => (item.mode === 'exact' ? 'stderr_differs' : 'stderr_missing')),
-  ],
+  differences: ['exit_code', ...stderr.map((item) => DIFFERENCE_KIND[item.mode])],
 });
 
 const runOutputMatchingFixture = async (
   useRealContainer: boolean,
   withLocations: boolean,
+  expectations: (
+    withLocations: boolean,
+  ) => readonly ArtifactOutputExpectationV1[] = outputMatchingExpectations,
 ): Promise<void> => {
   const root = await mkdtemp(path.join(tmpdir(), 'proofissue-output-matching-'));
   const checkout = path.join(root, 'checkout');
   const artifactPath = path.join(root, 'failure.proofissue');
   await mkdir(checkout);
   try {
-    const stderr = outputMatchingExpectations(withLocations);
+    const stderr = expectations(withLocations);
     await writeFile(artifactPath, serializeArtifact(outputMatchingArtifact(withLocations, stderr)));
     await writeFile(path.join(checkout, 'calculate.mjs'), FIXED_SUBJECT_SOURCE);
     await writeFile(
@@ -318,11 +340,19 @@ describe('Output matching fix verification through the shared application servic
   it('reproduces normalized expectations and does not reproduce after the declared fix', async () => {
     await runOutputMatchingFixture(false, false);
   });
+
+  it('reproduces normalized regex expectations and does not reproduce after the declared fix', async () => {
+    await runOutputMatchingFixture(false, false, regexExpectations);
+  });
 });
 
 integration('Output matching fix verification in the locked-down container', () => {
   it('reproduces normalized path and temporary-directory expectations and then the fix', async () => {
     await runOutputMatchingFixture(true, true);
+  }, 90_000);
+
+  it('reproduces normalized regex expectations with paths and then the fix', async () => {
+    await runOutputMatchingFixture(true, true, regexExpectations);
   }, 90_000);
 
   it('records on the host and reproduces in the container, then verifies the fix', async () => {
@@ -352,6 +382,16 @@ integration('Output matching fix verification in the locked-down container', () 
           { mode: 'contains', normalized: true, value: `at ${moduleUrl}` },
           { mode: 'contains', normalized: true, value: 'tmp=/tmp' },
           { mode: 'exact', normalized: true },
+          {
+            mode: 'regex',
+            normalized: true,
+            pattern: String.raw`Expected \d+ from calculate\(\d+\) \(<duration>\)`,
+          },
+          {
+            mode: 'regex',
+            normalized: true,
+            pattern: String.raw`^ {4}at <project>/reproduction\.mjs$`,
+          },
         ],
         expect_stdout: [],
         output_path: artifactPath,
@@ -378,6 +418,8 @@ integration('Output matching fix verification in the locked-down container', () 
         'stderr_contains',
         'stderr_contains',
         'stderr_exact',
+        'stderr_regex',
+        'stderr_regex',
       ]);
       expect(corrected.status).toBe('not_reproduced');
       expect(corrected.differences.map((item) => item.kind)).toEqual([
@@ -386,6 +428,8 @@ integration('Output matching fix verification in the locked-down container', () 
         'stderr_missing',
         'stderr_missing',
         'stderr_differs',
+        'stderr_no_match',
+        'stderr_no_match',
       ]);
     } finally {
       await rm(root, { force: true, recursive: true });
