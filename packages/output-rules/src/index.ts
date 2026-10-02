@@ -12,6 +12,15 @@ export {
   containsContextPath,
   createOutputPathContext,
 } from './path-context.js';
+export { BOUNDED_REGEX_LIMITS, compileBoundedRegex, searchBoundedRegex } from './regex/index.js';
+export type {
+  BoundedRegexCompilation,
+  BoundedRegexError,
+  BoundedRegexErrorCode,
+  BoundedRegexProgram,
+  BoundedRegexSearchOptions,
+  BoundedRegexSearchResult,
+} from './regex/index.js';
 export type {
   OutputPathContext,
   OutputPathContextInput,
