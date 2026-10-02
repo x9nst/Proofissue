@@ -1,4 +1,8 @@
-import type { PrepareOperationResult, ReplayOperationResult } from '@proofissue/application';
+import {
+  APPROVED_REPLAY_IMAGE,
+  type PrepareOperationResult,
+  type ReplayOperationResult,
+} from '@proofissue/application';
 import { describe, expect, it } from 'vitest';
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -203,8 +207,8 @@ describe('CLI argument errors', () => {
 
     const result = await runCli(['record', '--', 'node', '--help'], io);
 
-    expect(result.exit_code).toBe(2);
-    expect(output()).toMatch(/^Error: /u);
+    expect(result.exit_code).toBe(1);
+    expect(output()).not.toContain('File roles:');
   });
 
   it('prints the error and a help pointer, not the full help, for a malformed command', async () => {
@@ -669,8 +673,93 @@ describe('record CLI', () => {
     expect(parsed.request.arguments).toEqual(['test/a.mjs', 'argument with spaces', '&']);
   });
 
+  const minimalRecordArguments = [
+    '--reproduction',
+    'test/reproduction.mjs',
+    '--subject',
+    'src/calculate.mjs',
+    '--expect-stderr',
+    'Expected 4',
+    '--',
+    'node',
+    'test/reproduction.mjs',
+  ];
+  const nothingExists = { cwd: 'work', exists: () => false };
+
+  it('accepts a record command with only files, an expectation, and the command', () => {
+    const parsed = parseRecordArguments(minimalRecordArguments, nothingExists);
+
+    expect(parsed.request).toMatchObject({
+      environment_image: APPROVED_REPLAY_IMAGE,
+      output_path: 'reproduction.proofissue.yaml',
+      project_root: '.',
+      reproduction_paths: ['test/reproduction.mjs'],
+      subject_paths: ['src/calculate.mjs'],
+    });
+  });
+
+  it('derives the artifact name from the first reproduction file', () => {
+    const parsed = parseRecordArguments(
+      [
+        '--reproduction',
+        'test/second.mjs',
+        '--reproduction',
+        'test/other.mjs',
+        '--subject',
+        'src/a.mjs',
+        '--expect-stderr',
+        'x',
+        '--',
+        'node',
+        'test/second.mjs',
+      ],
+      nothingExists,
+    );
+
+    expect(parsed.request.output_path).toBe('second.proofissue.yaml');
+  });
+
+  it('keeps an explicit --output, image, and project exactly as given', () => {
+    const image = `node@sha256:${'1'.repeat(64)}`;
+    const parsed = parseRecordArguments(
+      [
+        '--output',
+        'mine.proofissue',
+        '--image',
+        image,
+        '--project',
+        'sub',
+        ...minimalRecordArguments,
+      ],
+      nothingExists,
+    );
+
+    expect(parsed.request).toMatchObject({
+      environment_image: image,
+      output_path: 'mine.proofissue',
+      project_root: 'sub',
+    });
+  });
+
+  it('adds a numeric suffix when the default name exists and refuses after -99', () => {
+    const taken = new Set(['reproduction.proofissue.yaml', 'reproduction-2.proofissue.yaml']);
+    const exists = (candidate: string): boolean =>
+      taken.has(path.basename(candidate)) && path.dirname(candidate) === 'work';
+
+    expect(
+      parseRecordArguments(minimalRecordArguments, { cwd: 'work', exists }).request.output_path,
+    ).toBe('reproduction-3.proofissue.yaml');
+
+    expect(() =>
+      parseRecordArguments(minimalRecordArguments, { cwd: 'work', exists: () => true }),
+    ).toThrow('pass --output <file>');
+  });
+
   it('renders grouped roles, consequences, limits, and safe redaction metadata', () => {
     const preview = renderRecordPreview({
+      host_node_major: 24,
+      output_path: 'failure.proofissue.yaml',
+      replay_image: APPROVED_REPLAY_IMAGE,
       command: { program: 'node', arguments: ['test/reproduction.mjs'] },
       reproduction_files: ['test/reproduction.mjs'],
       subject_files: ['src/subject.mjs'],
@@ -741,6 +830,9 @@ describe('record CLI', () => {
       'durations',
     ] as const;
     const preview = renderRecordPreview({
+      host_node_major: 24,
+      output_path: 'failure.proofissue.yaml',
+      replay_image: APPROVED_REPLAY_IMAGE,
       command: { program: 'node', arguments: ['test/reproduction.mjs'] },
       reproduction_files: ['test/reproduction.mjs'],
       subject_files: ['src/subject.mjs'],
@@ -791,6 +883,9 @@ describe('record CLI', () => {
     };
     const hidden = `a${String.fromCharCode(0x202e)}b${String.fromCharCode(0x85)}c${String.fromCharCode(127)}`;
     const preview = renderRecordPreview({
+      host_node_major: 24,
+      output_path: 'failure.proofissue.yaml',
+      replay_image: APPROVED_REPLAY_IMAGE,
       command: { program: 'node', arguments: ['x.mjs'] },
       reproduction_files: ['x.mjs'],
       subject_files: ['y.mjs'],
@@ -944,6 +1039,9 @@ describe('record CLI dependency capture', () => {
     truncated: false,
   };
   const basePreview = {
+    host_node_major: 24,
+    output_path: 'failure.proofissue.yaml',
+    replay_image: APPROVED_REPLAY_IMAGE,
     command: { program: 'node' as const, arguments: ['test/reproduction.mjs'] },
     reproduction_files: ['test/reproduction.mjs'],
     subject_files: ['src/subject.mjs'],
@@ -981,6 +1079,36 @@ describe('record CLI dependency capture', () => {
     '--expect-stderr',
     'failure marker',
   ];
+
+  it('warns in the preview when --image is not the approved image', () => {
+    const approved = renderRecordPreview(basePreview);
+    const other = renderRecordPreview({
+      ...basePreview,
+      replay_image: `node@sha256:${'1'.repeat(64)}`,
+    });
+
+    expect(approved).toContain('Replay image: approved Node.js 24 image');
+    expect(approved).not.toContain('Warning');
+    expect(other).toContain('Warning: this is not the approved replay image');
+    expect(other).toContain(`node@sha256:${'1'.repeat(64)}`);
+  });
+
+  it('warns when recording with a Node.js major other than 24', () => {
+    const rendered = renderRecordPreview({ ...basePreview, host_node_major: 22 });
+
+    expect(rendered).toContain('recorded with Node.js 22, but replay always uses Node.js 24');
+    expect(renderRecordPreview(basePreview)).not.toContain('recorded with Node.js');
+  });
+
+  it('shows where the artifact will be written, escaped', () => {
+    const rendered = renderRecordPreview({
+      ...basePreview,
+      output_path: 'a\u001b[31mb.proofissue',
+    });
+
+    expect(rendered).toContain('Artifact file: a\\u{001b}[31mb.proofissue');
+    expect(rendered).not.toContain('\u001b');
+  });
 
   it('documents the flag and its limits', () => {
     expect(RECORD_HELP).toContain('--dependencies');

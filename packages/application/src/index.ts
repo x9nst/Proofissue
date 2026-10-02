@@ -6,6 +6,7 @@ import { createOutputPathContext } from '@proofissue/output-rules';
 import { createRedactor } from '@proofissue/redactor';
 import type { Redactor } from '@proofissue/redactor';
 import {
+  APPROVED_NODE_IMAGE,
   createDockerRunner,
   REPLAY_TEMPORARY_DIRECTORY,
   REPLAY_WORKSPACE_PATH,
@@ -14,6 +15,18 @@ import {
 import type { Runner } from '@proofissue/runner';
 
 export type { RecordOutputExpectation } from '@proofissue/recorder';
+
+/** The only replay image replay accepts; recording defaults to it. */
+export const APPROVED_REPLAY_IMAGE: string = APPROVED_NODE_IMAGE;
+
+export {
+  artifactStem,
+  DEFAULT_ARTIFACT_EXTENSION,
+  defaultArtifactPath,
+  MAX_DEFAULT_ARTIFACT_SUFFIX,
+  REPLAY_NODE_MAJOR,
+} from './record-defaults.js';
+export type { DefaultArtifactPathInput, DefaultArtifactPathResult } from './record-defaults.js';
 
 export type {
   InspectOperationResult,
@@ -87,6 +100,12 @@ export interface RecordPreviewExpectation {
 }
 
 export interface RecordPreview {
+  /** The Node.js major version this recording ran with; replay always uses the approved image's. */
+  readonly host_node_major: number;
+  /** Where the artifact will be written, as the request gave it. */
+  readonly output_path: string;
+  /** The replay image the artifact will name. */
+  readonly replay_image: string;
   readonly command: { readonly program: 'node'; readonly arguments: readonly string[] };
   /** Present only when dependency files are being recorded. */
   readonly dependencies?: {
@@ -170,7 +189,10 @@ const previewExpectation = (
   value: item.value,
 });
 
-const createRecordPreview = (capture: RecordCapture): RecordPreview => {
+const createRecordPreview = (
+  capture: RecordCapture,
+  request: Pick<RecordApplicationRequest, 'output_path'>,
+): RecordPreview => {
   const grouped = new Map<string, RecordPreview['redaction']['findings'][number]>();
   for (const finding of capture.artifact.redaction.findings) {
     const key = `${finding.target}\u0000${finding.category}`;
@@ -183,6 +205,9 @@ const createRecordPreview = (capture: RecordCapture): RecordPreview => {
     });
   }
   return {
+    host_node_major: Number(capture.artifact.capture.node_version.split('.')[0]),
+    output_path: request.output_path,
+    replay_image: capture.artifact.environment.image,
     command: {
       program: capture.artifact.command.program,
       arguments: capture.artifact.command.arguments,
@@ -319,7 +344,7 @@ export const createRecordApplicationService = (
           ),
         );
       }
-      const preview = createRecordPreview(capture);
+      const preview = createRecordPreview(capture, request);
       const confirmation = await confirm(preview);
       if (
         !confirmation.reproduction_files_confirmed ||

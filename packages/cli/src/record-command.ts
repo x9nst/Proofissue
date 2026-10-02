@@ -1,5 +1,11 @@
+import { lstatSync } from 'node:fs';
+import process from 'node:process';
+
 import {
+  APPROVED_REPLAY_IMAGE,
   createRecordApplicationService,
+  defaultArtifactPath,
+  REPLAY_NODE_MAJOR,
   type OutputNormalizationRule,
   type RecordApplicationRequest,
   type RecordConfirmation,
@@ -13,15 +19,23 @@ import { escapePresentationText, quoteExpectation } from './presentation.js';
 import { usageError } from './usage.js';
 
 export const RECORD_HELP = `Usage:
-  proofissue record --project <directory> --output <file.proofissue>
-    --image <repository@sha256:digest>
-    --reproduction <path> --subject <path>
+  proofissue record --reproduction <path> --subject <path>
+    [--project <directory>] [--output <file>]
+    [--image <repository@sha256:digest>]
     [--expect-stdout <literal>] [--expect-stderr <literal>]
     [--expect-stdout-normalized <text>] [--expect-stderr-normalized <text>]
     [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
     [--expect-stdout-exact] [--expect-stderr-exact]
     [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
     [--dependencies] [--yes] -- node <arguments...>
+
+Defaults:
+  --project  The current directory.
+  --output   <name of the first --reproduction file>.proofissue.yaml in the current directory,
+             or -2 to -99 before the extension when that name is taken. A name you give is
+             used exactly as written; .proofissue and .proofissue.yaml are both valid. GitHub
+             issues accept the .yaml name as an attachment.
+  --image    The approved replay image (Node.js 24). Replay refuses any other image.
 
 File roles:
   --reproduction  A test, fixture, or input kept exactly as recorded during fix checks.
@@ -119,9 +133,26 @@ const describeNormalizations = (preview: RecordPreview): readonly string[] => {
   return lines;
 };
 
+const renderImageSection = (preview: RecordPreview): readonly string[] => [
+  preview.replay_image === APPROVED_REPLAY_IMAGE
+    ? `Replay image: approved Node.js ${String(REPLAY_NODE_MAJOR)} image`
+    : `Replay image: ${escapePresentationText(preview.replay_image)}`,
+  ...(preview.replay_image === APPROVED_REPLAY_IMAGE
+    ? []
+    : ['  Warning: this is not the approved replay image, so replay will refuse this artifact.']),
+  ...(preview.host_node_major === REPLAY_NODE_MAJOR
+    ? []
+    : [
+        `  Warning: recorded with Node.js ${String(preview.host_node_major)}, but replay always uses Node.js ${String(REPLAY_NODE_MAJOR)}; the failure may not reproduce there.`,
+      ]),
+];
+
 export const renderRecordPreview = (preview: RecordPreview): string => {
   const lines = [
     'ProofIssue recording preview',
+    '',
+    `Artifact file: ${escapePresentationText(preview.output_path)}`,
+    ...renderImageSection(preview),
     '',
     'Authorized command (no shell):',
     `  node ${preview.command.arguments.map(quoteArgument).join(' ')}`,
@@ -183,7 +214,43 @@ const EXACT_OPTIONS: ReadonlyMap<
 const isExactExpectation = (item: RecordOutputExpectation): boolean =>
   typeof item !== 'string' && item.mode === 'exact';
 
-export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecordCommand => {
+/** What parsing needs from the machine: the current directory and what already exists there. */
+export interface RecordEnvironment {
+  readonly cwd: string;
+  readonly exists: (candidate: string) => boolean;
+}
+
+const nodeRecordEnvironment = (): RecordEnvironment => ({
+  cwd: process.cwd(),
+  exists: (candidate) => {
+    try {
+      lstatSync(candidate);
+      return true;
+    } catch {
+      return false;
+    }
+  },
+});
+
+const chooseOutputPath = (
+  reproductionPaths: readonly string[],
+  environment: RecordEnvironment,
+): string => {
+  const chosen = defaultArtifactPath({
+    cwd: environment.cwd,
+    exists: environment.exists,
+    reproduction_paths: reproductionPaths,
+  });
+  if (chosen.status === 'chosen') return chosen.path;
+  throw new Error(
+    `Every default artifact name from ${chosen.first_candidate} to ${chosen.last_candidate} is taken; pass --output <file>.`,
+  );
+};
+
+export const parseRecordArguments = (
+  arguments_: readonly string[],
+  environment: RecordEnvironment = nodeRecordEnvironment(),
+): ParsedRecordCommand => {
   let projectRoot: string | undefined;
   let outputPath: string | undefined;
   let image: string | undefined;
@@ -267,9 +334,6 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
     }
   }
 
-  if (projectRoot === undefined || outputPath === undefined || image === undefined) {
-    throw new Error('--project, --output, and --image are required.');
-  }
   if (command?.[0] !== 'node' || command.length < 2) {
     throw new Error('The command after -- must start with node and include at least one argument.');
   }
@@ -277,13 +341,13 @@ export const parseRecordArguments = (arguments_: readonly string[]): ParsedRecor
     noninteractive_confirmation: noninteractive,
     request: {
       arguments: command.slice(1),
-      environment_image: image,
+      environment_image: image ?? APPROVED_REPLAY_IMAGE,
       expect_stderr: expectStderr,
       expect_stdout: expectStdout,
       ...(includeDependencies ? { include_dependencies: true } : {}),
-      output_path: outputPath,
+      output_path: outputPath ?? chooseOutputPath(reproductionPaths, environment),
       program: 'node',
-      project_root: projectRoot,
+      project_root: projectRoot ?? '.',
       reproduction_paths: reproductionPaths,
       subject_paths: subjectPaths,
     },
