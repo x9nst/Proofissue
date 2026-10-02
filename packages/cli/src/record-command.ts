@@ -354,6 +354,12 @@ export const parseRecordArguments = (
   };
 };
 
+/** Every error, one per line, each starting with the same prefix. */
+export const renderRecordFailure = (errors: readonly { readonly message: string }[]): string =>
+  (errors.length === 0 ? [{ message: 'unknown error' }] : errors)
+    .map((error) => `Recording failed: ${escapePresentationText(error.message)}\n`)
+    .join('');
+
 export const runRecordCommand = async (
   arguments_: readonly string[],
   io: CliIo,
@@ -403,10 +409,7 @@ export const runRecordCommand = async (
   if (result.status === 'created') io.write('Artifact created.\n');
   else if (result.status === 'cancelled')
     io.write('Recording cancelled; no artifact was written.\n');
-  else
-    io.write(
-      `Recording failed: ${escapePresentationText(result.errors[0]?.message ?? 'unknown error')}\n`,
-    );
+  else io.write(renderRecordFailure(result.errors));
   return {
     exit_code: result.status === 'created' || result.status === 'cancelled' ? 0 : 1,
     result,

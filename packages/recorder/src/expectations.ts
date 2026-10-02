@@ -268,6 +268,51 @@ const deriveRegex = (
   };
 };
 
+const lineCount = (text: string): number =>
+  text === '' ? 0 : text.split('\n').length - (text.endsWith('\n') ? 1 : 0);
+
+const plural = (count: number, noun: string): string =>
+  `${String(count)} ${noun}${count === 1 ? '' : 's'}`;
+
+/**
+ * Explains why a literal was not found, from facts alone. It never repeats the literal or any
+ * output text: it only names the other stream, the normalization option, truncation, and line
+ * counts, so it is safe to print and to place in a result.
+ */
+const missingLiteralHint = (
+  stream: RecordedStream,
+  other: RecordedStream | undefined,
+  facts: {
+    readonly in_normalized_stream: boolean;
+    readonly in_other_stream: 'normalized' | 'raw' | 'no';
+  },
+): string => {
+  const parts: string[] = [];
+  if (other !== undefined && facts.in_other_stream === 'raw') {
+    parts.push(`It was printed on ${other.name} instead; use --expect-${other.name}.`);
+  } else if (other !== undefined && facts.in_other_stream === 'normalized') {
+    parts.push(
+      `It appears in the normalized ${other.name}; use --expect-${other.name}-normalized.`,
+    );
+  } else if (facts.in_normalized_stream) {
+    parts.push(
+      `It matches the ${stream.name} only after normalization; use --expect-${stream.name}-normalized.`,
+    );
+  } else if (other !== undefined) {
+    const stdout = stream.name === 'stdout' ? stream : other;
+    const stderr = stream.name === 'stderr' ? stream : other;
+    parts.push(
+      `The command printed ${plural(lineCount(stdout.text), 'stdout line')} and ${plural(lineCount(stderr.text), 'stderr line')}; run the command yourself and copy part of its output.`,
+    );
+  }
+  if (stream.truncated) {
+    parts.push(
+      `The ${stream.name} was truncated at its retained byte limit, so the text may have been cut off.`,
+    );
+  }
+  return parts.map((part) => ` ${part}`).join('');
+};
+
 /**
  * Turns the requested expectations for one stream into artifact entries, in request order, and
  * checks that each one holds for this recording and is safe to store.
@@ -277,7 +322,41 @@ export const deriveOutputExpectations = (
   requested: readonly RecordOutputExpectation[],
   contexts: RecordPathContexts,
   redactor: Redactor,
+  other?: RecordedStream,
 ): readonly ArtifactOutputExpectationV1[] => {
+  let normalizedOther: string | undefined;
+  const normalizedOtherText = (): string => {
+    normalizedOther ??= normalizeOutput(
+      other?.text ?? '',
+      DEFAULT_OUTPUT_NORMALIZATION,
+      contexts.output,
+    ).text;
+    return normalizedOther;
+  };
+  // Where a literal that is missing here does appear. Only called after it was not found.
+  const locate = (
+    literal: string,
+    normalizedLiteral: string,
+    normalizedMode: boolean,
+  ): {
+    readonly in_normalized_stream: boolean;
+    readonly in_other_stream: 'normalized' | 'raw' | 'no';
+  } => {
+    let otherPlace: 'normalized' | 'raw' | 'no' = 'no';
+    if (other !== undefined && !normalizedMode && other.text.includes(literal)) otherPlace = 'raw';
+    else if (
+      other !== undefined &&
+      normalizedLiteral !== '' &&
+      normalizedOtherText().includes(normalizedLiteral)
+    ) {
+      otherPlace = 'normalized';
+    }
+    return {
+      in_normalized_stream:
+        !normalizedMode && normalizedLiteral !== '' && normalizedText().includes(normalizedLiteral),
+      in_other_stream: otherPlace,
+    };
+  };
   let normalizedStream: string | undefined;
   const normalizedText = (): string => {
     normalizedStream ??= normalizeOutput(
@@ -294,7 +373,15 @@ export const deriveOutputExpectations = (
       if (!stream.text.includes(item)) {
         throw new RecorderError(
           'invalid_request',
-          `An expected ${stream.name} literal was not observed in retained output.`,
+          `An expected ${stream.name} literal was not observed in retained output.${missingLiteralHint(
+            stream,
+            other,
+            locate(
+              item,
+              normalizeOutput(item, DEFAULT_OUTPUT_NORMALIZATION, contexts.output).text,
+              false,
+            ),
+          )}`,
         );
       }
       entries.push({ mode: 'contains', value: item });
@@ -305,7 +392,15 @@ export const deriveOutputExpectations = (
       if (!stream.text.includes(item.value)) {
         throw new RecorderError(
           'invalid_request',
-          `An expected ${stream.name} literal was not observed in retained output.`,
+          `An expected ${stream.name} literal was not observed in retained output.${missingLiteralHint(
+            stream,
+            other,
+            locate(
+              item.value,
+              normalizeOutput(item.value, DEFAULT_OUTPUT_NORMALIZATION, contexts.output).text,
+              false,
+            ),
+          )}`,
         );
       }
       entries.push({ mode: 'contains', value: item.value });
@@ -338,7 +433,11 @@ export const deriveOutputExpectations = (
     if (item.mode === 'contains' && !normalizedText().includes(value)) {
       throw new RecorderError(
         'invalid_request',
-        `An expected ${stream.name} literal was not observed in the normalized output.`,
+        `An expected ${stream.name} literal was not observed in the normalized output.${missingLiteralHint(
+          stream,
+          other,
+          locate(item.value, value, true),
+        )}`,
       );
     }
     if (redactor.redact(value).findings.length > 0) {

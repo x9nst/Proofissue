@@ -18,6 +18,7 @@ import {
   runCli,
   type CliIo,
 } from './index.js';
+import { renderRecordFailure } from './record-command.js';
 
 describe('CLI application boundary', () => {
   it('exports the adapter factory', () => {
@@ -1108,6 +1109,18 @@ describe('record CLI dependency capture', () => {
 
     expect(rendered).toContain('Artifact file: a\\u{001b}[31mb.proofissue');
     expect(rendered).not.toContain('\u001b');
+  });
+
+  it('prints every error, escaped, and not only the first', () => {
+    const rendered = renderRecordFailure([
+      { message: 'first problem' },
+      { message: 'second\u001b[31m problem' },
+    ]);
+
+    expect(rendered).toBe(
+      'Recording failed: first problem\nRecording failed: second\\u{001b}[31m problem\n',
+    );
+    expect(renderRecordFailure([])).toBe('Recording failed: unknown error\n');
   });
 
   it('documents the flag and its limits', () => {

@@ -583,12 +583,14 @@ export const captureRecording = async (
     request.expect_stdout,
     contexts,
     redactor,
+    { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
   );
   const stderrExpectations = deriveOutputExpectations(
     { name: 'stderr', text: stderr.text, truncated: command.stderr.truncated },
     request.expect_stderr,
     contexts,
     redactor,
+    { name: 'stdout', text: stdout.text, truncated: command.stdout.truncated },
   );
 
   const version = process.versions.node.split('.')[0];
