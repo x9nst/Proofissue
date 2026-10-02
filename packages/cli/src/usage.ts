@@ -1,6 +1,6 @@
 import { escapePresentationText } from './presentation.js';
 
-export type CliCommandName = 'inspect' | 'prepare' | 'record' | 'replay' | 'validate';
+export type CliCommandName = 'doctor' | 'inspect' | 'prepare' | 'record' | 'replay' | 'validate';
 
 // One line each: an error should not bury its message under the full help text.
 const SYNOPSES: Readonly<Record<CliCommandName, string>> = {
@@ -9,6 +9,7 @@ const SYNOPSES: Readonly<Record<CliCommandName, string>> = {
   inspect: 'proofissue inspect <artifact> [--json]',
   prepare: 'proofissue prepare <artifact> --dependency-store <directory> [--json]',
   replay: 'proofissue replay <artifact> [options]',
+  doctor: 'proofissue doctor',
 };
 
 /**

@@ -1,6 +1,6 @@
 # Command Line Reference
 
-ProofIssue installs one executable, `proofissue`, with five commands: `record`, `validate`, `inspect`, `prepare`, and `replay`. Until the package is published, run it from a built checkout:
+ProofIssue installs one executable, `proofissue`, with six commands: `record`, `validate`, `inspect`, `prepare`, `replay`, and `doctor`. Until the package is published, run it from a built checkout:
 
 ```text
 npm ci
@@ -571,3 +571,56 @@ An `execution_failed` result carries one error code. None of them is evidence ab
 ### Security notes
 
 Treat every artifact as hostile. Replay validates it first, accepts only the approved digest-pinned image, and runs it with no network, a read-only base filesystem, dropped capabilities, no privilege escalation, a non-root user, and limits on processes, memory, CPU, output and time, then removes the container and workspace. Output is redacted for likely secrets before it is matched, and the result and its summaries carry counts and fixed messages, never output text. The Docker CLI is started with an empty environment, and the container receives only `PATH` and `HOME=/tmp`. The input mount is read-only, and `/tmp` is a 16 MiB in-memory filesystem. See `replay.md` and `security-model.md`. The GitHub Action runs the same replay; see `github-action.md`.
+
+## `doctor`
+
+### Purpose
+
+Check whether this machine can replay artifacts, and say what to run when it cannot. It exists because replay's prerequisites (an x86-64 Linux host, a local Docker Engine 27 or newer with the default seccomp profile, and the approved image already pulled) otherwise surface one at a time as replay error codes.
+
+### Syntax
+
+```text
+proofissue doctor
+```
+
+### Options
+
+`doctor` takes no options. It has no `--json` form: its output is for a person, and the replay result contract is not changed by it. Any argument is a usage error.
+
+### Example
+
+The checks run in a fixed order, and everything after the first failure is shown as `skipped` instead of being guessed at. This is real output from `node packages/cli/dist/bin.js doctor` on a Windows host (exit `1`), where replay cannot run but recording can:
+
+```text
+ok      Node.js: Node.js 24.15.0; replay uses the same major version.
+fail    Host: Replay currently requires a local x86-64 Linux host with Docker Engine.
+        Replay needs an x86-64 Linux host. Record here, then replay on Linux or with the GitHub Action on a hosted Linux runner.
+skipped Docker CLI: Not checked because an earlier check failed.
+skipped Docker context: Not checked because an earlier check failed.
+skipped Docker Engine: Not checked because an earlier check failed.
+skipped Seccomp: Not checked because an earlier check failed.
+skipped Replay image: Not checked because an earlier check failed.
+
+Recording: ready. It runs on this host and needs no container.
+Replay: not ready. Fix the failed checks above, then run proofissue doctor again.
+```
+
+Each line starts with `ok`, `warn`, `fail`, or `skipped`. A `warn` does not stop replay: a Node.js major other than 24 only means that a recording made here can behave differently from the replay, which always uses the Node.js 24 image. A missing image is reported with the exact command that fetches it, and `doctor` does not run it:
+
+```text
+fail    Replay image: The approved replay image is not available locally; replay never pulls images automatically.
+        Run: docker pull node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
+```
+
+### Failure behavior
+
+- Exit `0` when replay is ready: every check is `ok` or `warn`.
+- Exit `1` when any check fails. The failed line carries one fixed next step; run it and run `doctor` again.
+- Exit `2` for any argument. The error, a one-line synopsis, and a pointer to `--help` are printed, and nothing is checked.
+
+The messages on a failed line are the same ones `replay` reports for the same problem (`engine_unavailable`, `engine_capability_unavailable`, `image_unavailable`), because both use one diagnosis.
+
+### Security notes
+
+`doctor` is read-only. It starts only the Docker CLI subcommands `context inspect`, `version`, `info`, and `image inspect`, each with an empty environment and no shell. It never pulls an image, never creates or starts a container, never reads an artifact, and never uses the network itself. It prints no Docker endpoint, path, or user name; the Docker Engine version appears only when it looks like a version number. Every line is escaped for the terminal.

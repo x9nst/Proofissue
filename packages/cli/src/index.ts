@@ -2,6 +2,7 @@ import type { ApplicationServices } from '@proofissue/application';
 
 import {
   CLI_HELP,
+  DOCTOR_HELP,
   helpFor,
   RECORD_HELP,
   REPLAY_HELP,
@@ -9,7 +10,8 @@ import {
   VALIDATE_HELP,
   INSPECT_HELP,
 } from './help.js';
-import { defaultIo, type CliIo, type CliRunResult } from './io.js';
+import { runDoctorCommand } from './doctor-command.js';
+import { defaultIo, type CliIo, type CliRunResult, type CliServices } from './io.js';
 import { runPrepareCommand } from './prepare-command.js';
 import { runRecordCommand } from './record-command.js';
 import { runReplayCommand } from './replay-command.js';
@@ -23,8 +25,17 @@ export interface CliAdapter {
 export const createCliAdapter = (application: ApplicationServices): CliAdapter =>
   Object.freeze({ application });
 
-export { CLI_HELP, INSPECT_HELP, PREPARE_HELP, RECORD_HELP, REPLAY_HELP, VALIDATE_HELP };
-export { type CliIo, type CliRunResult };
+export {
+  CLI_HELP,
+  DOCTOR_HELP,
+  INSPECT_HELP,
+  PREPARE_HELP,
+  RECORD_HELP,
+  REPLAY_HELP,
+  VALIDATE_HELP,
+};
+export { type CliIo, type CliRunResult, type CliServices };
+export { renderDoctorReport } from './doctor-command.js';
 export { parseRecordArguments, renderRecordPreview } from './record-command.js';
 export { renderReplayResult } from './replay-command.js';
 export {
@@ -33,7 +44,14 @@ export {
   type ParsedPrepareCommand,
 } from './prepare-command.js';
 
-const COMMAND_NAMES: readonly string[] = ['inspect', 'prepare', 'record', 'replay', 'validate'];
+const COMMAND_NAMES: readonly string[] = [
+  'doctor',
+  'inspect',
+  'prepare',
+  'record',
+  'replay',
+  'validate',
+];
 
 const isCommandName = (value: string | undefined): value is CliCommandName =>
   value !== undefined && COMMAND_NAMES.includes(value);
@@ -41,7 +59,7 @@ const isCommandName = (value: string | undefined): value is CliCommandName =>
 export const runCli = async (
   arguments_: readonly string[],
   io: CliIo = defaultIo(),
-  application?: Partial<ApplicationServices>,
+  application?: CliServices,
 ): Promise<CliRunResult> => {
   if (arguments_.length === 0 || arguments_[0] === '--help' || arguments_[0] === '-h') {
     io.write(CLI_HELP);
@@ -56,6 +74,7 @@ export const runCli = async (
 
   if (arguments_[0] === 'validate' || arguments_[0] === 'inspect')
     return runStaticCommand(arguments_, io, application);
+  if (arguments_[0] === 'doctor') return runDoctorCommand(arguments_, io, application);
   if (arguments_[0] === 'prepare') return runPrepareCommand(arguments_, io, application);
   if (arguments_[0] === 'replay') return runReplayCommand(arguments_, io, application);
 

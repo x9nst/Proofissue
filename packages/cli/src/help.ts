@@ -38,6 +38,16 @@ only declared subject paths are replaced; undeclared additions, removals, and re
 are not evaluated.
 `;
 
+export const DOCTOR_HELP = `Usage:
+  proofissue doctor
+
+Checks whether this machine can replay artifacts: Node.js, host platform, Docker CLI, a local
+Docker context, Docker Engine 27 or newer, the default seccomp profile, and the approved replay
+image. It runs only read-only Docker commands, never pulls the image (a missing image is
+reported with the exact docker pull command), starts no container, and uses no network.
+Exits 0 when replay is ready and 1 when it is not.
+`;
+
 export { RECORD_HELP };
 
 const COMMAND_HELP: Readonly<Record<CliCommandName, string>> = {
@@ -46,6 +56,7 @@ const COMMAND_HELP: Readonly<Record<CliCommandName, string>> = {
   inspect: INSPECT_HELP,
   prepare: PREPARE_HELP,
   replay: REPLAY_HELP,
+  doctor: DOCTOR_HELP,
 };
 
 /** The help for one command, as printed by `proofissue <command> --help`. */
@@ -60,6 +71,7 @@ Commands:
   inspect   Summarize an artifact without running it
   prepare   Download an artifact's locked npm packages (the only network step)
   replay    Replay an artifact in a locked-down container
+  doctor    Check whether this machine can replay artifacts
 
 Run "proofissue <command> --help" for one command's options.
 
@@ -67,4 +79,5 @@ ${RECORD_HELP}
 ${VALIDATE_HELP}
 ${INSPECT_HELP}
 ${PREPARE_HELP}
-${REPLAY_HELP}`;
+${REPLAY_HELP}
+${DOCTOR_HELP}`;
