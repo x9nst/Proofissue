@@ -31,26 +31,26 @@ Run one Node.js command that fails, and capture a minimal artifact that describe
 ### Syntax
 
 ```text
-proofissue record --project <directory> --output <file.proofissue>
-  --image <repository@sha256:digest>
-  --reproduction <path> --subject <path>
+proofissue record --reproduction <path> --subject <path>
+  [--project <directory>] [--output <file>]
+  [--image <repository@sha256:digest>]
   [--expect-stdout <literal>] [--expect-stderr <literal>]
   [--expect-stdout-normalized <text>] [--expect-stderr-normalized <text>]
   [--expect-stdout-regex <pattern>] [--expect-stderr-regex <pattern>]
   [--expect-stdout-exact] [--expect-stderr-exact]
   [--expect-stdout-exact-normalized] [--expect-stderr-exact-normalized]
-  [--dependencies] [--yes] -- node <arguments...>
+  [--dependencies] [--yes] [--json] -- node <arguments...>
 ```
 
 ### Options
 
 | Option | Required | Meaning |
 | --- | --- | --- |
-| `--project <directory>` | yes | The project root. Selected paths are resolved beneath it and symbolic links are refused. |
-| `--output <file>` | yes | The new artifact. An existing file is never overwritten. |
-| `--image <repo@sha256:digest>` | yes | The replay image. Only the approved Node.js 24 image is accepted by replay. |
-| `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. |
-| `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. |
+| `--project <directory>` | no | The project root. Defaults to the current directory. Selected paths are resolved beneath it and symbolic links are refused. |
+| `--output <file>` | no | The new artifact. Defaults to `<name of the first --reproduction file>.proofissue.yaml` in the current directory, for example `reproduction.proofissue.yaml`; when that name is taken, `-2` through `-99` is added before the extension, and after that the command asks for `--output`. A name you give is used exactly as written, so `.proofissue` and `.proofissue.yaml` are both valid. An existing file is never overwritten. |
+| `--image <repo@sha256:digest>` | no | The replay image. Defaults to the approved Node.js 24 image, the only one replay accepts. Another image is recorded as given, and the preview warns that replay will refuse it. |
+| `--reproduction <path>` | at least one | A test, fixture, or input kept exactly as recorded. Repeatable. A leading `./` is removed, and on Windows backslashes become forward slashes, so `.\test\a.mjs` is stored as `test/a.mjs`. |
+| `--subject <path>` | at least one | Implementation code that a fix may change, and that `replay --against` can replace. Repeatable. Spelled like `--reproduction`. |
 | `--expect-stdout <literal>`, `--expect-stderr <literal>` | at least one expectation overall | A literal substring the failing output must contain, byte for byte. Repeatable. |
 | `--expect-stdout-normalized <text>`, `--expect-stderr-normalized <text>` | no | Text as it was printed on your machine. Replay compares after ignoring line endings, terminal escape sequences, trailing whitespace, the project and temporary directories, durations, process IDs, the Node.js version, and Node.js internal line numbers. Repeatable. |
 | `--expect-stdout-regex <pattern>`, `--expect-stderr-regex <pattern>` | no | A pattern that must match somewhere in the stream after the same normalization, written against the normalized text (for example `took <duration>` or `<project>/test/a\.mjs:\d+:\d+`). The language is a bounded subset of JavaScript regular expressions that always runs in linear time: no lookaround or backreferences, at most 1024 characters, and a pattern that can match nothing, such as `a*`, is refused. It is checked before the command runs and must match the recording. Repeatable. |
@@ -58,16 +58,31 @@ proofissue record --project <directory> --output <file.proofissue>
 | `--expect-stdout-exact-normalized`, `--expect-stderr-exact-normalized` | no | A flag, with no value. The whole stream must match exactly after the same normalization. At most one exact option per stream, counting the raw one. |
 | `--dependencies` | no | Also record `package.json` and `package-lock.json` from the project root, so the locked npm packages can be installed later. Needs lockfile version 3 and the public npm registry. Replay such an artifact only after `prepare`. See `dependencies.md`. |
 | `--yes` | no | Approve without prompting. Use only after reviewing the project, command, file roles, expectations, and output path. |
-| `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. |
+| `--json` | no | Needs `--yes`. Prints one `RecordOperationResult` line on stdout (`created`, `cancelled`, `invalid_input`, or `execution_failed`, with the artifact digest when created) and sends the preview to stderr. The result never contains output text. Without `--yes` it is a usage error, exit `2`. |
+| `-- node <arguments...>` | yes | The command. It must start with `node` and have at least one argument. No argument may hold the project or home directory, and on Windows none may spell a project file with backslashes (write `test/a.mjs`); both are refused before anything runs. |
 
 The expected exit code is whatever the recorded command actually returned. The options that take no value derive the expectation from the recording itself, and the preview shows what will be stored. `output-matching.md` defines each normalization rule and the pattern language, and says how to choose between the options.
 
 ### Example
 
+The shortest form names the files, the expected text, and the command. The project is the current directory (here `--project` selects the example from the repository root), the image is the approved one, and the artifact is written to `reproduction.proofissue.yaml` in the current directory:
+
 ```text
 proofissue record \
   --project examples/failing-node-test \
-  --output failure.proofissue \
+  --reproduction test/reproduction.mjs \
+  --subject src/calculate.mjs \
+  --expect-stderr "Expected 4 from calculate(2)" \
+  --yes \
+  -- node test/reproduction.mjs
+```
+
+The same recording with every default written out is also valid:
+
+```text
+proofissue record \
+  --project examples/failing-node-test \
+  --output reproduction.proofissue.yaml \
   --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6 \
   --reproduction test/reproduction.mjs \
   --subject src/calculate.mjs \
@@ -78,6 +93,9 @@ proofissue record \
 
 ```text
 ProofIssue recording preview
+
+Artifact file: reproduction.proofissue.yaml
+Replay image: approved Node.js 24 image
 
 Authorized command (no shell):
   node "test/reproduction.mjs"
@@ -104,15 +122,27 @@ Redaction findings: 0
   Removed values are never shown. Redaction reduces risk but does not replace review.
 
 Artifact created.
+Saved: reproduction.proofissue.yaml (sha256 2dda53efd968)
+To share it, drag the file into a GitHub issue comment: GitHub accepts the .yaml extension.
+A maintainer replays it on x86-64 Linux with Docker:
+  proofissue replay reproduction.proofissue.yaml
+On x86-64 Linux with Docker you can check it yourself first:
+  proofissue replay reproduction.proofissue.yaml --require-status reproduced
+```
+
+The preview names the file and image. It adds a warning when the image is not the approved one, and when you recorded with a Node.js major other than 24, because replay always uses Node.js 24. After the artifact is written, the output says where it is, the first 12 characters of its SHA-256, how to attach it, and the commands to replay it; for an artifact recorded with `--dependencies` those are `proofissue prepare <file> --dependency-store .proofissue-store` followed by `proofissue replay <file> --dependency-store .proofissue-store`. GitHub refuses attachments ending in `.proofissue`, so when you chose such a name the output says to copy the file to a name ending in `.yaml` before attaching it. The artifact is YAML either way.
+
+With `--json`, stdout holds one line and the preview and these hints are not printed:
+
+```text
+{"result_schema_version":1,"operation":"record","status":"created","artifact_version":1,"artifact_digest":"<64 hex characters>","warnings":[],"errors":[]}
 ```
 
 For a failure whose output changes from run to run, ask for normalized expectations. The stored text has your project and temporary directories replaced by `<project>` and `<tmp>`, so it never holds a path from your machine, and replay in the container matches it. Suppose a project in `/srv/project` has a failing test that prints `checking calculate(2)` on stdout, and on stderr `Expected 4 from calculate(2) (12ms)` followed by the line `at /srv/project/test/reproduction.mjs`:
 
 ```text
 proofissue record \
-  --project . \
-  --output failure.proofissue \
-  --image node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6 \
+  --output failure.proofissue.yaml \
   --reproduction test/reproduction.mjs \
   --subject src/calculate.mjs \
   --expect-stdout-exact \
@@ -150,9 +180,10 @@ Without `--yes`, the recorder asks three questions in turn: whether the reproduc
 
 ### Failure behavior
 
-- Malformed arguments exit `2`: a missing `--project`, `--output`, or `--image`, an unknown option, a command that does not start with `node` and have an argument, or an exact option given twice for the same stream (a raw and a normalized exact option for one stream count as twice).
+- Malformed arguments exit `2` and print the error, a one-line synopsis, and a pointer to `record --help`: an unknown option, a positional argument before `--` (the error says to put the command after `--`), a command that does not start with `node` and have an argument, `--json` without `--yes`, an exact option given twice for the same stream (a raw and a normalized exact option for one stream count as twice), or a default artifact name whose `-2` through `-99` variants all exist.
 - A request with no `--reproduction` path, no `--subject` path, or no expectation exits `1` and writes no artifact.
-- An expected output literal that the command did not actually print, within the retained output, exits `1` and writes no artifact. A normalized literal must appear in the normalized output.
+- An expected output literal that the command did not actually print, within the retained output, exits `1` and writes no artifact. A normalized literal must appear in the normalized output. The message says where the text does appear, without repeating it: that it was printed on the other stream (use `--expect-stdout` or `--expect-stderr`), that it matches only after normalization (use the `-normalized` option), that the stream was truncated, and otherwise how many lines each stream printed. Every error is printed, not only the first.
+- A command argument that holds the project or home directory exits `1` before the command runs, and so does, on Windows, an argument that spells an existing project file with backslashes. The message gives the argument's position and, for a backslash path, the forward-slash spelling to use; it never repeats a local path.
 - A pattern outside the bounded language (lookaround, a backreference, an unknown escape, an unbalanced bracket, a pattern beyond a limit, or one that can match without consuming output) exits `1` before the command runs, and the message names the feature and its position without repeating the pattern. A pattern that does not match the normalized recording exits `1` and writes no artifact.
 - An exact expectation for a stream that was truncated, is empty, is larger than 8192 bytes, or contains a redaction marker exits `1`, and the message suggests a normalized literal instead.
 - An expected value that holds a likely secret once escape sequences are removed, or that still holds your project or home directory (in a literal or a pattern), exits `1`. The message never repeats the value.
