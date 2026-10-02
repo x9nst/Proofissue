@@ -35,6 +35,7 @@ Completing the technical prototype does not complete the initial supported workf
 | 5. Fix verification | Complete | Milestone 4 | Original and corrected-source end-to-end fixture; see `docs/milestone-5-evidence.md` |
 | 6. GitHub Actions integration | Complete | Milestone 5 | Action, stable outputs, and the Linux fixture workflow pass on a hosted runner; dependency advisory resolved; see `docs/milestone-6-evidence.md` |
 | 7. Initial supported Node.js workflow | Complete | Milestone 6 | Twelve real failures from three repositories confirmed on hosted CI; security, credential-leakage, documentation, and compatibility evidence; signed off by the maintainer on 2026-10-02; see `docs/real-project-evaluation.md` and `docs/milestone-7-evidence.md` |
+| 8. Usability and first preview release | In Progress | Milestone 7 | Record defaults, guided selection, file suggestions, doctor, packaged smoke tests, and a tag-triggered release; acceptance criteria in the Milestone 8 section |
 | Early maintainer validation track | In Progress | Runs alongside Milestones 1-7 | Task-based artifact, role, replay, and demand research in `docs/product-validation.md` |
 
 ## Early Maintainer Validation Track
@@ -364,6 +365,38 @@ The first documented Node.js workflow is reliable enough to support within its s
 - [x] Path traversal, symbolic-link escape, environment leakage, command injection, oversized input, process exhaustion, timeout, and network tests pass.
 - [x] Every command documents purpose, syntax, examples, failures, and relevant security behavior.
 - [x] All supported version 1 fixtures remain compatible.
+
+## Milestone 8 — Usability and First Preview Release
+
+**Status:** In Progress
+
+**Target outcome:**
+
+A reporter can create a shareable artifact with a short command, and a maintainer can install, replay, and give feedback on a first preview release of the initial supported Node.js workflow. This milestone does not complete roadmap Phase 1.
+
+**Deliverables:**
+
+- recording defaults for the approved image, the project directory, and the artifact name
+- per-command help and short usage errors
+- guided expectation selection from observed output
+- deterministic file and command suggestions
+- a `doctor` command and a replay step that prepares dependencies first
+- a self-contained npm package, with a package smoke test on Linux and Windows
+- a tag-triggered release with build attestation
+- install documentation, known limits, and feedback templates
+
+**Acceptance criteria:**
+
+- [ ] The example records with no `--project`, `--image`, or `--output` option.
+- [ ] Guided selection lets a reporter choose expected output from what the command printed.
+- [ ] File suggestions propose reproduction and subject files with reasons, and always ask first.
+- [ ] `proofissue doctor` reports replay prerequisites without pulling an image.
+- [ ] The packed CLI passes a smoke test on Linux and Windows.
+- [ ] A tag-triggered release publishes the package tarball with a build attestation.
+- [ ] Feedback templates exist for replay failures and preview feedback.
+- [ ] The maintainer has set a target number of external preview users.
+
+Roadmap Phase 1 is not complete (see `MILESTONES.md`); the early maintainer validation track remains open.
 
 ## Dependency Order
 
