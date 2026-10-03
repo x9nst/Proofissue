@@ -100,19 +100,14 @@ try {
   assert(help.status === 0 && help.stdout.includes('proofissue record'), '--help failed');
 
   step('4. record, validate, inspect the example');
-  const artifact = path.join(project, 'failure.proofissue');
-  // TODO(record defaults PR): once record defaults the image, project, and artifact name, drop
-  // --project, --image, and --output here and check for the default file name instead.
+  // No --project, --image, or --output: the defaults are the current directory, the approved
+  // image, and a name taken from the first reproduction file.
+  const artifact = path.join(project, 'reproduction.proofissue.yaml');
   const record = cli(
     [
       'record',
       '--yes',
-      '--project',
-      project,
-      '--image',
-      APPROVED_IMAGE,
-      '--output',
-      artifact,
+      '--json',
       '--reproduction',
       'test/reproduction.mjs',
       '--subject',
@@ -125,10 +120,20 @@ try {
     ],
     { cwd: project },
   );
-  assert(record.status === 0, `record failed:\n${record.stdout}\n${record.stderr}`);
-  assert(record.stdout.includes('Artifact created.'), 'record did not report creation');
-  assert((await stat(artifact)).isFile(), 'the artifact file was not written');
-  // TODO: also run doctor once the command exists (it is not implemented yet).
+  assert(
+    record.status === 0,
+    `record failed:
+${record.stdout}
+${record.stderr}`,
+  );
+  const recorded = JSON.parse(record.stdout.trim());
+  assert(recorded.status === 'created', `record status was ${recorded.status}`);
+  assert(/^[0-9a-f]{64}$/.test(recorded.artifact_digest), 'record returned no artifact digest');
+  assert(
+    record.stderr.includes('Artifact file: reproduction.proofissue.yaml'),
+    'the preview did not name the default artifact file',
+  );
+  assert((await stat(artifact)).isFile(), 'the default artifact file was not written');
   const validate = cli(['validate', artifact]);
   assert(validate.status === 0 && validate.stdout.startsWith('valid'), 'validate failed');
   const inspect = cli(['inspect', artifact, '--json']);
@@ -138,6 +143,14 @@ try {
   if (process.platform === 'linux' && process.env.PROOFISSUE_SMOKE_REPLAY === '1') {
     step('5. Replay in the approved image, then verify a fix');
     execFileSync('docker', ['pull', APPROVED_IMAGE], { stdio: 'inherit' });
+    const doctor = cli(['doctor']);
+    assert(
+      doctor.status === 0,
+      `doctor did not exit 0:
+${doctor.stdout}
+${doctor.stderr}`,
+    );
+    assert(doctor.stdout.includes('Replay: ready.'), 'doctor did not report replay as ready');
     const reproduced = cli(['replay', artifact, '--require-status', 'reproduced']);
     assert(
       reproduced.status === 0,
@@ -158,7 +171,15 @@ try {
     ]);
     assert(fixed.status === 0, `the fix was not verified:\n${fixed.stdout}\n${fixed.stderr}`);
   } else if (isWindows) {
-    step('6. Windows: replay is refused with the documented code');
+    step(
+      '6. Windows: doctor reports replay as not ready, and replay is refused with the documented code',
+    );
+    const doctor = cli(['doctor']);
+    assert(doctor.status === 1, `doctor exited ${doctor.status}, expected 1`);
+    assert(
+      doctor.stdout.includes('Replay: not ready.'),
+      'doctor did not report replay as not ready',
+    );
     const replay = cli(['replay', artifact, '--json']);
     assert(replay.status === 1, `replay --json exited ${replay.status}, expected 1`);
     const result = JSON.parse(replay.stdout);
