@@ -396,6 +396,8 @@ A reporter can create a shareable artifact with a short command, and a maintaine
 - [ ] Feedback templates exist for replay failures and preview feedback.
 - [ ] The maintainer has set a target number of external preview users.
 
+**Current evidence:** the implementation is on `main` and the milestone is not complete. Recording defaults (`--project`, `--image`, and `--output` optional), per-command help, `record --json`, guided expectation selection, file, dependency, and command suggestions, the `doctor` command, `replay --prepare`, next-step lines, the readable `inspect` summary, and `--version` are implemented with tests; `packages/application/src/example.test.ts` records the example without those options, and `packages/cli/src/record-suggestions.test.ts` records it with only `-- node test/reproduction.mjs` in a simulated terminal. The bundled `proofissue` npm package, its packed-CLI check, the package smoke workflow (Linux and Windows), the tag-triggered release workflow with attestation, `docs/release.md`, and the two feedback issue templates exist, and the README now documents installation, a five-minute walkthrough, and the known limits, with `packages/cli/src/readme.test.ts` keeping its commands working. Not yet done: the 0.1.0 version change and the release itself (the package is not published, so `npx proofissue` does not resolve yet), hosted evidence of the release workflow on a real tag, and the criterion that the maintainer sets a target number of external preview users, which is unmet.
+
 Roadmap Phase 1 is not complete (see `MILESTONES.md`); the early maintainer validation track remains open.
 
 ## Dependency Order
