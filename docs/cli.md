@@ -1,6 +1,13 @@
 # Command Line Reference
 
-ProofIssue installs one executable, `proofissue`, with six commands: `record`, `validate`, `inspect`, `prepare`, `replay`, and `doctor`. Until the package is published, run it from a built checkout:
+ProofIssue installs one executable, `proofissue`, with six commands: `record`, `validate`, `inspect`, `prepare`, `replay`, and `doctor`. Install the preview package, which needs Node.js 24 or newer, or run it without installing:
+
+```text
+npm install --global proofissue
+npx proofissue@0.1.0 <command> ...
+```
+
+The package is created by the 0.1.0 release. Until it is published, or when contributing, run it from a built checkout:
 
 ```text
 npm ci
@@ -8,7 +15,7 @@ npm run build
 node packages/cli/dist/bin.js <command> ...
 ```
 
-The examples below write `proofissue` for that invocation. They use the project in `examples/failing-node-test`.
+The examples below write `proofissue` for any of these invocations. They use the project in `examples/failing-node-test`.
 
 ## Exit codes
 

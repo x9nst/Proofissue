@@ -1,5 +1,12 @@
 # ProofIssue Documentation
 
+## Start Here
+
+- `../README.md` covers installing the preview, a five-minute walkthrough, the GitHub Action snippet, the known limits, and how to give feedback.
+- `cli.md` is the command reference.
+- `../examples/failing-node-test/README.md` is the runnable example behind the walkthrough.
+- `release.md` and `../CHANGELOG.md` describe how the preview package is released and what it contains.
+
 ## Planning and Status
 
 - `../MILESTONES.md` describes the long-term product roadmap.
