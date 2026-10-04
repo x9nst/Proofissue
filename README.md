@@ -8,12 +8,21 @@ The initial supported Node.js workflow is released as a **preview** (version 0.1
 
 ## Install
 
-The npm package `proofissue` is created by the 0.1.0 release. Until that release is published, `npx proofissue` returns a 404 and you should build from source (below).
+Install the 0.1.0 preview from its GitHub release:
+
+```text
+npm install --global https://github.com/x9nst/Proofissue/releases/download/v0.1.0/proofissue-0.1.0.tgz
+proofissue --version
+```
+
+Once the package is also published on npm, the shorter forms work too. Until then, `npx proofissue` returns a 404; use the installed `proofissue` command instead wherever this README writes `npx proofissue`.
 
 ```text
 npx proofissue@0.1.0 --version
 npm install --global proofissue
 ```
+
+The GitHub release also lists the tarball's SHA-256 checksum and a build-provenance attestation, which you can check with `gh attestation verify proofissue-0.1.0.tgz --repo x9nst/Proofissue`.
 
 It is a single file for Node.js 24 or newer with no runtime dependencies. Recording works on Windows, macOS, and Linux; replay needs the host in [Known limits](#known-limits).
 

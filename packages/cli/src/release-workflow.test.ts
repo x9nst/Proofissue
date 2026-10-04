@@ -304,8 +304,15 @@ describe('scripts/release-notes.mjs', () => {
     expect(spawnSync(process.execPath, [script], { encoding: 'utf8' }).status).toBe(2);
   });
 
-  it('finds a non-empty Unreleased section in the repository changelog', () => {
-    const result = notes(['Unreleased']);
+  it('has release notes in the repository changelog for the packaged version', () => {
+    const packaged = (
+      JSON.parse(
+        readFileSync(path.join(repositoryRoot, 'release', 'npm', 'package.json'), 'utf8'),
+      ) as { version: string }
+    ).version;
+    // A release version needs the dated section the tag build reads; a development version
+    // keeps its notes under Unreleased until the release is cut.
+    const result = notes([/^\d+\.\d+\.\d+$/u.test(packaged) ? packaged : 'Unreleased']);
 
     expect(result.status).toBe(0);
     expect(result.stdout).toContain('proofissue --version');

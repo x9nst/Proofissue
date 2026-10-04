@@ -6,7 +6,11 @@ ProofIssue 0.1.0 is a preview release of the initial supported Node.js workflow.
 
 ## [Unreleased]
 
-This section lists what the first preview release, 0.1.0, contains so far. It is dated and renamed when the release is cut.
+Nothing yet.
+
+## [0.1.0] - 2026-10-05
+
+The first preview release of the initial supported Node.js workflow.
 
 ### Added
 
