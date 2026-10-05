@@ -360,6 +360,11 @@ const missingLiteralHint = (
       `The ${stream.name} was truncated at its retained byte limit, so the text may have been cut off.`,
     );
   }
+  if (stream.text.includes('[REDACTED:')) {
+    parts.push(
+      `The ${stream.name} contains redacted values; redaction removes the rest of a line after a recognized credential, so text there cannot be expected. Choose text from another line.`,
+    );
+  }
   return parts.map((part) => ` ${part}`).join('');
 };
 

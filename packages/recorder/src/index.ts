@@ -441,6 +441,23 @@ const redactTarget = (
 };
 
 /**
+ * Each argument is checked alone and all of them together, so a flag and its value given as
+ * separate arguments (`--password`, then the value) are read as the command line they form. A
+ * count of findings too large to describe is a refusal as well.
+ */
+const argumentsHoldSecret = (args: readonly string[], redactor: Redactor): boolean => {
+  try {
+    return (
+      args.some((argument) => redactor.redact(argument).findings.length > 0) ||
+      redactor.redact(args.join(' ')).findings.length > 0
+    );
+  } catch (error: unknown) {
+    if (error instanceof RedactionLimitError) return true;
+    throw error;
+  }
+};
+
+/**
  * Reads the selected files, runs the command, and redacts what it printed, without deciding
  * what the artifact will expect. This is the first half of a recording: the file contents are
  * read before the command runs, and nothing here has chosen an expectation. Pass the
@@ -455,7 +472,7 @@ export const observeRecording = async (
   expectations?: ExpectationRequest,
 ): Promise<RecordObservation> => {
   validateSelections(request, expectations);
-  if (request.arguments.some((argument) => redactor.redact(argument).findings.length > 0)) {
+  if (argumentsHoldSecret(request.arguments, redactor)) {
     throw new RecorderError('redaction_failed', 'A command argument contains a likely secret.');
   }
   const root = await prepareProjectRoot(request.project_root);
