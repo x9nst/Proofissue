@@ -1,5 +1,14 @@
 import { afterEach, describe, expect, it, vi, type TestContext } from 'vitest';
-import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import {
+  access,
+  mkdtemp,
+  mkdir,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
 import type * as FsPromises from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -83,6 +92,53 @@ describe('captureRecording', () => {
       );
       expect(result.text).not.toContain('synthetic-token-value');
     }
+  });
+
+  it('cannot miss a split secret in the forms that span separators', () => {
+    const canary = ['SYNTHETIC', '_TEST_ONLY'].join('');
+    for (const [secret, expected] of [
+      [`userPassword=a,b${canary}`, 'userPassword=[REDACTED:password]'],
+      [`--password a b${canary}`, '--password [REDACTED:password]'],
+      [`https://u:a/b${canary}@h`, 'https://u:[REDACTED:password]@h'],
+    ] as const) {
+      for (let split = 1; split < secret.length; split += 1) {
+        const capture = decodeBoundedOutput(
+          [Buffer.from(secret.slice(0, split)), Buffer.from(secret.slice(split))],
+          1024,
+        );
+        const result = redactText(capture.decoded_text);
+        expect(result.text, `${expected} split ${String(split)}`).toBe(expected);
+        expect(result.text).not.toContain(canary);
+      }
+    }
+  });
+
+  it('refuses a flag and its secret given as separate arguments without running the command', async () => {
+    const canary = ['SYNTHETIC', '_TEST_ONLY'].join('');
+    const root = await project();
+    await writeFile(
+      path.join(root, 'test', 'reproduction.mjs'),
+      "import { writeFileSync } from 'node:fs';\nwriteFileSync(new URL('../ran.txt', import.meta.url), 'ran');\n",
+    );
+
+    const error: unknown = await captureRecording(
+      request(root, { arguments: ['test/reproduction.mjs', '--password', canary] }),
+    ).catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ code: 'redaction_failed' } satisfies Partial<RecorderError>);
+    expect((error as Error).message).not.toContain(canary);
+    await expect(access(path.join(root, 'ran.txt'))).rejects.toMatchObject({ code: 'ENOENT' });
+  });
+
+  it('refuses --token=VALUE in one argument', async () => {
+    const canary = ['SYNTHETIC', '_TEST_ONLY'].join('');
+    const root = await project();
+
+    await expect(
+      captureRecording(
+        request(root, { arguments: ['test/reproduction.mjs', `--token=${canary}`] }),
+      ),
+    ).rejects.toMatchObject({ code: 'redaction_failed' } satisfies Partial<RecorderError>);
   });
 
   it('captures separate streams, exit code, metadata, and only explicit files', async () => {

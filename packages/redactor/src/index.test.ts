@@ -365,7 +365,7 @@ describe('redactText idempotence regressions', () => {
   // Found by the property test below. A redaction marker contains a colon, so it must
   // never be readable as user:password inside a URL.
   it('does not read a marker as URL credentials', () => {
-    const input = 'Authorization://[REDACTED:api_key]@';
+    const input = 'scheme://[REDACTED:api_key]@';
 
     expect(redactText(input)).toEqual({ text: input, findings: [] });
   });
@@ -424,6 +424,21 @@ describe('redactText idempotence property', () => {
       '.',
       '-',
       'x',
+      '`',
+      '|',
+      '>',
+      '--',
+      '--token ',
+      '--password ',
+      'userPassword',
+      'myToken',
+      'secret',
+      'Secret',
+      '{',
+      '}',
+      ',',
+      ';',
+      'https://',
     );
     fc.assert(
       fc.property(fc.array(fragment, { maxLength: 32 }), (parts) => {
@@ -437,7 +452,7 @@ describe('redactText idempotence property', () => {
         }
         expect(redactText(first.text).text).toBe(first.text);
       }),
-      { numRuns: 3000 },
+      { numRuns: Math.max(3000, Number(process.env['PROOFISSUE_PROPERTY_RUNS'] ?? '0')) },
     );
   });
 });

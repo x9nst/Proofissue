@@ -136,6 +136,10 @@ stdout and stderr are kept as separate raw byte streams. Each stream has an inde
 
 Whole-buffer redaction runs after decoding. Process-read chunk boundaries do not affect redaction. `output-handling.md` is the complete shared recorder and runner contract.
 
+Redaction removes a recognized credential whole, and it runs to the end of the line. Text after the credential on the same line is hidden too, because a secret can contain commas, quotes, spaces, and braces. An expected literal that sits on such a line is refused, and the message says that redaction removed it; choose text from another line. In guided selection a line that holds a redaction marker cannot be selected. Command arguments are checked one by one and joined, so a flag and its value given as separate arguments are refused before the command runs.
+
+Redaction is rule-based and has limits: a secret without a recognizable name or shape is not found, a name with letters after the credential word is not recognized, and a URL password longer than 512 characters is not recognized. See the known limits in `security-model.md`, and read the preview before confirming.
+
 Raw captured output is held in memory only until redaction. It is not written to debug logs, temporary files, crash reports, or snapshots. Terminal summaries show redacted content only.
 
 ## Expectations
@@ -194,6 +198,7 @@ Recording stops without writing an artifact when:
 - the command cannot start or has no representable exit result;
 - the recording command exceeds its wall-clock limit or cannot be terminated cleanly;
 - a command argument holds the project or home directory, or, on Windows, spells a project file with backslashes (refused before the command runs);
+- a command argument, or the arguments joined, hold a likely secret (refused before the command runs);
 - a command does not start with `node` (exit `2`, with a hint when the lockfile or the command allows one);
 - with `--dependencies`, either dependency file is missing, `package.json` is not a JSON object, the lockfile is unsupported, or redaction would alter either file;
 - an exact expectation is requested for a truncated, empty, oversized, or redacted stream, or twice for one stream;

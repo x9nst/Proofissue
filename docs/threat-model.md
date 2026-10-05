@@ -115,8 +115,10 @@ Could provide compromised runtime content. Digest pinning prevents silent tag mo
 | Disk-filling writes | Workspace | Use bounded temporary storage and unconditional cleanup | Containment |
 | Process ignores termination | Cleanup | Escalate from stop to host-controlled kill, remove container, then workspace | Containment |
 | Output contains API key or private key | Secret/log | Redact before presentation or serialization and record only safe finding metadata | Containment |
-| Output cut off inside a private key or quoted secret | Secret/log | Redact to the end of the line, or of the text for a key block, instead of leaving the remainder | Containment |
-| Crafted output makes a redaction pattern run for a long time | Availability | Linear-time rules with a time budget enforced by tests | Containment |
+| Output cut off inside a private key, quoted secret, or YAML block | Secret/log | Redact to the end of the line, or of the text for a key block, instead of leaving the remainder; a block takes its indented lines | Containment |
+| A recognized credential value contains separators, quotes, escapes, `@` or `/` | Secret/log | Remove the whole value: quoted values end at their matching unescaped quote, other values and credential headers run to the end of the line, a URL password runs to the last `@`; a property test requires that no part of a generated value survives and that a second pass changes nothing | Containment |
+| Flag and value passed as separate arguments | Recorder | Check the arguments one by one and joined, before the command runs | Rejection |
+| Crafted output makes a redaction pattern run for a long time, including long runs of whitespace after a separator | Availability | Linear-time rules (every value starts with a non-whitespace character, alternations are disjoint, the URL rule is bounded) with a time budget on 1 MiB inputs enforced by tests | Containment |
 | Output contains terminal escape sequences | User terminal | Escape control characters before human display | Containment |
 | Artifact uses redacted marker as expected evidence | Matcher | Reject the expectation during semantic validation | Rejection |
 | Same exit code comes from a different error | Matcher | Require literal output evidence and report every difference | Detection |
@@ -175,7 +177,9 @@ Action adapter tests must additionally prove that:
 
 - A container or kernel escape can cross the intended boundary.
 - Docker Desktop and the container daemon are trusted dependencies.
-- Secret detection can miss unknown formats or redact benign values.
+- Secret detection is pattern-based: it can miss unlabeled secrets and unknown formats, names with letters after the credential word, URL passwords longer than 512 characters, and a secret on the next line with no key.
+- Removing whole values over-redacts: the rest of a line after a recognized credential, and some harmless names, are hidden. An expected literal on such a line is refused, and a selected source file can be changed by redaction.
+- Artifacts recorded with 0.1.0 can hold the tail of a secret that 0.1.0 failed to remove; review them, re-record them, and rotate any credential they may have exposed.
 - Redaction does not recognize user names, computer names, or local paths, so an expected literal that contains one puts it into the artifact. On Windows the recorded command also receives these values through its environment.
 - A malicious approved runtime image can act before the replay command.
 - Local administrators can inspect host memory or temporary resources.

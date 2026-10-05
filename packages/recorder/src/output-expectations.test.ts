@@ -331,6 +331,21 @@ describe('output expectation modes', () => {
       );
     });
 
+    it('explains that a literal on a redacted line was removed by redaction', async () => {
+      const canary = join('SYNTHETIC', '_TEST_ONLY');
+      const message = await missing(
+        `process.stderr.write('password=${canary} marker-after-credential'); process.exitCode = 1;`,
+        { expect_stderr: ['marker-after-credential'] },
+      );
+
+      expect(message).toContain('was not observed in retained output.');
+      expect(message).toContain(
+        'The stderr contains redacted values; redaction removes the rest of a line after a recognized credential, so text there cannot be expected. Choose text from another line.',
+      );
+      expect(message).not.toContain('marker-after-credential');
+      expect(message).not.toContain(canary);
+    });
+
     it('counts lines when nothing else explains it', async () => {
       const message = await missing(
         "process.stdout.write('a\\nb\\n'); process.stderr.write('c'); process.exitCode = 1;\n",

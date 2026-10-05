@@ -6,7 +6,17 @@ ProofIssue 0.1.0 is a preview release of the initial supported Node.js workflow.
 
 ## [Unreleased]
 
-Nothing yet.
+### Security
+
+- Redaction in 0.1.0 could leave part of a recognized credential visible: a value that held a comma, semicolon, space, quote, escaped quote, `@`, or `/` was removed only up to that character, quoted `Cookie` and `Set-Cookie` values stopped at a quote, an `Authorization` value stopped at a comma or was not recognized without a scheme, a URL password stopped at the first `@` or `/`, camelCase names were not recognized, and a flag's value was not removed when it was a separate argument (the value was stored in the artifact's command arguments). Redaction now removes the whole value (see `docs/security-model.md`), recognizes camelCase and more credential names and the `--password`, `--token`, `--secret`, `--api-key`, and `--private-key` flags, and `record` refuses a flag and its value given as separate arguments.
+- A long run of whitespace after a credential name made 0.1.0 redaction take quadratic time (about a second for 40,000 spaces, minutes for a 1 MiB stream). Because replay redacts container output on the host, a crafted artifact could stall replay or the GitHub Action. Matching is now linear, and the test suite checks 1 MiB adversarial inputs against a time budget.
+- Artifacts recorded with 0.1.0 can still hold the tail of a secret that 0.1.0 failed to remove. Review them, re-record them with this version, and rotate any credential they may have exposed.
+
+### Changed
+
+- Redaction now hides the rest of a line after a recognized credential. An expected output literal on that line is refused when recording, with a message that says redaction removed it, and a line that holds a redaction marker cannot be selected in guided mode. Recordings with close to 100 findings can reach the finding limit and are refused.
+- Compatibility: replay redacts output before matching, so an artifact recorded with 0.1.0 whose expected text sits on the same line after a credential now replays as not reproduced. Re-record it with this version.
+- Upgrade: install the new version, run `proofissue --version` to confirm it, and re-record any artifact that has not been shared or that may hold a credential.
 
 ## [0.1.0] - 2026-10-05
 
