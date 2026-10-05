@@ -190,18 +190,34 @@ Detection is rule-based and deterministic. Every rule maps onto one of the five 
 | Category | Detected |
 | --- | --- |
 | `private_key` | PEM private-key blocks, including encrypted keys and PGP private-key blocks. A block with no end line, such as output cut off at a byte limit, is redacted to the end of the text. |
-| `authorization_header` | `Authorization` with Bearer, Basic, Token, Negotiate, NTLM, ApiKey, Digest, Hawk, or AWS4 schemes, including the JSON-quoted form; `Cookie`, `Set-Cookie`, `X-Api-Key`, `X-Auth-Token`, and `X-Amz-Security-Token` headers. |
-| `password` | `password`, `passwd`, and `pwd` settings including prefixed names such as `db_password`, with unquoted, quoted, JSON, and unterminated-quote values; the password part of `scheme://user:password@host` URLs. |
-| `sensitive_environment` | A fixed list of well-known variables (for example `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `GITHUB_TOKEN`, `DATABASE_URL`); upper-case variable names ending in `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `PRIVATE_KEY`, `ACCESS_KEY`, or `CREDENTIALS`; `api_key`, `access_token`, `auth_token`, `client_secret`, `secret_key`, `private_key`, and `session_token` settings; npm `_authToken`, `_auth`, and `_password`. |
+| `authorization_header` | `Authorization` with or without a Bearer, Basic, Token, Negotiate, NTLM, ApiKey, Digest, Hawk, or AWS4 scheme (the scheme stays visible, the rest of the line is removed), including the JSON-quoted form; `Cookie`, `Set-Cookie`, `X-Api-Key`, `X-Auth-Token`, and `X-Amz-Security-Token` headers. |
+| `password` | Settings named `password`, `passwd`, or `pwd`, anywhere in a name (so `db_password` and `userPassword` match); the command-line flags `--password` and `--passwd`, with any prefix words such as `--db-password`, whether the value follows a space or an equals sign; the password part of `scheme://user:password@host` URLs, which may hold `/`, `@`, and `:`. |
+| `sensitive_environment` | A fixed list of well-known variables (for example `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `GITHUB_TOKEN`, `DATABASE_URL`); upper-case names containing `TOKEN`, `SECRET`, `PASSWORD`, `API_KEY`, `PRIVATE_KEY`, `ACCESS_KEY`, or `CREDENTIALS`; settings named `api_key`, `api_token`, `api_secret`, `access_token`, `access_key`, `auth_token`, `client_secret`, `secret_key`, `private_key`, `session_token`, or `refresh_token`, with or without the underscore or hyphen; camelCase names that end in `Token`, `Secret`, or `Credentials` (such as `githubToken`); a bare `secret` setting; the command-line flags `--token`, `--secret`, `--api-key`, and `--private-key`, with any prefix words; npm `_authToken`, `_auth`, and `_password`. |
 | `api_key` | AWS access key ids (`AKIA`, `ASIA`), GitHub classic and fine-grained tokens, OpenAI-style `sk-` keys, GitLab `glpat-`, Slack `xox` tokens, Stripe `sk_`/`rk_` keys, Google `AIza` keys, npm `npm_` tokens, and JSON web tokens. |
 
 Properties the rules keep, each covered by tests:
 
 - Redacting already-redacted text changes nothing and adds no findings.
-- Matching time is linear in the input; adversarial inputs have a time budget in the test suite.
+- Matching time is linear in the input. The test suite runs about two dozen adversarial 1 MiB inputs (long runs of whitespace after a separator, nested quotes and escapes, repeated names, URL shapes, YAML blocks, flags) against a 2 second budget each. Version 0.1.0 took about a second for 40,000 spaces after a separator, which extrapolates to minutes for a 1 MiB stream; that was a denial of service for replay, which redacts container output on the host.
 - A value that is truncated or has an unterminated quote is redacted to the end of the line, or of the text for a private key, rather than left behind.
+- A recognized credential is removed whole. A quoted value ends at its matching unescaped quote, together with any quoted or unquoted segments attached to it. Any other value, and everything after an `Authorization`, cookie, or API-key header name, runs to the end of the line, because a secret can contain a comma, a semicolon, a quote, a brace, or a space. A command-line flag value also runs to the end of the line. A YAML block (a value of `|` or `>` at the end of a line) takes its indented and blank lines too.
+- A URL password runs to the last `@` within 512 characters, and the user name may contain `@`.
+- No part of a recognized value survives. A property test builds a secret from separators, quotes, escapes, `@`, `/`, and credential-looking fragments, places it in every supported form, and requires that no part of it remains and that a second pass changes nothing.
+- A command's arguments are checked one by one and joined, so a flag and its value given as separate arguments are refused.
 
-Known limits. Variable-name rules are case-sensitive for the generic upper-case form on purpose, so ordinary lowercase program output such as `token: 5` or `max_tokens=5` is left alone. Header rules can over-redact prose that starts with the word Cookie and a colon. URL credentials are recognized only when the user name has no raw `[` or `]`, which RFC 3986 forbids there and which keeps a redaction marker from being read as `user:password`. A secret with no recognizable shape or label, such as a bare random string, is not detected. Redaction reduces accidental exposure; it is not a guarantee, and the reviewed preview remains a required control.
+The price of removing whole values is over-redaction: the rest of a line after a recognized credential is hidden, and an expected literal on that line is refused when recording (the message says so). `DATABASE_URL` followed by a URL with a password produces two findings. Some harmless names are redacted, for example a boolean flag named `isToken`, a `hasSecret` property, help text that lists a token option, and prose that says to use the password flag. The bare words `token`, `tokens`, `id-token`, `--passWithNoTests`, `max_tokens`, and error class names such as `JsonWebTokenError` are deliberately left alone.
+
+Known limits.
+
+- Redaction is pattern-based. A secret with no recognizable shape or label, such as a bare random string, or in a format the rules do not know, is not found.
+- Names with letters after the credential word (for example `passwordConfirm`) are not recognized, and neither are a short `-p` flag or `--pass`.
+- URL passwords longer than 512 characters are not recognized.
+- A secret on the line after its key, with no key of its own, is missed unless the key line ends with the separator (the separator may be followed by a line break).
+- Words after a closed quote and a space are treated as separate values.
+- Variable-name rules are case-sensitive for the generic upper-case and camelCase forms on purpose, so ordinary lowercase program output such as `token: 5` or `max_tokens=5` is left alone.
+- URL credentials are recognized only when the user name has no raw `[` or `]`, which RFC 3986 forbids there and which keeps a redaction marker from being read as a user and password.
+- Over-redaction hides the rest of the line and can break a selected source file that has to be stored as written.
+- Redaction reduces accidental exposure; it is not a guarantee, and the reviewed preview remains a required control.
 
 The GitHub Action writes the stable replay result to the runner-provided output
 file with randomized multiline delimiters. Its workflow summary is derived only
