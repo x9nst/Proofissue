@@ -4,10 +4,10 @@ ProofIssue installs one executable, `proofissue`, with six commands: `record`, `
 
 ```text
 npm install --global proofissue
-npx proofissue@0.1.0 <command> ...
+npx proofissue@0.1.1 <command> ...
 ```
 
-The package is created by the 0.1.0 release. Until it is published, or when contributing, run it from a built checkout:
+When contributing, run it from a built checkout:
 
 ```text
 npm ci
@@ -25,7 +25,7 @@ The examples below write `proofissue` for any of these invocations. They use the
 | `1` | The command ran but did not succeed: an invalid or missing artifact, a replay that could not complete, a required status that was not met, a preparation that failed, or a recording that failed. |
 | `2` | The arguments were malformed. The error, a one-line synopsis, and a pointer to the command's help are printed, and nothing is executed. |
 
-Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. `proofissue --version` prints the bare version, for example `0.1.0`, and exits `0`; quote it when you report a problem. `proofissue <command> --help` prints only that command's options and also exits `0` (a `-h` is recognized only as the first argument after the command name, and nothing after a `--` separator is read as a ProofIssue option). After an unknown command or malformed arguments, ProofIssue prints `Error: <what is wrong>`, a one-line synopsis, and `Run "proofissue <command> --help" for all options.`, and exits `2` without printing the full help.
+Running `proofissue` with no arguments, or with `--help` or `-h`, prints the usage text and exits `0`; nothing is executed. `proofissue --version` prints the bare version, for example `0.1.1`, and exits `0`; quote it when you report a problem. `proofissue <command> --help` prints only that command's options and also exits `0` (a `-h` is recognized only as the first argument after the command name, and nothing after a `--` separator is read as a ProofIssue option). After an unknown command or malformed arguments, ProofIssue prints `Error: <what is wrong>`, a one-line synopsis, and `Run "proofissue <command> --help" for all options.`, and exits `2` without printing the full help.
 
 A replay that ends in `reproduced` or `not_reproduced` is a successful classification. Which of the two you want is a policy decision, expressed with `--require-status`.
 

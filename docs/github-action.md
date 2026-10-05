@@ -45,7 +45,7 @@ jobs:
 
       - name: Confirm the failure still reproduces
         id: proofissue
-        uses: x9nst/Proofissue/action@v0.1.0
+        uses: x9nst/Proofissue/action@v0.1.1
         with:
           artifact-path: failures/example.proofissue
           replay-mode: snapshot
@@ -57,11 +57,11 @@ jobs:
         run: node --input-type=module -e "console.log(JSON.parse(process.env.PROOFISSUE_RESULT).status)"
 ```
 
-The examples use the release tag `v0.1.0`; the `v0` tag follows the newest 0.x
+The examples use the release tag `v0.1.1`; the `v0` tag follows the newest 0.x
 release. A tag is a movable reference, so for a workflow that handles untrusted
 artifacts, pin the Action to the reviewed full commit SHA of the release instead,
-for example `x9nst/Proofissue/action@<full commit SHA> # v0.1.0`. The tags exist
-once the 0.1.0 release is published. The repository integration fixture uses
+for example `x9nst/Proofissue/action@<full commit SHA> # v0.1.1`. Do not use
+`v0.1.0`: its redaction could leave part of a secret in output. The repository integration fixture uses
 `./action` so it exercises the exact checked-out bundle.
 
 ### Inputs
@@ -163,13 +163,13 @@ directory.
 ```yaml
       - name: Prepare dependencies
         id: prepare
-        uses: x9nst/Proofissue/action/prepare@v0.1.0
+        uses: x9nst/Proofissue/action/prepare@v0.1.1
         with:
           artifact-path: failures/example.proofissue
           dependency-store: ${{ runner.temp }}/proofissue-dependency-store
 
       - name: Confirm the failure still reproduces
-        uses: x9nst/Proofissue/action@v0.1.0
+        uses: x9nst/Proofissue/action@v0.1.1
         with:
           artifact-path: failures/example.proofissue
           dependency-store: ${{ runner.temp }}/proofissue-dependency-store

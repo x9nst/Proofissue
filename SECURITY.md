@@ -2,12 +2,12 @@
 
 ## Supported Versions
 
-ProofIssue 0.1.0 is a preview release of the initial supported Node.js workflow. Security fixes are made for the latest 0.1.x release only; older versions are not patched, so upgrade to the latest 0.1.x before reporting. Until the first release is published, only the `main` branch is supported.
+ProofIssue 0.1.x is a preview release of the initial supported Node.js workflow. Security fixes are made for the latest 0.1.x release only; older versions are not patched, so upgrade to the latest 0.1.x before reporting. 0.1.0 has a known redaction flaw fixed in 0.1.1.
 
 | Version | Supported |
 | --- | --- |
-| 0.1.x (latest) | Yes |
-| earlier than 0.1.0 | No |
+| 0.1.1 and later 0.1.x (latest) | Yes |
+| 0.1.0 | No: upgrade, redaction flaw fixed in 0.1.1 |
 
 The preview supports the documented environment only: replay on a local, rootful Docker Engine 27 or newer on x86-64 Linux, npm lockfile version 3 dependencies from the public registry, and pure-JavaScript test runners. See `docs/supported-environments.md`. Roadmap Phase 1 is not complete.
 

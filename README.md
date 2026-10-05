@@ -4,25 +4,27 @@ ProofIssue turns a failing Node.js command into a portable, inspectable bug repo
 
 ## Status
 
-The initial supported Node.js workflow is released as a **preview** (version 0.1.0). It records one failing Node.js command, writes a validated `.proofissue.yaml` artifact, and replays it in a locked-down Linux container. It supports a deliberately narrow environment (see [Known limits](#known-limits)), and it has not completed roadmap Phase 1: see `MILESTONES.md` and `IMPLEMENTATION_PLAN.md`, where the Milestone 8 criterion of external preview users is still open.
+The initial supported Node.js workflow is released as a **preview** (version 0.1.1). It records one failing Node.js command, writes a validated `.proofissue.yaml` artifact, and replays it in a locked-down Linux container. It supports a deliberately narrow environment (see [Known limits](#known-limits)), and it has not completed roadmap Phase 1: see `MILESTONES.md` and `IMPLEMENTATION_PLAN.md`, where the Milestone 8 criterion of external preview users is still open.
 
 ## Install
 
-Install the 0.1.0 preview from its GitHub release:
+Install the latest preview. Use 0.1.1 or later: 0.1.0 could leave part of a secret in an artifact (see `CHANGELOG.md`).
+
+From its GitHub release:
 
 ```text
-npm install --global https://github.com/x9nst/Proofissue/releases/download/v0.1.0/proofissue-0.1.0.tgz
+npm install --global https://github.com/x9nst/Proofissue/releases/download/v0.1.1/proofissue-0.1.1.tgz
 proofissue --version
 ```
 
 Once the package is also published on npm, the shorter forms work too. Until then, `npx proofissue` returns a 404; use the installed `proofissue` command instead wherever this README writes `npx proofissue`.
 
 ```text
-npx proofissue@0.1.0 --version
+npx proofissue@0.1.1 --version
 npm install --global proofissue
 ```
 
-The GitHub release also lists the tarball's SHA-256 checksum and a build-provenance attestation, which you can check with `gh attestation verify proofissue-0.1.0.tgz --repo x9nst/Proofissue`.
+The GitHub release also lists the tarball's SHA-256 checksum and a build-provenance attestation, which you can check with `gh attestation verify proofissue-0.1.1.tgz --repo x9nst/Proofissue`.
 
 It is a single file for Node.js 24 or newer with no runtime dependencies. Recording works on Windows, macOS, and Linux; replay needs the host in [Known limits](#known-limits).
 
@@ -135,13 +137,13 @@ The replay Action calls the same code as the command line. Replay never pulls an
   env:
     PROOFISSUE_IMAGE: node@sha256:d45d78e7929b46875bbd4e29bea672d5bc48186c6c3588306521c815e78352d6
   run: docker pull "$PROOFISSUE_IMAGE"
-- uses: x9nst/Proofissue/action@v0.1.0
+- uses: x9nst/Proofissue/action@v0.1.1
   with:
     artifact-path: failures/reproduction.proofissue.yaml
     required-status: reproduced
 ```
 
-For an artifact with dependencies, run `x9nst/Proofissue/action/prepare@v0.1.0` first and give both steps the same `dependency-store`. Tags move only by deliberate release, but for a security-sensitive workflow pin the full commit SHA of the release instead, as `docs/github-action.md` recommends.
+For an artifact with dependencies, run `x9nst/Proofissue/action/prepare@v0.1.1` first and give both steps the same `dependency-store`. Tags move only by deliberate release, but for a security-sensitive workflow pin the full commit SHA of the release instead, as `docs/github-action.md` recommends.
 
 ## Known limits
 

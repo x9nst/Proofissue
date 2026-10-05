@@ -2,9 +2,15 @@
 
 All notable changes to ProofIssue are recorded here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project uses [Semantic Versioning](https://semver.org/).
 
-ProofIssue 0.1.0 is a preview release of the initial supported Node.js workflow. It has not completed roadmap Phase 1, and its supported environment is deliberately narrow (see `docs/supported-environments.md`).
+ProofIssue 0.1.x is a preview release of the initial supported Node.js workflow. It has not completed roadmap Phase 1, and its supported environment is deliberately narrow (see `docs/supported-environments.md`).
 
 ## [Unreleased]
+
+Nothing yet.
+
+## [0.1.1] - 2026-10-05
+
+A security fix release. Everyone using 0.1.0 should upgrade.
 
 ### Security
 
