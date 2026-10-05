@@ -16,7 +16,7 @@ Expected 4 from calculate(2)
 
 ## Turn it into a replayable report
 
-From this directory, with the CLI installed (`npm install --global proofissue`, or `npx proofissue@0.1.0` in its place; the npm package appears with the 0.1.0 release, and `node <checkout>/packages/cli/dist/bin.js` is the from-source equivalent after `npm ci && npm run build`):
+From this directory, with the CLI installed (`npm install --global proofissue`, or `npx proofissue@0.1.1` in its place, and `node <checkout>/packages/cli/dist/bin.js` is the from-source equivalent after `npm ci && npm run build`):
 
 ```text
 proofissue record -- node test/reproduction.mjs

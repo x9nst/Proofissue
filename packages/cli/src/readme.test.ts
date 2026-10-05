@@ -157,7 +157,10 @@ describe('README.md five-minute walkthrough', () => {
       version: string;
     };
     const [major = '0', minor = '0'] = manifest.version.split('.');
-    const release = `v${major}.${minor}.0`;
+    // A release version names itself; a development version names the minor release it leads to.
+    const release = /^\d+\.\d+\.\d+$/u.test(manifest.version)
+      ? `v${manifest.version}`
+      : `v${major}.${minor}.0`;
     // The README and the Action reference name the release these docs describe.
     expect(await readme()).toContain(`x9nst/Proofissue/action@${release}`);
     expect(await readme()).toContain(`x9nst/Proofissue/action/prepare@${release}`);
