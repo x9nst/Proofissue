@@ -30,7 +30,7 @@ describe('createDiagnosticSink', () => {
     const sink = createDiagnosticSink(target, createScrubber([]));
 
     sink.add('step.txt', 'before\n');
-    sink.add('step.txt', `API_TOKEN=SYNTHETIC_TEST_ONLY_value_789 at ${home}\n`);
+    sink.add('step.txt', `API_TOKEN=SYNTHETIC_TEST_ONLY_value_789\nat ${home}\n`);
     await sink.flush();
 
     const text = await readFile(path.join(target, 'step.txt'), 'utf8');

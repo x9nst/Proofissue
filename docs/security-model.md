@@ -201,7 +201,7 @@ Properties the rules keep, each covered by tests:
 - Matching time is linear in the input; adversarial inputs have a time budget in the test suite.
 - A value that is truncated or has an unterminated quote is redacted to the end of the line, or of the text for a private key, rather than left behind.
 
-Known limits. Variable-name rules are case-sensitive for the generic upper-case form on purpose, so ordinary lowercase program output such as `token: 5` or `max_tokens=5` is left alone. Header rules can over-redact prose that starts with `Cookie:`. URL credentials are recognized only when the user name has no raw `[` or `]`, which RFC 3986 forbids there and which keeps a redaction marker from being read as `user:password`. A secret with no recognizable shape or label, such as a bare random string, is not detected. Redaction reduces accidental exposure; it is not a guarantee, and the reviewed preview remains a required control.
+Known limits. Variable-name rules are case-sensitive for the generic upper-case form on purpose, so ordinary lowercase program output such as `token: 5` or `max_tokens=5` is left alone. Header rules can over-redact prose that starts with the word Cookie and a colon. URL credentials are recognized only when the user name has no raw `[` or `]`, which RFC 3986 forbids there and which keeps a redaction marker from being read as `user:password`. A secret with no recognizable shape or label, such as a bare random string, is not detected. Redaction reduces accidental exposure; it is not a guarantee, and the reviewed preview remains a required control.
 
 The GitHub Action writes the stable replay result to the runner-provided output
 file with randomized multiline delimiters. Its workflow summary is derived only
